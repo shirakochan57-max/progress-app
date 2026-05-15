@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="進捗管理">
+<title>進捗管理</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", sans-serif;
+  background: #f5f5f7; color: #1d1d1f;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+}
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
+}
+.header {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(255,255,255,0.92);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e5e5ea;
+  padding: 8px 12px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+}
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.tab {
+  flex: 1; min-height: 40px; padding: 6px 10px;
+  border-radius: 10px; border: 1px solid #d2d2d7;
+  background: #fff; color: #1d1d1f;
+  font-size: 14px; font-weight: 500;
+}
+.tab.active { background: #007aff; color: #fff; border-color: #007aff; }
+.tab:active { opacity: 0.75; }
+.date-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.date-label { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; }
+#datePicker {
+  font-size: 16px; background: transparent; border: none;
+  padding: 6px 0; color: #1d1d1f; font-weight: 600;
+  min-height: 36px; font-family: inherit;
+}
+.icon-btn {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: none; background: #f2f2f7;
+  font-size: 20px; color: #007aff;
+}
+.icon-btn:active { background: #d1d1d6; }
+.icon-row { display: flex; gap: 6px; align-items: center; }
+
+.cards { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.status { text-align: center; padding: 32px 16px; color: #8e8e93; font-size: 14px; }
+.error-box {
+  background: #fff4e0; border: 1px solid #ffcc8a; color: #6e3a00;
+  padding: 12px; border-radius: 10px; font-size: 14px;
+  margin: 12px; line-height: 1.5;
+}
+.error-box button { margin-top: 8px; min-height: 40px; padding: 8px 16px;
+  border: none; border-radius: 8px; background: #ff9500; color: #fff;
+  font-size: 14px; font-weight: 600; }
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e5ea;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.card.done { background: #f7f7f9; }
+.card.done .card-body { display: none; }
+.card.done.expanded .card-body { display: flex; flex-direction: column; gap: 10px; }
+.card-head { display: flex; align-items: center; gap: 8px; }
+.time-badge {
+  font-size: 12px; font-weight: 700;
+  padding: 5px 8px; border-radius: 6px;
+  background: #e8f1ff; color: #007aff;
+  white-space: nowrap; min-width: 52px; text-align: center;
+}
+.time-badge.allday { background: #fff4e0; color: #b25c00; }
+.time-badge.done-badge { background: #e5f8ec; color: #19a34d; }
+.title-input {
+  flex: 1; min-width: 0;
+  font-size: 16px;
+  border: none; background: transparent;
+  padding: 6px 4px; min-height: 36px;
+  font-weight: 500; color: #1d1d1f;
+  border-bottom: 1px solid transparent;
+  font-family: inherit;
+}
+.title-input:focus { outline: none; border-bottom-color: #007aff; }
+.card.done .title-input { color: #8e8e93; text-decoration: line-through; }
+
+.action-btns { display: flex; gap: 2px; }
+.action-btn {
+  min-width: 44px; min-height: 44px;
+  border: none; background: transparent;
+  font-size: 18px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.action-btn.done-btn { color: #34c759; }
+.action-btn.delete-btn { color: #ff3b30; font-size: 16px; }
+.action-btn:active { background: #f2f2f7; }
+
+.card-body { display: flex; flex-direction: column; gap: 10px; }
+.time-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.time-row label { font-size: 14px; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; }
+.time-row input[type="time"] {
+  font-size: 16px;
+  border: 1px solid #d2d2d7; border-radius: 8px;
+  padding: 6px 10px; background: #fff; min-height: 40px;
+  font-family: inherit; color: #1d1d1f;
+}
+.time-row input[type="checkbox"] { width: 22px; height: 22px; accent-color: #007aff; }
+.time-row .sep { color: #8e8e93; font-size: 14px; }
+
+.memo-section { display: flex; flex-direction: column; gap: 6px; }
+.memo-label { font-size: 12px; color: #6e6e73; font-weight: 600; }
+textarea {
+  font-size: 16px;
+  border: 1px solid #d2d2d7; border-radius: 8px;
+  padding: 8px 10px; background: #fff;
+  resize: vertical; min-height: 60px;
+  font-family: inherit; color: #1d1d1f;
+  line-height: 1.5; width: 100%;
+}
+textarea:focus, input:focus { outline: none; border-color: #007aff; }
+
+.progress-log {
+  font-size: 13px; color: #3a3a3c;
+  background: #f2f2f7; border-radius: 8px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  max-height: 140px; overflow-y: auto;
+  line-height: 1.5;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.progress-log:empty { display: none; }
+.row-buttons { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.save-btn {
+  min-height: 40px; padding: 8px 16px;
+  border: none; border-radius: 8px;
+  background: #007aff; color: #fff;
+  font-size: 14px; font-weight: 600;
+  margin-left: auto;
+}
+.save-btn:active { background: #0056b3; }
+.save-btn:disabled { background: #b0b0b0; }
+.add-progress-btn {
+  min-height: 40px; padding: 6px 14px;
+  border: 1px solid #007aff; border-radius: 8px;
+  background: transparent; color: #007aff;
+  font-size: 14px; font-weight: 500;
+}
+
+.fab-container {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  right: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  z-index: 20;
+}
+.fab {
+  width: 56px; height: 56px;
+  border-radius: 50%; border: none;
+  background: #007aff; color: #fff; font-size: 24px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+  display: flex; align-items: center; justify-content: center;
+}
+.fab.secondary { background: #34c759; font-size: 22px; }
+.fab:active { transform: scale(0.94); }
+
+.sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 30;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+}
+.sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  padding: 12px 16px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 31;
+  max-height: 85vh; overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.25s ease-out;
+}
+.sheet.open { transform: translateY(0); }
+.sheet-handle {
+  width: 40px; height: 4px;
+  background: #d1d1d6;
+  border-radius: 2px;
+  margin: 4px auto 12px;
+}
+.sheet h3 { margin: 0 0 14px; font-size: 17px; font-weight: 700; }
+.form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.form-row > label { font-size: 13px; color: #6e6e73; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.form-row input[type="text"], .form-row input[type="url"] {
+  font-size: 16px;
+  border: 1px solid #d2d2d7; border-radius: 8px;
+  padding: 10px 12px; min-height: 44px;
+  font-family: inherit; color: #1d1d1f;
+}
+.form-row input[type="checkbox"] { width: 22px; height: 22px; accent-color: #007aff; }
+.time-pair { display: flex; align-items: center; gap: 8px; }
+.time-pair input[type="time"] {
+  flex: 1; font-size: 16px;
+  border: 1px solid #d2d2d7; border-radius: 8px;
+  padding: 10px 12px; min-height: 44px;
+  font-family: inherit;
+}
+.sheet-actions { display: flex; gap: 8px; margin-top: 8px; }
+.btn {
+  flex: 1; min-height: 46px;
+  padding: 10px; border-radius: 10px;
+  border: none; font-size: 15px; font-weight: 600;
+  font-family: inherit;
+}
+.btn.primary { background: #007aff; color: #fff; }
+.btn.primary:disabled { background: #b0b0b0; }
+.btn.secondary { background: #f2f2f7; color: #007aff; }
+.btn:active { opacity: 0.7; }
+
+.toast {
+  position: fixed;
+  bottom: calc(110px + env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  background: #1d1d1f; color: #fff;
+  padding: 10px 18px; border-radius: 10px;
+  font-size: 14px; z-index: 50;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+  max-width: 80%; text-align: center;
+}
+.toast.show { opacity: 1; }
+
+.extract-slot {
+  border: 1px solid #e5e5ea; border-radius: 10px;
+  padding: 10px; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: #fff;
+}
+.extract-head { display: flex; align-items: center; gap: 8px; }
+.extract-head input[type="checkbox"] { width: 22px; height: 22px; accent-color: #007aff; }
+.extract-head input[type="text"] {
+  flex: 1; font-size: 16px;
+  border: 1px solid #d2d2d7; border-radius: 8px;
+  padding: 8px 10px; min-height: 40px;
+  font-family: inherit;
+}
+.extract-times { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.extract-times label { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; }
+.extract-times input[type="time"] {
+  font-size: 16px; min-height: 40px;
+  border: 1px solid #d2d2d7; border-radius: 8px;
+  padding: 6px 8px; font-family: inherit;
+}
+.extract-times input[type="checkbox"] { width: 20px; height: 20px; accent-color: #007aff; }
+.extract-slot textarea { min-height: 50px; font-size: 14px; }
+.muted { color: #8e8e93; font-size: 13px; }
+.help-text { font-size: 12px; color: #8e8e93; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="tabs">
+      <button class="tab" data-offset="-1">昨日</button>
+      <button class="tab active" data-offset="0">今日</button>
+      <button class="tab" data-offset="1">明日</button>
+    </div>
+    <div class="date-row">
+      <div class="date-label">
+        <input type="date" id="datePicker">
+        <span id="weekday" class="muted"></span>
+      </div>
+      <div class="icon-row">
+        <button class="icon-btn" id="settingsBtn" aria-label="設定">⚙</button>
+        <button class="icon-btn" id="refreshBtn" aria-label="更新">⟳</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards" id="cards">
+    <div class="status">読み込み中…</div>
+  </div>
+</div>
+
+<div class="fab-container">
+  <button class="fab secondary" id="importFab" aria-label="ドキュメントインポート">📝</button>
+  <button class="fab" id="addFab" aria-label="新規予定">＋</button>
+</div>
+
+<!-- Settings sheet -->
+<div class="sheet-backdrop" id="settingsBackdrop"></div>
+<div class="sheet" id="settingsSheet">
+  <div class="sheet-handle"></div>
+  <h3>設定</h3>
+  <div class="form-row">
+    <label>GAS ウェブアプリ URL</label>
+    <input type="url" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="help-text">
+      Google Apps Script で配布したウェブアプリのURLを貼り付けてください。
+      ローカル端末（localStorage）に保存されます。
+    </div>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn secondary" id="settingsCancel">キャンセル</button>
+    <button class="btn primary" id="settingsSave">保存</button>
+  </div>
+  <div class="sheet-actions" style="margin-top: 4px;">
+    <button class="btn secondary" id="settingsTest">接続テスト</button>
+  </div>
+</div>
+
+<!-- New event sheet -->
+<div class="sheet-backdrop" id="addBackdrop"></div>
+<div class="sheet" id="addSheet">
+  <div class="sheet-handle"></div>
+  <h3>新規予定を追加</h3>
+  <div class="form-row">
+    <label>タイトル</label>
+    <input type="text" id="addTitle" placeholder="予定のタイトル">
+  </div>
+  <div class="form-row">
+    <label><input type="checkbox" id="addAllDay"> 終日</label>
+  </div>
+  <div class="form-row" id="addTimeRow">
+    <label>時刻</label>
+    <div class="time-pair">
+      <input type="time" id="addStart" value="10:00">
+      <span class="muted">〜</span>
+      <input type="time" id="addEnd" value="11:00">
+    </div>
+  </div>
+  <div class="form-row">
+    <label>メモ</label>
+    <textarea id="addMemo" placeholder="メモ（任意）"></textarea>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn secondary" id="addCancel">キャンセル</button>
+    <button class="btn primary" id="addSubmit">登録する</button>
+  </div>
+</div>
+
+<!-- Import sheet -->
+<div class="sheet-backdrop" id="importBackdrop"></div>
+<div class="sheet" id="importSheet">
+  <div class="sheet-handle"></div>
+  <h3>Googleドキュメントからインポート</h3>
+  <div class="form-row">
+    <label>URL</label>
+    <div class="time-pair">
+      <input type="text" id="docUrl" placeholder="https://docs.google.com/...">
+      <button class="btn primary" id="docLoadBtn" style="flex: 0 0 88px; min-width: 88px;">読込</button>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>または直接貼り付け</label>
+    <textarea id="docPaste" placeholder="テキストを貼り付け"></textarea>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn secondary" id="importCancel">閉じる</button>
+    <button class="btn primary" id="extractBtn">予定を抽出する</button>
+  </div>
+  <div id="extractResults" style="margin-top:12px;"></div>
+  <div class="sheet-actions" id="extractActions" style="display:none;">
+    <button class="btn primary" id="bulkRegisterBtn">一括登録</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============= Config =============
+const GAS_URL_KEY = 'gas_proxy_url';
+function getGasUrl() { return localStorage.getItem(GAS_URL_KEY) || ''; }
+function setGasUrl(u) { localStorage.setItem(GAS_URL_KEY, u); }
+
+// ============= State =============
+let currentDate = new Date();
+currentDate.setHours(0, 0, 0, 0);
+let eventsCache = [];
+
+// ============= Utils =============
+const pad = n => (n < 10 ? '0' + n : '' + n);
+const fmtDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const weekdayJP = d => '日月火水木金土'[d.getDay()];
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function normalizeChars(s) {
+  if (!s) return '';
+  s = s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  s = s.replace(/[：・]/g, ':');
+  s = s.replace(/　/g, ' ');
+  return s;
+}
+function localISO(date, hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${fmtDate(date)}T${pad(h)}:${pad(m)}:00`;
+}
+function addDays(dateKey, n) {
+  const d = parseDateKey(dateKey);
+  d.setDate(d.getDate() + n);
+  return fmtDate(d);
+}
+function parseDateKey(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// ============= GAS API =============
+async function gasCall(action, payload) {
+  const url = getGasUrl();
+  if (!url) throw new Error('GAS URLが未設定です');
+  const body = JSON.stringify(Object.assign({ action }, payload || {}));
+  // text/plain にしてプリフライト回避
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+// ============= Event helpers =============
+function isAllDay(ev) {
+  if (ev.allDay === true) return true;
+  return !!(ev.start && ev.start.date && !ev.start.dateTime);
+}
+function getEventDateKey(ev) {
+  if (ev.start && ev.start.date) return String(ev.start.date).split('T')[0];
+  if (ev.start && ev.start.dateTime) return String(ev.start.dateTime).split('T')[0];
+  return '';
+}
+function getStartISO(ev) { return ev.start && ev.start.dateTime ? ev.start.dateTime : null; }
+function getEndISO(ev) { return ev.end && ev.end.dateTime ? ev.end.dateTime : null; }
+function isDone(ev) { return (ev.summary || '').startsWith('✔️'); }
+function plainTitle(ev) {
+  const s = ev.summary || '';
+  return s.startsWith('✔️') ? s.replace(/^✔️\s*/, '') : s;
+}
+
+function sortEvents(events) {
+  return events.slice().sort((a, b) => {
+    const aDone = isDone(a) ? 1 : 0;
+    const bDone = isDone(b) ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    const aAll = isAllDay(a) ? 1 : 0;
+    const bAll = isAllDay(b) ? 1 : 0;
+    if (aAll !== bAll) return aAll - bAll;
+    if (!aAll) {
+      const aS = getStartISO(a) || '';
+      const bS = getStartISO(b) || '';
+      return aS.localeCompare(bS);
+    }
+    return (a.summary || '').localeCompare(b.summary || '');
+  });
+}
+
+function getProgressLog(eventId) {
+  return localStorage.getItem('progress_' + eventId) || '';
+}
+function appendProgressLog(eventId, text) {
+  const cur = getProgressLog(eventId);
+  const now = new Date();
+  const stamp = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  const line = '[' + stamp + '] ' + text;
+  const next = cur ? cur + '\n' + line : line;
+  localStorage.setItem('progress_' + eventId, next);
+  return next;
+}
+
+// ============= Heuristic time parser =============
+function parseScheduleText(text) {
+  // 入力テキストから予定候補を抽出（正規表現ベース）
+  const norm = normalizeChars(text);
+  const lines = norm.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const results = [];
+  for (const line of lines) {
+    if (line.length > 200) continue;
+    const item = parseLine(line);
+    if (item) results.push(item);
+    if (results.length >= 15) break;
+  }
+  return results;
+}
+
+function parseLine(line) {
+  // パターン1: HH:MM〜HH:MM または HH時(MM分)?〜HH時(MM分)?
+  const rangeRe = /(\d{1,2})\s*[:時]\s*(\d{1,2})?\s*分?\s*[〜~\-ー－–—]\s*(\d{1,2})\s*[:時]\s*(\d{1,2})?\s*分?/;
+  // パターン2: HH時半
+  const halfRe = /(\d{1,2})\s*時\s*半/;
+  // パターン3: 単一 HH:MM / HH時(MM分)?
+  const singleRe = /(\d{1,2})\s*[:時]\s*(\d{1,2})?\s*分?/;
+
+  let title = line;
+  let start = null, end = null, allDay = false;
+
+  let m = line.match(rangeRe);
+  if (m) {
+    const sh = +m[1], sm = +(m[2] || 0);
+    const eh = +m[3], em = +(m[4] || 0);
+    if (validHM(sh, sm) && validHM(eh, em)) {
+      start = pad(sh) + ':' + pad(sm);
+      end = pad(eh) + ':' + pad(em);
+      title = line.replace(m[0], '').trim();
+    }
+  } else {
+    m = line.match(halfRe);
+    if (m) {
+      const h = +m[1];
+      if (validHM(h, 30)) {
+        start = pad(h) + ':30';
+        end = pad((h + 1) % 24) + ':30';
+        title = line.replace(m[0], '').trim();
+      }
+    } else {
+      m = line.match(singleRe);
+      if (m) {
+        const h = +m[1], mm = +(m[2] || 0);
+        if (validHM(h, mm)) {
+          start = pad(h) + ':' + pad(mm);
+          end = pad((h + 1) % 24) + ':' + pad(mm);
+          title = line.replace(m[0], '').trim();
+        }
+      }
+    }
+  }
+
+  // 記号類を除去してタイトル整形
+  title = title.replace(/^[\-・･\*・ー*]\s*/, '').replace(/^[：:]\s*/, '').trim();
+  if (!title) return null;
+  if (!start) { allDay = true; start = null; end = null; }
+  return { title, allDay, start, end, memo: '' };
+}
+
+function validHM(h, m) {
+  return Number.isInteger(h) && Number.isInteger(m) && h >= 0 && h < 24 && m >= 0 && m < 60;
+}
+
+// ============= Fetch =============
+async function fetchEvents(date) {
+  const data = await gasCall('list', { date: fmtDate(date) });
+  return data.events || [];
+}
+
+// ============= Render =============
+function renderEvents() {
+  const container = document.getElementById('cards');
+  const events = sortEvents(eventsCache);
+  if (events.length === 0) {
+    container.innerHTML = '<div class="status">予定はありません</div>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const ev of events) container.appendChild(renderCard(ev));
+}
+
+function renderCard(ev) {
+  const card = document.createElement('div');
+  card.className = 'card' + (isDone(ev) ? ' done' : '');
+  card.dataset.eventId = ev.id;
+  card.dataset.date = getEventDateKey(ev);
+
+  const allDay = isAllDay(ev);
+  const startTime = allDay ? '' : formatTime(getStartISO(ev));
+  const endTime = allDay ? '' : formatTime(getEndISO(ev));
+
+  const head = document.createElement('div');
+  head.className = 'card-head';
+
+  const badge = document.createElement('span');
+  badge.className = 'time-badge' + (allDay ? ' allday' : '') + (isDone(ev) ? ' done-badge' : '');
+  badge.textContent = isDone(ev) ? '✔︎' : (allDay ? '終日' : (startTime || '—'));
+  head.appendChild(badge);
+
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'title-input';
+  titleInput.value = plainTitle(ev);
+  titleInput.dataset.field = 'title';
+  head.appendChild(titleInput);
+
+  const actions = document.createElement('div');
+  actions.className = 'action-btns';
+
+  const doneBtn = document.createElement('button');
+  doneBtn.className = 'action-btn done-btn';
+  doneBtn.textContent = isDone(ev) ? '↺' : '✓';
+  doneBtn.addEventListener('click', e => { e.stopPropagation(); toggleDone(ev, doneBtn); });
+  actions.appendChild(doneBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'action-btn delete-btn';
+  delBtn.textContent = '🗑';
+  delBtn.addEventListener('click', e => { e.stopPropagation(); deleteCardEvent(ev); });
+  actions.appendChild(delBtn);
+
+  head.appendChild(actions);
+  card.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'card-body';
+
+  const timeRow = document.createElement('div');
+  timeRow.className = 'time-row';
+
+  const allDayLbl = document.createElement('label');
+  const allDayCb = document.createElement('input');
+  allDayCb.type = 'checkbox';
+  allDayCb.checked = allDay;
+  allDayCb.dataset.field = 'allDay';
+  allDayLbl.appendChild(allDayCb);
+  const adt = document.createElement('span'); adt.textContent = '終日';
+  allDayLbl.appendChild(adt);
+  timeRow.appendChild(allDayLbl);
+
+  const startInput = document.createElement('input');
+  startInput.type = 'time';
+  startInput.value = startTime || '10:00';
+  startInput.dataset.field = 'start';
+
+  const sep = document.createElement('span');
+  sep.className = 'sep'; sep.textContent = '〜';
+
+  const endInput = document.createElement('input');
+  endInput.type = 'time';
+  endInput.value = endTime || '11:00';
+  endInput.dataset.field = 'end';
+
+  timeRow.appendChild(startInput);
+  timeRow.appendChild(sep);
+  timeRow.appendChild(endInput);
+
+  function applyAllDay() {
+    const v = allDayCb.checked;
+    startInput.style.display = v ? 'none' : '';
+    endInput.style.display = v ? 'none' : '';
+    sep.style.display = v ? 'none' : '';
+  }
+  allDayCb.addEventListener('change', applyAllDay);
+  applyAllDay();
+  body.appendChild(timeRow);
+
+  const memoSec = document.createElement('div');
+  memoSec.className = 'memo-section';
+  const memoLabel = document.createElement('div');
+  memoLabel.className = 'memo-label';
+  memoLabel.textContent = 'メモ（カレンダー連動）';
+  const memo = document.createElement('textarea');
+  memo.value = ev.description || '';
+  memo.dataset.field = 'description';
+  memoSec.appendChild(memoLabel);
+  memoSec.appendChild(memo);
+  body.appendChild(memoSec);
+
+  const progSec = document.createElement('div');
+  progSec.className = 'memo-section';
+  const progLabel = document.createElement('div');
+  progLabel.className = 'memo-label';
+  progLabel.textContent = '進捗メモ（端末保存）';
+  const progLog = document.createElement('div');
+  progLog.className = 'progress-log';
+  progLog.textContent = getProgressLog(ev.id);
+  const progInput = document.createElement('textarea');
+  progInput.placeholder = '進捗を追記…';
+  progInput.style.minHeight = '44px';
+  const addProgBtn = document.createElement('button');
+  addProgBtn.className = 'add-progress-btn';
+  addProgBtn.textContent = '＋ 追記';
+  addProgBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const t = progInput.value.trim();
+    if (!t) return;
+    const next = appendProgressLog(ev.id, t);
+    progLog.textContent = next;
+    progInput.value = '';
+    showToast('進捗を記録しました');
+  });
+  progSec.appendChild(progLabel);
+  progSec.appendChild(progLog);
+  progSec.appendChild(progInput);
+
+  const rowBtns = document.createElement('div');
+  rowBtns.className = 'row-buttons';
+  rowBtns.appendChild(addProgBtn);
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'save-btn';
+  saveBtn.textContent = '保存';
+  saveBtn.addEventListener('click', e => { e.stopPropagation(); saveCardEvent(card, ev, saveBtn); });
+  rowBtns.appendChild(saveBtn);
+  progSec.appendChild(rowBtns);
+  body.appendChild(progSec);
+
+  card.appendChild(body);
+
+  if (isDone(ev)) {
+    head.addEventListener('click', (e) => {
+      if (e.target === titleInput || e.target.closest('.action-btns')) return;
+      card.classList.toggle('expanded');
+    });
+  }
+
+  return card;
+}
+
+// ============= Mutations =============
+async function refresh() {
+  const container = document.getElementById('cards');
+  if (!getGasUrl()) {
+    container.innerHTML =
+      '<div class="error-box">' +
+      'GAS ウェブアプリ URL が未設定です。<br>右上の ⚙ から設定してください。' +
+      '<br><button id="openSettingsBtn">設定を開く</button>' +
+      '</div>';
+    document.getElementById('openSettingsBtn').addEventListener('click', () => openSheet('settings'));
+    return;
+  }
+  container.innerHTML = '<div class="status">読み込み中…</div>';
+  try {
+    eventsCache = await fetchEvents(currentDate);
+    renderEvents();
+  } catch (e) {
+    console.error(e);
+    container.innerHTML = '<div class="error-box">読み込み失敗：' + (e.message || e) + '</div>';
+  }
+}
+
+async function saveCardEvent(card, ev, btn) {
+  const eventId = ev.id;
+  const titleInput = card.querySelector('[data-field="title"]');
+  const allDayCb = card.querySelector('[data-field="allDay"]');
+  const startInput = card.querySelector('[data-field="start"]');
+  const endInput = card.querySelector('[data-field="end"]');
+  const memo = card.querySelector('[data-field="description"]');
+
+  const newTitle = (isDone(ev) ? '✔️ ' : '') + titleInput.value.trim();
+  const wasAllDay = isAllDay(ev);
+  const nowAllDay = allDayCb.checked;
+  const dateKey = (card.dataset.date || fmtDate(currentDate)).split('T')[0];
+  const dateObj = parseDateKey(dateKey);
+
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '保存中…';
+
+  try {
+    if (wasAllDay !== nowAllDay) {
+      // 終日 ⇄ 時間指定: 削除→再作成
+      let created;
+      if (nowAllDay) {
+        created = await gasCall('create', {
+          summary: newTitle,
+          startTime: dateKey + 'T00:00:00',
+          endTime: addDays(dateKey, 1) + 'T00:00:00',
+          allDay: true,
+          description: memo.value
+        });
+      } else {
+        created = await gasCall('create', {
+          summary: newTitle,
+          startTime: localISO(dateObj, startInput.value),
+          endTime: localISO(dateObj, endInput.value),
+          description: memo.value
+        });
+      }
+      if (!created || !created.id) throw new Error('作成失敗');
+      await gasCall('delete', { eventId });
+    } else if (nowAllDay) {
+      await gasCall('update', {
+        eventId,
+        summary: newTitle,
+        description: memo.value
+      });
+    } else {
+      await gasCall('update', {
+        eventId,
+        summary: newTitle,
+        description: memo.value,
+        startTime: localISO(dateObj, startInput.value),
+        endTime: localISO(dateObj, endInput.value)
+      });
+    }
+    showToast('保存しました');
+    await refresh();
+  } catch (e) {
+    console.error(e);
+    showToast('保存失敗: ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+async function toggleDone(ev, btn) {
+  const newDone = !isDone(ev);
+  const newTitle = newDone ? '✔️ ' + plainTitle(ev) : plainTitle(ev);
+  btn.disabled = true;
+  try {
+    await gasCall('update', { eventId: ev.id, summary: newTitle });
+    showToast(newDone ? '完了にしました' : '未完了に戻しました');
+    await refresh();
+  } catch (e) {
+    showToast('更新失敗');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteCardEvent(ev) {
+  if (!confirm(`「${plainTitle(ev)}」を削除しますか？`)) return;
+  try {
+    await gasCall('delete', { eventId: ev.id });
+    showToast('削除しました');
+    await refresh();
+  } catch (e) {
+    showToast('削除失敗');
+  }
+}
+
+// ============= Sheets =============
+function openSheet(name) {
+  document.getElementById(name + 'Backdrop').classList.add('open');
+  document.getElementById(name + 'Sheet').classList.add('open');
+}
+function closeSheet(name) {
+  document.getElementById(name + 'Backdrop').classList.remove('open');
+  document.getElementById(name + 'Sheet').classList.remove('open');
+}
+
+// Settings
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('gasUrl').value = getGasUrl();
+  openSheet('settings');
+});
+document.getElementById('settingsBackdrop').addEventListener('click', () => closeSheet('settings'));
+document.getElementById('settingsCancel').addEventListener('click', () => closeSheet('settings'));
+document.getElementById('settingsSave').addEventListener('click', () => {
+  const v = document.getElementById('gasUrl').value.trim();
+  setGasUrl(v);
+  showToast('保存しました');
+  closeSheet('settings');
+  refresh();
+});
+document.getElementById('settingsTest').addEventListener('click', async () => {
+  const v = document.getElementById('gasUrl').value.trim();
+  if (!v) { showToast('URLが空です'); return; }
+  setGasUrl(v); // 一時的に保存して試す
+  try {
+    const res = await gasCall('ping');
+    if (res && res.ok) showToast('接続OK (TZ: ' + res.tz + ')');
+    else showToast('応答が不正');
+  } catch (e) {
+    showToast('接続失敗: ' + (e.message || e));
+  }
+});
+
+// New event
+document.getElementById('addFab').addEventListener('click', () => {
+  if (!getGasUrl()) { openSheet('settings'); return; }
+  openSheet('add');
+});
+document.getElementById('addBackdrop').addEventListener('click', () => closeSheet('add'));
+document.getElementById('addCancel').addEventListener('click', () => closeSheet('add'));
+document.getElementById('addAllDay').addEventListener('change', () => {
+  document.getElementById('addTimeRow').style.display =
+    document.getElementById('addAllDay').checked ? 'none' : '';
+});
+document.getElementById('addSubmit').addEventListener('click', async () => {
+  const title = document.getElementById('addTitle').value.trim();
+  if (!title) { showToast('タイトルを入力'); return; }
+  const allDay = document.getElementById('addAllDay').checked;
+  const memo = document.getElementById('addMemo').value;
+  const dateKey = fmtDate(currentDate);
+  const btn = document.getElementById('addSubmit');
+  btn.disabled = true; btn.textContent = '登録中…';
+  try {
+    if (allDay) {
+      await gasCall('create', {
+        summary: title,
+        startTime: dateKey + 'T00:00:00',
+        endTime: addDays(dateKey, 1) + 'T00:00:00',
+        allDay: true,
+        description: memo
+      });
+    } else {
+      const s = document.getElementById('addStart').value;
+      const e = document.getElementById('addEnd').value;
+      await gasCall('create', {
+        summary: title,
+        startTime: localISO(currentDate, s),
+        endTime: localISO(currentDate, e),
+        description: memo
+      });
+    }
+    showToast('登録しました');
+    closeSheet('add');
+    document.getElementById('addTitle').value = '';
+    document.getElementById('addMemo').value = '';
+    document.getElementById('addAllDay').checked = false;
+    document.getElementById('addTimeRow').style.display = '';
+    await refresh();
+  } catch (e) {
+    showToast('登録失敗: ' + (e.message || e));
+  } finally {
+    btn.disabled = false; btn.textContent = '登録する';
+  }
+});
+
+// Import
+document.getElementById('importFab').addEventListener('click', () => {
+  if (!getGasUrl()) { openSheet('settings'); return; }
+  openSheet('import');
+});
+document.getElementById('importBackdrop').addEventListener('click', () => closeSheet('import'));
+document.getElementById('importCancel').addEventListener('click', () => closeSheet('import'));
+
+document.getElementById('docLoadBtn').addEventListener('click', async () => {
+  const url = document.getElementById('docUrl').value.trim();
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) { showToast('URLが正しくありません'); return; }
+  const fileId = m[1];
+  const btn = document.getElementById('docLoadBtn');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '...';
+  try {
+    const res = await gasCall('readDoc', { fileId });
+    document.getElementById('docPaste').value = res.content || '';
+    showToast('読み込み完了');
+  } catch (e) {
+    showToast('読み込み失敗: ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+document.getElementById('extractBtn').addEventListener('click', () => {
+  const raw = document.getElementById('docPaste').value;
+  if (!raw.trim()) { showToast('テキストがありません'); return; }
+  const items = parseScheduleText(raw);
+  renderExtractSlots(items);
+  if (items.length === 0) showToast('予定が見つかりません');
+});
+
+function renderExtractSlots(items) {
+  const container = document.getElementById('extractResults');
+  container.innerHTML = '';
+  const slots = items.slice(0, 15);
+  slots.forEach((it, idx) => {
+    const slot = document.createElement('div');
+    slot.className = 'extract-slot';
+    slot.dataset.idx = idx;
+
+    const head = document.createElement('div');
+    head.className = 'extract-head';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = true; cb.dataset.f = 'sel';
+    const ti = document.createElement('input');
+    ti.type = 'text'; ti.value = it.title || ''; ti.dataset.f = 'title';
+    head.appendChild(cb); head.appendChild(ti);
+
+    const times = document.createElement('div');
+    times.className = 'extract-times';
+    const adl = document.createElement('label');
+    const ad = document.createElement('input');
+    ad.type = 'checkbox'; ad.checked = !!it.allDay; ad.dataset.f = 'allDay';
+    adl.appendChild(ad);
+    const adt = document.createElement('span'); adt.textContent = '終日';
+    adl.appendChild(adt);
+    const st = document.createElement('input');
+    st.type = 'time'; st.value = it.start || '10:00'; st.dataset.f = 'start';
+    const sp = document.createElement('span'); sp.textContent = '〜'; sp.className = 'muted';
+    const en = document.createElement('input');
+    en.type = 'time'; en.value = it.end || '11:00'; en.dataset.f = 'end';
+    times.appendChild(adl); times.appendChild(st); times.appendChild(sp); times.appendChild(en);
+
+    function applyAd() {
+      const v = ad.checked;
+      st.style.visibility = v ? 'hidden' : 'visible';
+      en.style.visibility = v ? 'hidden' : 'visible';
+      sp.style.visibility = v ? 'hidden' : 'visible';
+    }
+    ad.addEventListener('change', applyAd);
+    applyAd();
+
+    const memo = document.createElement('textarea');
+    memo.value = it.memo || ''; memo.dataset.f = 'memo';
+    memo.placeholder = 'メモ';
+
+    slot.appendChild(head);
+    slot.appendChild(times);
+    slot.appendChild(memo);
+    container.appendChild(slot);
+  });
+  document.getElementById('extractActions').style.display = slots.length ? '' : 'none';
+}
+
+document.getElementById('bulkRegisterBtn').addEventListener('click', async () => {
+  const slots = document.querySelectorAll('.extract-slot');
+  const dateKey = fmtDate(currentDate);
+  const btn = document.getElementById('bulkRegisterBtn');
+  btn.disabled = true; btn.textContent = '登録中…';
+  let ok = 0, ng = 0;
+  for (const slot of slots) {
+    const sel = slot.querySelector('[data-f="sel"]').checked;
+    if (!sel) continue;
+    const title = slot.querySelector('[data-f="title"]').value.trim();
+    if (!title) continue;
+    const allDay = slot.querySelector('[data-f="allDay"]').checked;
+    const memo = slot.querySelector('[data-f="memo"]').value;
+    try {
+      if (allDay) {
+        await gasCall('create', {
+          summary: title,
+          startTime: dateKey + 'T00:00:00',
+          endTime: addDays(dateKey, 1) + 'T00:00:00',
+          allDay: true,
+          description: memo
+        });
+      } else {
+        const s = slot.querySelector('[data-f="start"]').value;
+        const e = slot.querySelector('[data-f="end"]').value;
+        await gasCall('create', {
+          summary: title,
+          startTime: localISO(currentDate, s),
+          endTime: localISO(currentDate, e),
+          description: memo
+        });
+      }
+      ok++;
+    } catch (e) {
+      console.error(e);
+      ng++;
+    }
+  }
+  btn.disabled = false; btn.textContent = '一括登録';
+  showToast(`${ok}件登録 / ${ng}件失敗`);
+  closeSheet('import');
+  document.getElementById('docUrl').value = '';
+  document.getElementById('docPaste').value = '';
+  document.getElementById('extractResults').innerHTML = '';
+  document.getElementById('extractActions').style.display = 'none';
+  await refresh();
+});
+
+// Date controls
+function updateDateLabel() {
+  document.getElementById('datePicker').value = fmtDate(currentDate);
+  document.getElementById('weekday').textContent = '（' + weekdayJP(currentDate) + '）';
+}
+function syncTabs() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const cur = new Date(currentDate); cur.setHours(0, 0, 0, 0);
+  const diff = Math.round((cur.getTime() - today.getTime()) / 86400000);
+  document.querySelectorAll('.tab').forEach(t => {
+    const off = parseInt(t.dataset.offset, 10);
+    t.classList.toggle('active', off === diff);
+  });
+}
+document.getElementById('datePicker').addEventListener('change', e => {
+  if (!e.target.value) return;
+  currentDate = parseDateKey(e.target.value);
+  updateDateLabel(); syncTabs(); refresh();
+});
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    const off = parseInt(t.dataset.offset, 10);
+    const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() + off);
+    currentDate = d;
+    updateDateLabel(); syncTabs(); refresh();
+  });
+});
+document.getElementById('refreshBtn').addEventListener('click', refresh);
+
+// Swipe-down to close sheets
+function attachSwipeClose(sheetId, name) {
+  const el = document.getElementById(sheetId);
+  let startY = null, trackY = 0;
+  el.addEventListener('touchstart', e => {
+    if (el.scrollTop > 0) { startY = null; return; }
+    startY = e.touches[0].clientY; trackY = 0;
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    if (startY === null) return;
+    trackY = e.touches[0].clientY - startY;
+    if (trackY > 0) el.style.transform = `translateY(${trackY}px)`;
+  }, { passive: true });
+  el.addEventListener('touchend', () => {
+    if (startY === null) return;
+    el.style.transform = '';
+    if (trackY > 80) closeSheet(name);
+    startY = null;
+  });
+}
+attachSwipeClose('addSheet', 'add');
+attachSwipeClose('importSheet', 'import');
+attachSwipeClose('settingsSheet', 'settings');
+
+// Init
+updateDateLabel();
+syncTabs();
+refresh();
+</script>
+</body>
+</html>
