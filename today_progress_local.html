@@ -386,17 +386,8 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     gap: 16px;
   }
-  .sheet { max-width: 720px; }
-
-  /* Make sheets look more like modals on big screens */
-  .sheet {
-    bottom: 50%;
-    transform: translateY(60%);
-    border-radius: 16px;
-    margin-bottom: 0;
-    max-height: 80vh;
-  }
-  .sheet.open { transform: translateY(50%); }
+  .sheet { max-width: 720px; left: 50%; transform: translateX(-50%) translateY(100%); }
+  .sheet.open { transform: translateX(-50%) translateY(0); }
 }
 
 /* ===================== iPad portrait specific tweaks ===================== */
@@ -1038,6 +1029,8 @@ async function deleteCardEvent(ev) {
 }
 
 function openSheet(name) {
+  // 先に他のシートを全部閉じる
+  document.querySelectorAll('.sheet.open, .sheet-backdrop.open').forEach(el => el.classList.remove('open'));
   document.getElementById(name + 'Backdrop').classList.add('open');
   document.getElementById(name + 'Sheet').classList.add('open');
 }
