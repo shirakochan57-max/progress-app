@@ -474,7 +474,7 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
   <h3>新規予定を追加</h3>
   <div class="form-row">
     <label>タイトル</label>
-    <input type="text" id="addTitle" placeholder="予定のタイトル">
+    <input type="text" id="addTitle" placeholder="予定のタイトル" lang="ja" autocomplete="off" autocorrect="off">
   </div>
   <div class="form-row">
     <label><input type="checkbox" id="addAllDay"> 終日</label>
@@ -721,6 +721,9 @@ function renderCard(ev) {
   titleInput.className = 'title-input';
   titleInput.value = plainTitle(ev);
   titleInput.dataset.field = 'title';
+  titleInput.setAttribute('lang', 'ja');
+  titleInput.setAttribute('autocomplete', 'off');
+  titleInput.setAttribute('autocorrect', 'off');
   card.appendChild(titleInput);
 
   const head = document.createElement('div');
@@ -1276,6 +1279,11 @@ function attachSwipeClose(sheetId, name) {
   const el = document.getElementById(sheetId);
   let startY = null, trackY = 0;
   el.addEventListener('touchstart', e => {
+    // 入力欄やボタン上のタッチではスワイプ開始しない（IME・キーボード妨害を防ぐ）
+    const t = e.target;
+    if (t.matches('input, textarea, button, select, [contenteditable]') || t.closest('input, textarea, button, select, [contenteditable]')) {
+      startY = null; return;
+    }
     if (el.scrollTop > 0) { startY = null; return; }
     startY = e.touches[0].clientY; trackY = 0;
   }, { passive: true });
