@@ -968,6 +968,7 @@ async function saveCardEvent(card, ev, btn) {
   const orig = btn.textContent;
   btn.textContent = '…';
   try {
+    let newId = null;
     if (wasAllDay !== nowAllDay) {
       let created;
       if (nowAllDay) {
@@ -986,6 +987,7 @@ async function saveCardEvent(card, ev, btn) {
         });
       }
       if (!created || !created.id) throw new Error('作成失敗');
+      newId = created.id;
       await gasCall('delete', { eventId });
     } else if (nowAllDay) {
       await gasCall('update', { eventId, summary: newTitle, description: memo.value });
@@ -996,13 +998,36 @@ async function saveCardEvent(card, ev, btn) {
         endTime: localISO(dateObj, endInput.value)
       });
     }
-    showToast('保存しました');
-    await refresh();
+    // ローカルのev/cardを直接更新（refresh()は呼ばない）
+    ev.summary = newTitle;
+    ev.description = memo.value;
+    if (nowAllDay) {
+      ev.allDay = true;
+      ev.start = { date: dateKey };
+      ev.end = { date: addDays(dateKey, 1) };
+    } else {
+      ev.allDay = false;
+      ev.start = { dateTime: localISO(dateObj, startInput.value) };
+      ev.end = { dateTime: localISO(dateObj, endInput.value) };
+    }
+    if (newId) {
+      ev.id = newId;
+      card.dataset.eventId = newId;
+    }
+    // 時刻ピルだけ更新
+    const pill = card.querySelector('.time-pill');
+    if (pill) {
+      pill.className = 'time-pill' + (nowAllDay ? ' allday' : '') + (isDone(ev) ? ' done-pill' : '');
+      pill.textContent = isDone(ev) ? '✔︎' : (nowAllDay ? '終日' : formatTime(getStartISO(ev)));
+    }
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = orig; }, 800);
   } catch (e) {
     console.error(e);
     showToast('保存失敗: ' + (e.message || e));
+    btn.textContent = orig;
   } finally {
-    btn.disabled = false; btn.textContent = orig;
+    btn.disabled = false;
   }
 }
 
@@ -1012,8 +1037,22 @@ async function toggleDone(ev, btn) {
   btn.disabled = true;
   try {
     await gasCall('update', { eventId: ev.id, summary: newTitle });
-    showToast(newDone ? '完了にしました' : '未完了に戻しました');
-    await refresh();
+    ev.summary = newTitle;
+    // カードの見た目だけ更新
+    const card = document.querySelector(`.card[data-event-id="${ev.id}"]`);
+    if (card) {
+      card.classList.toggle('done', newDone);
+      const ti = card.querySelector('.title-input');
+      if (ti) ti.value = plainTitle(ev);
+      const pill = card.querySelector('.time-pill');
+      if (pill) {
+        const allDay = isAllDay(ev);
+        pill.className = 'time-pill' + (allDay ? ' allday' : '') + (newDone ? ' done-pill' : '');
+        pill.textContent = newDone ? '✔︎' : (allDay ? '終日' : formatTime(getStartISO(ev)));
+      }
+      btn.textContent = newDone ? '戻す' : '完了';
+      btn.className = 'pill-btn ' + (newDone ? 'undo-pill' : 'done-pill');
+    }
   } catch (e) {
     showToast('更新失敗');
   } finally {
@@ -1025,8 +1064,11 @@ async function deleteCardEvent(ev) {
   if (!confirm(`「${plainTitle(ev)}」を削除しますか？`)) return;
   try {
     await gasCall('delete', { eventId: ev.id });
+    // 該当カードだけDOMから削除（refresh()しない）
+    const card = document.querySelector(`.card[data-event-id="${ev.id}"]`);
+    if (card) card.remove();
+    eventsCache = eventsCache.filter(e => e.id !== ev.id);
     showToast('削除しました');
-    await refresh();
   } catch (e) {
     showToast('削除失敗');
   }
