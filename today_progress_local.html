@@ -160,10 +160,28 @@ html, body {
 }
 .drag-handle {
   display: flex; align-items: center; justify-content: center;
-  color: #c7c7cc; font-size: 16px;
-  width: 20px; height: 36px;
+  color: #9ca3af; font-size: 18px;
+  width: 32px; height: 40px;
   letter-spacing: -2px;
   user-select: none;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 6px;
+}
+.drag-handle:active { cursor: grabbing; background: #f2f2f7; }
+.card.dragging {
+  position: fixed !important;
+  z-index: 100 !important;
+  opacity: 0.95;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  pointer-events: none;
+  transition: none !important;
+}
+.card-placeholder {
+  border-radius: 14px;
+  background: #e5e5ea;
+  opacity: 0.45;
+  border: 2px dashed #9ca3af;
 }
 
 .time-pill {
@@ -710,6 +728,132 @@ function renderEvents() {
   }
   container.innerHTML = '';
   for (const ev of events) container.appendChild(renderCard(ev));
+  applyCardOrder();
+}
+
+// ============= Drag & drop reorder =============
+function setupCardDrag(card, handle) {
+  let pressTimer = null;
+  let dragging = false;
+  let startY = 0, startX = 0;
+  let offsetY = 0;
+  let placeholder = null;
+
+  function startDrag(y, x) {
+    dragging = true;
+    const rect = card.getBoundingClientRect();
+    offsetY = y - rect.top;
+    placeholder = document.createElement('div');
+    placeholder.className = 'card-placeholder';
+    placeholder.style.height = rect.height + 'px';
+    card.parentNode.insertBefore(placeholder, card);
+    card.classList.add('dragging');
+    card.style.width = rect.width + 'px';
+    card.style.left = rect.left + 'px';
+    card.style.top = rect.top + 'px';
+    if (navigator.vibrate) navigator.vibrate(30);
+  }
+  function moveDrag(y, x) {
+    if (!dragging) return;
+    card.style.top = (y - offsetY) + 'px';
+    card.style.display = 'none';
+    const target = document.elementFromPoint(x, y);
+    card.style.display = '';
+    if (target) {
+      const targetCard = target.closest('.card');
+      if (targetCard && targetCard !== card && targetCard.parentNode === card.parentNode) {
+        const tRect = targetCard.getBoundingClientRect();
+        if (y < tRect.top + tRect.height / 2) {
+          targetCard.parentNode.insertBefore(placeholder, targetCard);
+        } else {
+          targetCard.parentNode.insertBefore(placeholder, targetCard.nextSibling);
+        }
+      }
+    }
+  }
+  function endDrag() {
+    if (!dragging) return;
+    if (placeholder) {
+      placeholder.parentNode.insertBefore(card, placeholder);
+      placeholder.remove();
+      placeholder = null;
+    }
+    card.classList.remove('dragging');
+    card.style.left = '';
+    card.style.top = '';
+    card.style.width = '';
+    dragging = false;
+    saveCardOrder();
+  }
+
+  handle.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    startY = t.clientY; startX = t.clientX;
+    pressTimer = setTimeout(() => startDrag(startY, startX), 200);
+  }, { passive: true });
+  handle.addEventListener('touchmove', e => {
+    if (!dragging && pressTimer) {
+      const t = e.touches[0];
+      if (Math.abs(t.clientY - startY) > 8 || Math.abs(t.clientX - startX) > 8) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+      return;
+    }
+    if (dragging) {
+      const t = e.touches[0];
+      moveDrag(t.clientY, t.clientX);
+      e.preventDefault();
+    }
+  }, { passive: false });
+  handle.addEventListener('touchend', () => { clearTimeout(pressTimer); endDrag(); });
+  handle.addEventListener('touchcancel', () => { clearTimeout(pressTimer); endDrag(); });
+
+  handle.addEventListener('mousedown', e => {
+    startY = e.clientY; startX = e.clientX;
+    pressTimer = setTimeout(() => startDrag(startY, startX), 200);
+    function onMove(ev) {
+      if (!dragging && pressTimer) {
+        if (Math.abs(ev.clientY - startY) > 8) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+        return;
+      }
+      if (dragging) moveDrag(ev.clientY, ev.clientX);
+    }
+    function onUp() {
+      clearTimeout(pressTimer);
+      endDrag();
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function saveCardOrder() {
+  const ids = [...document.querySelectorAll('.card[data-event-id]')].map(c => c.dataset.eventId);
+  localStorage.setItem('card_order_' + fmtDate(currentDate), JSON.stringify(ids));
+}
+function applyCardOrder() {
+  const saved = localStorage.getItem('card_order_' + fmtDate(currentDate));
+  if (!saved) return;
+  let ids;
+  try { ids = JSON.parse(saved); } catch { return; }
+  const container = document.getElementById('cards');
+  const cardMap = {};
+  [...container.querySelectorAll('.card[data-event-id]')].forEach(c => {
+    cardMap[c.dataset.eventId] = c;
+  });
+  ids.forEach(id => {
+    if (cardMap[id]) {
+      container.appendChild(cardMap[id]);
+      delete cardMap[id];
+    }
+  });
+  Object.values(cardMap).forEach(c => container.appendChild(c));
 }
 
 function renderCard(ev) {
@@ -738,6 +882,8 @@ function renderCard(ev) {
   const drag = document.createElement('span');
   drag.className = 'drag-handle';
   drag.textContent = '⋮⋮';
+  drag.title = '長押しでドラッグして並び替え';
+  setupCardDrag(card, drag);
   head.appendChild(drag);
 
   const pill = document.createElement('span');
@@ -1077,6 +1223,7 @@ async function toggleDone(ev, btn) {
         if (firstDone) container.insertBefore(card, firstDone);
         else container.appendChild(card);
       }
+      saveCardOrder();
     }
   } catch (e) {
     showToast('更新失敗');
