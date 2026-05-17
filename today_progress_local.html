@@ -1067,6 +1067,16 @@ async function toggleDone(ev, btn) {
       }
       btn.textContent = newDone ? '戻す' : '完了';
       btn.className = 'pill-btn ' + (newDone ? 'undo-pill' : 'done-pill');
+
+      // 並び替え: 完了は最後尾、未完了は完了より前へ
+      const container = document.getElementById('cards');
+      if (newDone) {
+        container.appendChild(card);
+      } else {
+        const firstDone = container.querySelector('.card.done');
+        if (firstDone) container.insertBefore(card, firstDone);
+        else container.appendChild(card);
+      }
     }
   } catch (e) {
     showToast('更新失敗');
