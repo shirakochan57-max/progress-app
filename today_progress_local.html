@@ -112,11 +112,35 @@ html, body {
 
 /* ルーレット回転中のハイライト */
 .card.roulette-spinning {
-  transform: scale(1.02);
-  border-left: 6px solid #10b981 !important;
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
-  transition: transform 0.08s ease, box-shadow 0.08s ease, border-left-color 0.08s ease;
+  background: linear-gradient(135deg, #d1fae5 0%, #6ee7b7 100%) !important;
+  border: 2px solid #059669 !important;
+  border-left: 6px solid #059669 !important;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.45);
+  transition: background 0.06s ease, border-color 0.06s ease, box-shadow 0.06s ease;
   z-index: 3;
+}
+.card.roulette-spinning .title-input { color: #064e3b; font-weight: 700; }
+/* ルーレット実行中は引きの表示にして全体を見せる */
+.cards.roulette-running {
+  transform: scale(0.78);
+  transform-origin: top center;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cards.roulette-running .card {
+  transition: background 0.06s, border-color 0.06s, box-shadow 0.06s, transform 0.06s;
+}
+.roulette-indicator {
+  position: fixed;
+  top: 12px; left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #10b981, #34d399);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 14px; font-weight: 700;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
+  z-index: 40;
+  pointer-events: none;
 }
 /* ルーレット当選カードの拡大表示 */
 .card.roulette-winner {
@@ -515,7 +539,7 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
     </div>
     <div class="action-card roulette-card" id="rouletteCard">
       <div class="action-icon">🎲</div>
-      <div class="action-label">ルーレット（次にやる1つを決める）</div>
+      <div class="action-label">ルーレット（終日の中から次の1つを決める）</div>
     </div>
   </div>
   <div id="rouletteBannerSlot"></div>
@@ -933,7 +957,7 @@ function applyCardOrder() {
 
 function renderCard(ev) {
   const card = document.createElement('div');
-  card.className = 'card' + (isDone(ev) ? ' done' : '');
+  card.className = 'card' + (isDone(ev) ? ' done' : '') + (isAllDay(ev) ? ' allday' : '');
   card.dataset.eventId = ev.id;
   card.dataset.date = getEventDateKey(ev);
 
@@ -1129,7 +1153,8 @@ function clearRouletteWinner() {
   if (slot) slot.innerHTML = '';
 }
 function pickRandomCard(excludeId) {
-  const cards = [...document.querySelectorAll('#cardsIncomplete .card')];
+  // 終日（時刻指定のない）未完了のみが抽選対象
+  const cards = [...document.querySelectorAll('#cardsIncomplete .card.allday')];
   const candidates = excludeId ? cards.filter(c => c.dataset.eventId !== excludeId) : cards;
   if (!candidates.length) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];
@@ -1172,13 +1197,13 @@ let rouletteRunning = false;
 async function startRoulette() {
   if (rouletteRunning) return;
   clearRouletteWinner();
-  const cards = [...document.querySelectorAll('#cardsIncomplete .card')];
+  // 終日（時刻指定なし）の未完了のみが対象
+  const cards = [...document.querySelectorAll('#cardsIncomplete .card.allday')];
   if (!cards.length) {
-    showToast('未完了の予定がありません');
+    showToast('終日の未完了予定がありません');
     return;
   }
   if (cards.length === 1) {
-    // 1件しかなければ即決
     cards[0].classList.add('roulette-winner');
     cards[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     showRouletteBanner(cards[0]);
@@ -1187,10 +1212,23 @@ async function startRoulette() {
 
   rouletteRunning = true;
   const container = document.querySelector('.cards');
+
+  // 引きの表示にして全体を見せる
   container.classList.add('roulette-running');
+  // 全体が見えるよう先頭付近にスクロール
+  document.getElementById('cardsIncomplete').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // 「回転中」インジケータ
+  const indicator = document.createElement('div');
+  indicator.className = 'roulette-indicator';
+  indicator.textContent = '🎲 回転中…';
+  document.body.appendChild(indicator);
+
+  // 演出の前に少し待つ（引き画像が安定するまで）
+  await new Promise(r => setTimeout(r, 450));
 
   // ステップ数とターゲットを決める
-  const baseLoops = 3 + Math.floor(Math.random() * 2); // 3〜4周
+  const baseLoops = 3 + Math.floor(Math.random() * 2);
   const targetOffset = Math.floor(Math.random() * cards.length);
   const totalSteps = baseLoops * cards.length + targetOffset;
 
@@ -1202,43 +1240,35 @@ async function startRoulette() {
   }
 
   for (let i = 0; i < totalSteps; i++) {
-    const c = highlightAt(i);
+    highlightAt(i);
     const remaining = totalSteps - i;
-
-    // 速度カーブ: 最初速い→だんだん遅く→ラスト超ゆっくり
     let delay;
-    if (remaining > 18) delay = 70;
-    else if (remaining > 12) delay = 110;
-    else if (remaining > 8)  delay = 180;
-    else if (remaining > 5)  delay = 280;
-    else if (remaining > 3)  delay = 420;
-    else if (remaining > 2)  delay = 600;
-    else if (remaining > 1)  delay = 800;
-    else                     delay = 1000;
-
-    // フェイクストップ（止まりそうで止まらない演出）
-    if (remaining === 6 || remaining === 9) delay += 250;
-    // ラスト直前のためらい
-    if (remaining === 2) delay += 200;
-
-    // 軽い振動（端末対応時のみ・ラスト数回のみ）
-    if (navigator.vibrate && remaining <= 5) navigator.vibrate(10);
-
+    if (remaining > 18) delay = 120;
+    else if (remaining > 12) delay = 180;
+    else if (remaining > 8)  delay = 260;
+    else if (remaining > 5)  delay = 380;
+    else if (remaining > 3)  delay = 560;
+    else if (remaining > 2)  delay = 780;
+    else if (remaining > 1)  delay = 1000;
+    else                     delay = 1300;
+    if (remaining === 6 || remaining === 9) delay += 300;
+    if (remaining === 2) delay += 250;
+    if (navigator.vibrate && remaining <= 5) navigator.vibrate(12);
     await new Promise(r => setTimeout(r, delay));
-
-    // ラスト3回くらいで途中スクロール
-    if (remaining === 3) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  // 当選
+  // 当選 → 引き表示を解除して通常サイズに戻す
   const winner = cards[totalSteps % cards.length];
   cards.forEach(c => c.classList.remove('roulette-spinning'));
+  container.classList.remove('roulette-running');
+  // 引きが戻るのを待ってから拡大ハイライト
+  await new Promise(r => setTimeout(r, 400));
   winner.classList.add('roulette-winner');
   winner.scrollIntoView({ behavior: 'smooth', block: 'center' });
   if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+  indicator.remove();
   showRouletteBanner(winner);
 
-  container.classList.remove('roulette-running');
   rouletteRunning = false;
 }
 
