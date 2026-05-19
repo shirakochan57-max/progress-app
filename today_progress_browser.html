@@ -1034,23 +1034,29 @@ function renderCard(ev) {
   addLabel.className = 'memo-label';
   addLabel.textContent = '追記';
   const addInput = document.createElement('textarea');
-  addInput.placeholder = '入力すると✔️日時が自動でつきます…';
+  addInput.className = 'append-input';
+  addInput.placeholder = '入力して「ローカル保存」を押すと✔日時付きで進捗メモへ。「保存」を押すと直接カレンダーメモへ';
   addInput.style.minHeight = '60px';
-  addInput.addEventListener('blur', () => {
+  function localSaveAppend() {
     const t = addInput.value.trim();
     if (!t) return;
     const next = appendProgressLog(ev.id, t);
     progLog.value = next;
     addInput.value = '';
-  });
+  }
   addInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      addInput.blur();
+      localSaveAppend();
     }
   });
+  const localSaveBtn = document.createElement('button');
+  localSaveBtn.className = 'add-progress-btn';
+  localSaveBtn.textContent = '＋ ローカル保存';
+  localSaveBtn.addEventListener('click', e => { e.stopPropagation(); localSaveAppend(); });
   addSec.appendChild(addLabel);
   addSec.appendChild(addInput);
+  addSec.appendChild(localSaveBtn);
   body.appendChild(addSec);
 
   card.appendChild(body);
@@ -1192,6 +1198,25 @@ async function saveCardEvent(card, ev, btn) {
       pill.textContent = isDone(ev) ? '✔︎' : (nowAllDay ? '終日' : formatTime(getStartISO(ev)));
     }
 
+    // 保存実行前に、全カードの「追記」欄に未保存の入力があれば
+    // 進捗メモ（localStorage）に取り込んでからカレンダー追記処理に渡す
+    [...document.querySelectorAll('.card[data-event-id]')].forEach(c => {
+      const evId = c.dataset.eventId;
+      const addIn = c.querySelector('.append-input');
+      if (addIn && addIn.value.trim()) {
+        const next = appendProgressLog(evId, addIn.value.trim());
+        const pl = c.querySelector('.progress-log');
+        if (pl) pl.value = next;
+        addIn.value = '';
+      }
+      // 進捗メモ欄に直接書かれた内容もlocalStorageに同期
+      const pl = c.querySelector('.progress-log');
+      if (pl) {
+        const v = pl.value;
+        if (v.trim()) localStorage.setItem('progress_' + evId, v);
+        else localStorage.removeItem('progress_' + evId);
+      }
+    });
     // 全カードの進捗メモを一括でカレンダーに追記
     const bulk = await appendAllProgressToCalendar();
 
