@@ -144,18 +144,51 @@ html, body {
 }
 /* ルーレット当選カードの拡大表示 */
 .card.roulette-winner {
-  transform: scale(1.05);
-  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4);
-  border: 2px solid #10b981 !important;
-  border-left: 6px solid #10b981 !important;
-  z-index: 5;
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
-  animation: winner-pulse 1.5s ease-in-out infinite;
+  transform: scale(1.1);
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%) !important;
+  border: 3px solid #059669 !important;
+  border-left: 8px solid #059669 !important;
+  z-index: 10;
+  position: relative;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+  animation: winner-pulse 1.2s ease-in-out infinite;
+}
+.card.roulette-winner .title-input {
+  font-size: 19px !important;
+  color: #064e3b !important;
+  font-weight: 800 !important;
+}
+.card.roulette-winner::before {
+  content: '✨ これにしよう ✨';
+  position: absolute;
+  top: -16px; left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  padding: 6px 18px;
+  border-radius: 999px;
+  font-size: 13px; font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.5);
+  z-index: 11;
+  animation: winner-badge-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes winner-pulse {
-  0%, 100% { box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4); }
-  50%      { box-shadow: 0 8px 48px rgba(16, 185, 129, 0.7); }
+  0%, 100% { box-shadow: 0 8px 32px rgba(16, 185, 129, 0.5), 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50%      { box-shadow: 0 12px 50px rgba(16, 185, 129, 0.8), 0 0 0 14px rgba(16, 185, 129, 0); }
 }
+@keyframes winner-badge-bounce {
+  0%   { transform: translateX(-50%) scale(0); opacity: 0; }
+  60%  { transform: translateX(-50%) scale(1.2); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+/* 当選時、他のカードは暗くして当選カードを目立たせる */
+.cards.roulette-won .card:not(.roulette-winner) {
+  opacity: 0.3;
+  filter: grayscale(50%);
+  transition: opacity 0.5s ease, filter 0.5s ease;
+}
+.cards.roulette-won .card.roulette-winner { opacity: 1; }
 .roulette-banner {
   background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
   color: #fff;
@@ -1149,6 +1182,8 @@ function renderCard(ev) {
 // ============= Roulette =============
 function clearRouletteWinner() {
   document.querySelectorAll('.card.roulette-winner').forEach(c => c.classList.remove('roulette-winner'));
+  const container = document.querySelector('.cards');
+  if (container) container.classList.remove('roulette-won');
   const slot = document.getElementById('rouletteBannerSlot');
   if (slot) slot.innerHTML = '';
 }
@@ -1263,9 +1298,11 @@ async function startRoulette() {
   container.classList.remove('roulette-running');
   // 引きが戻るのを待ってから拡大ハイライト
   await new Promise(r => setTimeout(r, 400));
+  // 他のカードを暗くして当選カードを目立たせる
+  container.classList.add('roulette-won');
   winner.classList.add('roulette-winner');
   winner.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+  if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 120]);
   indicator.remove();
   showRouletteBanner(winner);
 
