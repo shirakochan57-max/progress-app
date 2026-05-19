@@ -458,11 +458,6 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
     </div>
   </div>
 
-  <div class="bulk-memo-wrap">
-    <button id="bulkMemoBtn" class="bulk-memo-btn">📋 進捗メモをカレンダーに<br>一括追記</button>
-    <div id="bulkMemoFeedback" class="bulk-feedback"></div>
-  </div>
-
   <div class="action-cards">
     <div class="action-card import-card" id="importCard">
       <div class="action-icon">📝</div>
@@ -1070,14 +1065,8 @@ function renderCard(ev) {
   return card;
 }
 
-function setBulkFeedback(text, kind) {
-  const fb = document.getElementById('bulkMemoFeedback');
-  fb.textContent = text;
-  fb.className = 'bulk-feedback' + (kind ? ' ' + kind : '');
-}
-
-async function bulkAppendMemo() {
-  const btn = document.getElementById('bulkMemoBtn');
+// 進捗メモがあるカードすべてに対して、カレンダーのdescriptionに追記する
+async function appendAllProgressToCalendar() {
   const cards = [...document.querySelectorAll('.card')];
   const targets = cards.filter(card => {
     const eventId = card.dataset.eventId;
@@ -1085,21 +1074,9 @@ async function bulkAppendMemo() {
     const memo = localStorage.getItem('progress_' + eventId);
     return memo && memo.trim();
   });
-  if (!targets.length) {
-    setBulkFeedback('追記する進捗メモがありません', 'error');
-    setTimeout(() => setBulkFeedback(''), 5000);
-    return;
-  }
-  if (!getGasUrl()) {
-    setBulkFeedback('GAS URLが未設定です', 'error');
-    setTimeout(() => setBulkFeedback(''), 5000);
-    return;
-  }
-  btn.disabled = true;
+  if (!targets.length) return { ok: 0, fail: 0 };
   let ok = 0, fail = 0;
-  for (let i = 0; i < targets.length; i++) {
-    const card = targets[i];
-    setBulkFeedback(`追記中 (${i+1}/${targets.length})…`, 'progress');
+  for (const card of targets) {
     const eventId = card.dataset.eventId;
     const progress = (localStorage.getItem('progress_' + eventId) || '').trim();
     const memoEl = card.querySelector('.memo-input');
@@ -1116,10 +1093,7 @@ async function bulkAppendMemo() {
       console.error(e); fail++;
     }
   }
-  btn.disabled = false;
-  if (fail === 0) setBulkFeedback(`✓ ${ok}件の予定に進捗メモを追記しました`, 'success');
-  else setBulkFeedback(`${ok}件成功、${fail}件失敗`, 'error');
-  setTimeout(() => setBulkFeedback(''), 5000);
+  return { ok, fail };
 }
 
 async function refresh() {
@@ -1217,8 +1191,17 @@ async function saveCardEvent(card, ev, btn) {
       pill.className = 'time-pill' + (nowAllDay ? ' allday' : '') + (isDone(ev) ? ' done-pill' : '');
       pill.textContent = isDone(ev) ? '✔︎' : (nowAllDay ? '終日' : formatTime(getStartISO(ev)));
     }
+
+    // 全カードの進捗メモを一括でカレンダーに追記
+    const bulk = await appendAllProgressToCalendar();
+
     btn.textContent = '✓';
     setTimeout(() => { btn.textContent = orig; }, 800);
+    if (bulk.ok > 0 && bulk.fail === 0) {
+      showToast(`保存しました（進捗 ${bulk.ok}件追記）`);
+    } else if (bulk.ok > 0 && bulk.fail > 0) {
+      showToast(`保存・${bulk.ok}件追記、${bulk.fail}件失敗`);
+    }
   } catch (e) {
     console.error(e);
     showToast('保存失敗: ' + (e.message || e));
@@ -1492,7 +1475,6 @@ document.getElementById('bulkRegisterBtn').addEventListener('click', async () =>
   await refresh();
 });
 
-document.getElementById('bulkMemoBtn').addEventListener('click', bulkAppendMemo);
 
 function updateDateLabel() {
   document.getElementById('datePicker').value = fmtDate(currentDate);
