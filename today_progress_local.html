@@ -1398,6 +1398,8 @@ async function saveCardEvent(card, ev, btn) {
       pill.className = 'time-pill' + (nowAllDay ? ' allday' : '') + (isDone(ev) ? ' done-pill' : '');
       pill.textContent = isDone(ev) ? '✔︎' : (nowAllDay ? '終日' : formatTime(getStartISO(ev)));
     }
+    // カードの allday クラスを最新の状態に同期（ルーレット対象判定に必要）
+    card.classList.toggle('allday', nowAllDay);
 
     // 保存実行前に、全カードの「追記」欄に未保存の入力があれば
     // 進捗メモ（localStorage）に取り込んでからカレンダー追記処理に渡す
