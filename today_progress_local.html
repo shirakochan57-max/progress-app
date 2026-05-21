@@ -367,6 +367,9 @@ html, body {
   background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;
   min-width: 40px; padding: 6px 10px; border-radius: 10px;
 }
+.pill-btn.reschedule-pill {
+  background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+}
 .pill-btn:disabled { opacity: 0.5; cursor: default; }
 .head-spacer { flex: 1; }
 
@@ -649,6 +652,31 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
   </div>
   <div class="sheet-actions" style="margin-top: 4px;">
     <button class="btn secondary" id="settingsTest">接続テスト</button>
+  </div>
+</div>
+
+<!-- Reschedule sheet -->
+<div class="sheet-backdrop" id="rescheduleBackdrop"></div>
+<div class="sheet" id="rescheduleSheet">
+  <div class="sheet-handle"></div>
+  <h3>予定を振替</h3>
+  <div class="form-row">
+    <label>① 振替先の日付（次のアクションをする日）</label>
+    <input type="date" id="rescheduleDate">
+  </div>
+  <div class="form-row">
+    <label>② 次のアクションの内容（具体的に）</label>
+    <textarea id="rescheduleAction" placeholder="例：〇〇さんに電話する／資料の目次だけ作る／メールを下書きする" lang="ja" autocomplete="off" autocorrect="off"></textarea>
+  </div>
+  <div class="form-row">
+    <div class="help-text">
+      ※ 日付と次のアクション内容の両方を入力しないと振替できません。<br>
+      これは無計画な先延ばしを防ぐための仕様です。
+    </div>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn secondary" id="rescheduleCancel">キャンセル</button>
+    <button class="btn primary" id="rescheduleSubmit" disabled>振替する</button>
   </div>
 </div>
 
@@ -1085,6 +1113,12 @@ function renderCard(ev) {
   doneBtn.textContent = isDone(ev) ? '戻す' : '完了';
   doneBtn.addEventListener('click', e => { e.stopPropagation(); toggleDone(ev, doneBtn); });
   head.appendChild(doneBtn);
+
+  const reschedBtn = document.createElement('button');
+  reschedBtn.className = 'pill-btn reschedule-pill';
+  reschedBtn.textContent = '🔄 振替';
+  reschedBtn.addEventListener('click', e => { e.stopPropagation(); openReschedule(card, ev); });
+  head.appendChild(reschedBtn);
 
   const delBtn = document.createElement('button');
   delBtn.className = 'pill-btn delete-pill';
@@ -1577,6 +1611,77 @@ async function toggleDone(ev, btn) {
   }
 }
 
+// ============= Reschedule =============
+let currentReschedule = null;
+function openReschedule(card, ev) {
+  currentReschedule = { card, ev };
+  const tomorrow = new Date(currentDate); tomorrow.setDate(tomorrow.getDate() + 1);
+  document.getElementById('rescheduleDate').value = fmtDate(tomorrow);
+  document.getElementById('rescheduleAction').value = '';
+  checkRescheduleValid();
+  openSheet('reschedule');
+}
+function checkRescheduleValid() {
+  const d = document.getElementById('rescheduleDate').value;
+  const a = document.getElementById('rescheduleAction').value.trim();
+  document.getElementById('rescheduleSubmit').disabled = !(d && a);
+}
+async function doReschedule() {
+  if (!currentReschedule) return;
+  const { card, ev } = currentReschedule;
+  const newDate = document.getElementById('rescheduleDate').value;
+  const action = document.getElementById('rescheduleAction').value.trim();
+  if (!newDate || !action) return;
+  const btn = document.getElementById('rescheduleSubmit');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '振替中…';
+  try {
+    const memoEl = card.querySelector('.memo-input');
+    const existingDesc = memoEl ? memoEl.value : (ev.description || '');
+    const stamp = nowStamp();
+    const note = `🔄 [${stamp}] ${fmtDate(currentDate)} から ${newDate} に振替\n次のアクション: ${action}`;
+    const newDesc = existingDesc.trim() ? existingDesc.trim() + '\n' + note : note;
+
+    const dateObj = parseDateKey(newDate);
+    let created;
+    if (isAllDay(ev)) {
+      created = await gasCall('create', {
+        summary: ev.summary,
+        startTime: newDate + 'T00:00:00',
+        endTime: addDays(newDate, 1) + 'T00:00:00',
+        allDay: true,
+        description: newDesc
+      });
+    } else {
+      const startHM = formatTime(getStartISO(ev)) || '10:00';
+      const endHM = formatTime(getEndISO(ev)) || '11:00';
+      created = await gasCall('create', {
+        summary: ev.summary,
+        startTime: localISO(dateObj, startHM),
+        endTime: localISO(dateObj, endHM),
+        description: newDesc
+      });
+    }
+    if (!created || !created.id) throw new Error('作成失敗');
+    await gasCall('delete', { eventId: ev.id });
+
+    // UI更新: 該当カードをDOMから削除（別日に移動したため）
+    card.remove();
+    eventsCache = eventsCache.filter(e => e.id !== ev.id);
+    saveCardOrder();
+    showToast(`${newDate} に振替しました`);
+    closeSheet('reschedule');
+    currentReschedule = null;
+  } catch (e) {
+    console.error(e);
+    showToast('振替失敗: ' + (e.message || e));
+  } finally {
+    btn.textContent = orig;
+    checkRescheduleValid();
+  }
+}
+
 async function deleteCardEvent(ev) {
   if (!confirm(`「${plainTitle(ev)}」を削除しますか？`)) return;
   try {
@@ -1685,6 +1790,12 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
 });
 
 document.getElementById('rouletteCard').addEventListener('click', startRoulette);
+document.getElementById('rescheduleBackdrop').addEventListener('click', () => closeSheet('reschedule'));
+document.getElementById('rescheduleCancel').addEventListener('click', () => closeSheet('reschedule'));
+document.getElementById('rescheduleDate').addEventListener('input', checkRescheduleValid);
+document.getElementById('rescheduleAction').addEventListener('input', checkRescheduleValid);
+document.getElementById('rescheduleSubmit').addEventListener('click', doReschedule);
+attachSwipeClose('rescheduleSheet', 'reschedule');
 document.getElementById('importCard').addEventListener('click', () => {
   if (!getGasUrl()) { openSheet('settings'); return; }
   openSheet('import');
