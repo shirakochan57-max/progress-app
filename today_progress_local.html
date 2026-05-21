@@ -1580,6 +1580,7 @@ async function toggleDone(ev, btn) {
   const newTitle = newDone ? '✔️ ' + plainTitle(ev) : plainTitle(ev);
   btn.disabled = true;
   try {
+    if (!ev.id) throw new Error('イベントIDが空');
     await gasCall('update', { eventId: ev.id, summary: newTitle });
     ev.summary = newTitle;
     // カードの見た目だけ更新
@@ -1605,7 +1606,8 @@ async function toggleDone(ev, btn) {
       saveCardOrder();
     }
   } catch (e) {
-    showToast('更新失敗');
+    console.error('toggleDone error', e, 'eventId:', ev && ev.id);
+    showToast('更新失敗: ' + (e.message || e));
   } finally {
     btn.disabled = false;
   }
