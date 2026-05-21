@@ -813,6 +813,18 @@ function getEventDateKey(ev) {
 function getStartISO(ev) { return ev.start && ev.start.dateTime ? ev.start.dateTime : null; }
 function getEndISO(ev) { return ev.end && ev.end.dateTime ? ev.end.dateTime : null; }
 function isDone(ev) { return (ev.summary || '').startsWith('✔️'); }
+// 単発の複数日終日予定かどうか（繰り返しインスタンスは除外）
+function isMultiDay(ev) {
+  if (!isAllDay(ev)) return false;
+  if (!ev.start || !ev.end || !ev.start.date || !ev.end.date) return false;
+  const s = parseDateKey(ev.start.date);
+  const e = parseDateKey(ev.end.date);
+  const diffDays = Math.round((e - s) / 86400000);
+  if (diffDays <= 1) return false;
+  // 繰り返しインスタンスID (_YYYYMMDDTHHMMSSZ) は対象外
+  if (ev.id && /_\d{8}T\d{6}Z/.test(String(ev.id))) return false;
+  return true;
+}
 function plainTitle(ev) {
   const s = ev.summary || '';
   return s.startsWith('✔️') ? s.replace(/^✔️\s*/, '') : s;
@@ -1581,6 +1593,36 @@ async function toggleDone(ev, btn) {
   btn.disabled = true;
   try {
     if (!ev.id) throw new Error('イベントIDが空');
+
+    // 単発の複数日終日予定 + 完了化: 開始日を翌日に短縮 (or 残り0日なら削除)
+    if (newDone && isMultiDay(ev)) {
+      const todayKey = fmtDate(currentDate);
+      const newStartKey = addDays(todayKey, 1);
+      const endKey = ev.end.date; // exclusive
+      if (parseDateKey(newStartKey) >= parseDateKey(endKey)) {
+        // 残り0日 → 予定削除
+        await gasCall('delete', { eventId: ev.id });
+        const cardEl = document.querySelector(`.card[data-event-id="${ev.id}"]`);
+        if (cardEl) cardEl.remove();
+        eventsCache = eventsCache.filter(e => e.id !== ev.id);
+        saveCardOrder();
+        showToast('完了しました（予定終了）');
+      } else {
+        await gasCall('update', {
+          eventId: ev.id,
+          allDay: true,
+          startTime: newStartKey + 'T00:00:00',
+          endTime: endKey + 'T00:00:00'
+        });
+        const cardEl = document.querySelector(`.card[data-event-id="${ev.id}"]`);
+        if (cardEl) cardEl.remove();
+        eventsCache = eventsCache.filter(e => e.id !== ev.id);
+        saveCardOrder();
+        showToast(`${newStartKey} から再開に短縮`);
+      }
+      return;
+    }
+
     await gasCall('update', { eventId: ev.id, summary: newTitle });
     ev.summary = newTitle;
     // カードの見た目だけ更新
@@ -1644,6 +1686,40 @@ async function doReschedule() {
     const stamp = nowStamp();
     const note = `🔄 [${stamp}] ${fmtDate(currentDate)} から ${newDate} に振替\n次のアクション: ${action}`;
     const newDesc = existingDesc.trim() ? existingDesc.trim() + '\n' + note : note;
+
+    // 単発複数日予定の振替: 開始日変更 (終了日超え時は単発1日に置換)
+    if (isMultiDay(ev)) {
+      const endKey = ev.end.date; // exclusive
+      const lastDay = addDays(endKey, -1); // 包含表示の最終日
+      if (parseDateKey(newDate) > parseDateKey(lastDay)) {
+        // 終了日超え: 元を削除 + 単発1日として新規作成
+        const created = await gasCall('create', {
+          summary: ev.summary,
+          startTime: newDate + 'T00:00:00',
+          endTime: addDays(newDate, 1) + 'T00:00:00',
+          allDay: true,
+          description: newDesc
+        });
+        if (!created || !created.id) throw new Error('作成失敗');
+        await gasCall('delete', { eventId: ev.id });
+      } else {
+        // 範囲内: 開始日を newDate に変更 (終了日保持)
+        await gasCall('update', {
+          eventId: ev.id,
+          allDay: true,
+          startTime: newDate + 'T00:00:00',
+          endTime: endKey + 'T00:00:00',
+          description: newDesc
+        });
+      }
+      card.remove();
+      eventsCache = eventsCache.filter(e => e.id !== ev.id);
+      saveCardOrder();
+      showToast(`${newDate} に振替しました`);
+      closeSheet('reschedule');
+      currentReschedule = null;
+      return;
+    }
 
     const dateObj = parseDateKey(newDate);
     let created;
