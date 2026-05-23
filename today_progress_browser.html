@@ -1843,7 +1843,8 @@ document.getElementById('addCancel').addEventListener('click', () => closeSheet(
 document.getElementById('addTimeToggle').addEventListener('click', () => {
   const row = document.getElementById('addTimeRow');
   const btn = document.getElementById('addTimeToggle');
-  const isHidden = row.style.display === 'none' || !row.style.display;
+  // computed styleで判定 (style.display='' 後でも正しく動くように)
+  const isHidden = window.getComputedStyle(row).display === 'none';
   row.style.display = isHidden ? '' : 'none';
   btn.textContent = isHidden ? '× 終日に戻す' : '＋ 時間を指定する';
 });
@@ -1852,7 +1853,7 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
   if (!title) { showToast('タイトルを入力'); return; }
   // 時間行が表示されていれば時間指定、隠れていれば終日
   const timeRow = document.getElementById('addTimeRow');
-  const allDay = (timeRow.style.display === 'none' || !timeRow.style.display);
+  const allDay = window.getComputedStyle(timeRow).display === 'none';
   const memo = document.getElementById('addMemo').value;
   // 日付フィールドの値を使用(空ならcurrentDate)
   const dateKey = document.getElementById('addDate').value || fmtDate(currentDate);
