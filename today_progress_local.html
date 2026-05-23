@@ -942,6 +942,25 @@ async function fetchEvents(date) {
   return data.events || [];
 }
 
+// ========= 日付別キャッシュ (localStorage) =========
+const EVENTS_CACHE_PREFIX = 'events_cache_';
+function getCachedEvents(dateKey) {
+  try {
+    const raw = localStorage.getItem(EVENTS_CACHE_PREFIX + dateKey);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    return (obj && Array.isArray(obj.events)) ? obj.events : null;
+  } catch (e) { return null; }
+}
+function setCachedEvents(dateKey, events) {
+  try {
+    localStorage.setItem(EVENTS_CACHE_PREFIX + dateKey, JSON.stringify({ events, t: Date.now() }));
+  } catch (e) {}
+}
+function persistCache() {
+  try { setCachedEvents(fmtDate(currentDate), eventsCache); } catch (e) {}
+}
+
 function renderEvents() {
   const incomplete = document.getElementById('cardsIncomplete');
   const done = document.getElementById('cardsDone');
@@ -952,6 +971,7 @@ function renderEvents() {
   if (events.length === 0) {
     status.style.display = '';
     status.textContent = '予定はありません';
+    persistCache();
     return;
   }
   status.style.display = 'none';
@@ -961,6 +981,7 @@ function renderEvents() {
     else incomplete.appendChild(card);
   }
   applyCardOrder();
+  persistCache();
 }
 
 // ============= Drag & drop reorder =============
@@ -1478,9 +1499,9 @@ async function refresh() {
   const status = document.getElementById('cardsStatus');
   const incompleteSec = document.getElementById('cardsIncomplete');
   const doneSec = document.getElementById('cardsDone');
-  if (incompleteSec) incompleteSec.innerHTML = '';
-  if (doneSec) doneSec.innerHTML = '';
   if (!getGasUrl()) {
+    if (incompleteSec) incompleteSec.innerHTML = '';
+    if (doneSec) doneSec.innerHTML = '';
     status.style.display = '';
     status.innerHTML =
       '<div class="error-box">' +
@@ -1489,15 +1510,40 @@ async function refresh() {
     document.getElementById('openSettingsBtn').addEventListener('click', () => openSheet('settings'));
     return;
   }
-  status.style.display = '';
-  status.textContent = '読み込み中…';
-  try {
-    eventsCache = await fetchEvents(currentDate);
+  const dateKey = fmtDate(currentDate);
+  // 1) キャッシュがあれば即表示
+  const cached = getCachedEvents(dateKey);
+  if (cached) {
+    eventsCache = cached;
     renderEvents();
+    status.style.display = 'none';
+  } else {
+    if (incompleteSec) incompleteSec.innerHTML = '';
+    if (doneSec) doneSec.innerHTML = '';
+    status.style.display = '';
+    status.textContent = '読み込み中…';
+  }
+  // 2) バックグラウンドで最新を取得
+  try {
+    const fresh = await fetchEvents(currentDate);
+    setCachedEvents(dateKey, fresh);
+    // ユーザーが日付を切り替えていたら無視
+    if (fmtDate(currentDate) !== dateKey) return;
+    // 差分があれば再描画
+    if (JSON.stringify(fresh) !== JSON.stringify(eventsCache)) {
+      eventsCache = fresh;
+      renderEvents();
+    }
+    if (status) status.style.display = (eventsCache.length === 0 ? '' : 'none');
   } catch (e) {
     console.error(e);
-    status.style.display = '';
-    status.innerHTML = '<div class="error-box">読み込み失敗：' + (e.message || e) + '</div>';
+    if (!cached) {
+      status.style.display = '';
+      status.innerHTML = '<div class="error-box">読み込み失敗：' + (e.message || e) + '</div>';
+    } else {
+      // キャッシュ表示中ならトーストだけ
+      showToast('最新取得失敗(キャッシュ表示中): ' + (e.message || e));
+    }
   }
 }
 
@@ -1629,6 +1675,7 @@ async function toggleDone(ev, btn) {
         if (cardEl) cardEl.remove();
         eventsCache = eventsCache.filter(e => e.id !== ev.id);
         saveCardOrder();
+        persistCache();
         showToast('完了しました（予定終了）');
       } else {
         await gasCall('update', {
@@ -1641,14 +1688,15 @@ async function toggleDone(ev, btn) {
         if (cardEl) cardEl.remove();
         eventsCache = eventsCache.filter(e => e.id !== ev.id);
         saveCardOrder();
+        persistCache();
         showToast(`${newStartKey} から再開に短縮`);
       }
       return;
     }
 
-    await gasCall('update', { eventId: ev.id, summary: newTitle });
+    // 楽観的UI: 先に画面を更新してから背景同期
+    const oldTitle = ev.summary;
     ev.summary = newTitle;
-    // カードの見た目だけ更新
     const card = document.querySelector(`.card[data-event-id="${ev.id}"]`);
     if (card) {
       card.classList.toggle('done', newDone);
@@ -1662,14 +1710,41 @@ async function toggleDone(ev, btn) {
       }
       btn.textContent = newDone ? '戻す' : '完了';
       btn.className = 'pill-btn ' + (newDone ? 'undo-pill' : 'done-pill');
-
-      // セクション移動: done→完了セクション、未完了→未完了セクション
       const incompleteSec = document.getElementById('cardsIncomplete');
       const doneSec = document.getElementById('cardsDone');
       if (newDone) doneSec.appendChild(card);
       else incompleteSec.appendChild(card);
       saveCardOrder();
+      persistCache();
     }
+    btn.disabled = false;
+    // 背景でサーバー同期(失敗時のみロールバック)
+    gasCall('update', { eventId: ev.id, summary: newTitle }).catch(err => {
+      console.error('toggleDone sync error', err);
+      ev.summary = oldTitle;
+      if (card) {
+        const wasDone = isDone({ summary: oldTitle });
+        card.classList.toggle('done', wasDone);
+        const ti2 = card.querySelector('.title-input');
+        if (ti2) ti2.value = plainTitle(ev);
+        const pill2 = card.querySelector('.time-pill');
+        if (pill2) {
+          const allDay = isAllDay(ev);
+          pill2.className = 'time-pill' + (allDay ? ' allday' : '') + (wasDone ? ' done-pill' : '');
+          pill2.textContent = wasDone ? '✔︎' : (allDay ? '終日' : formatTime(getStartISO(ev)));
+        }
+        btn.textContent = wasDone ? '戻す' : '完了';
+        btn.className = 'pill-btn ' + (wasDone ? 'undo-pill' : 'done-pill');
+        const incompleteSec2 = document.getElementById('cardsIncomplete');
+        const doneSec2 = document.getElementById('cardsDone');
+        if (wasDone) doneSec2.appendChild(card);
+        else incompleteSec2.appendChild(card);
+        saveCardOrder();
+        persistCache();
+      }
+      showToast('更新失敗(元に戻しました): ' + (err.message || err));
+    });
+    return;
   } catch (e) {
     console.error('toggleDone error', e, 'eventId:', ev && ev.id);
     showToast('更新失敗: ' + (e.message || e));
@@ -1738,6 +1813,9 @@ async function doReschedule() {
       card.remove();
       eventsCache = eventsCache.filter(e => e.id !== ev.id);
       saveCardOrder();
+      persistCache();
+      // 振替先のキャッシュを無効化
+      try { localStorage.removeItem(EVENTS_CACHE_PREFIX + newDate); } catch (err) {}
       showToast(`${newDate} に振替しました`);
       closeSheet('reschedule');
       currentReschedule = null;
@@ -1771,6 +1849,9 @@ async function doReschedule() {
     card.remove();
     eventsCache = eventsCache.filter(e => e.id !== ev.id);
     saveCardOrder();
+    persistCache();
+    // 振替先のキャッシュを無効化
+    try { localStorage.removeItem(EVENTS_CACHE_PREFIX + newDate); } catch (err) {}
     showToast(`${newDate} に振替しました`);
     closeSheet('reschedule');
     currentReschedule = null;
@@ -1786,11 +1867,14 @@ async function doReschedule() {
 async function deleteCardEvent(ev) {
   if (!confirm(`「${plainTitle(ev)}」を削除しますか？`)) return;
   try {
-    await gasCall('delete', { eventId: ev.id });
-    // 該当カードだけDOMから削除（refresh()しない）
+    // 楽観的UI: 先に削除してから背景同期
     const card = document.querySelector(`.card[data-event-id="${ev.id}"]`);
     if (card) card.remove();
     eventsCache = eventsCache.filter(e => e.id !== ev.id);
+    persistCache();
+    gasCall('delete', { eventId: ev.id }).catch(err => {
+      showToast('削除失敗(サーバー側): ' + (err.message || err));
+    });
     showToast('削除しました');
   } catch (e) {
     showToast('削除失敗');
@@ -1862,20 +1946,25 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
   const btn = document.getElementById('addSubmit');
   btn.disabled = true; btn.textContent = '登録中…';
   try {
+    let created, startISO, endISO;
     if (allDay) {
-      await gasCall('create', {
+      startISO = dateKey + 'T00:00:00';
+      endISO = addDays(dateKey, 1) + 'T00:00:00';
+      created = await gasCall('create', {
         summary: title,
-        startTime: dateKey + 'T00:00:00',
-        endTime: addDays(dateKey, 1) + 'T00:00:00',
+        startTime: startISO,
+        endTime: endISO,
         allDay: true, description: memo
       });
     } else {
       const s = document.getElementById('addStart').value;
       const e = document.getElementById('addEnd').value;
-      await gasCall('create', {
+      startISO = localISO(targetDate, s);
+      endISO = localISO(targetDate, e);
+      created = await gasCall('create', {
         summary: title,
-        startTime: localISO(targetDate, s),
-        endTime: localISO(targetDate, e),
+        startTime: startISO,
+        endTime: endISO,
         description: memo
       });
     }
@@ -1883,12 +1972,24 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
     closeSheet('add');
     document.getElementById('addTitle').value = '';
     document.getElementById('addMemo').value = '';
-    // フォームを終日デフォルトの初期状態に戻す
     document.getElementById('addTimeRow').style.display = 'none';
     document.getElementById('addTimeToggle').textContent = '＋ 時間を指定する';
-    // 表示中の日付に登録した場合のみリスト更新(別日に登録した場合はそのまま)
-    if (dateKey === fmtDate(currentDate)) {
-      await refresh();
+    // 表示中の日付に登録した場合はローカル状態に直接追加(再取得不要)
+    if (dateKey === fmtDate(currentDate) && created && created.id) {
+      const newEv = {
+        id: created.id,
+        summary: title,
+        description: memo,
+        allDay: allDay,
+        start: allDay ? { date: dateKey } : { dateTime: startISO },
+        end:   allDay ? { date: addDays(dateKey, 1) } : { dateTime: endISO }
+      };
+      eventsCache.push(newEv);
+      renderEvents();
+      setCachedEvents(dateKey, eventsCache);
+    } else if (dateKey !== fmtDate(currentDate)) {
+      // 別日に登録した場合はその日のキャッシュを無効化(次回開いた時に再取得)
+      try { localStorage.removeItem(EVENTS_CACHE_PREFIX + dateKey); } catch (err) {}
     }
   } catch (e) {
     showToast('登録失敗: ' + (e.message || e));
