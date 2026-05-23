@@ -2096,26 +2096,35 @@ async function runSearch() {
 function renderSearchResults(events, q) {
   const resBox = document.getElementById('searchResults');
   if (!events.length) { resBox.innerHTML = '<div class="muted" style="padding:8px;">該当なし</div>'; return; }
-  // 開始日昇順
+  // 開始日昇順(過去→未来)
   events.sort((a, b) => {
     const aKey = a.start && (a.start.date || (a.start.dateTime || '').split('T')[0]) || '';
     const bKey = b.start && (b.start.date || (b.start.dateTime || '').split('T')[0]) || '';
     return aKey.localeCompare(bKey);
   });
-  const html = events.map(ev => {
+  const todayKey = fmtDate(currentDate);
+  // 本日以降の最初のイベントindexを探す
+  let firstUpcomingIdx = events.findIndex(ev => {
+    const k = ev.start && (ev.start.date || (ev.start.dateTime || '').split('T')[0]) || '';
+    return k >= todayKey;
+  });
+  if (firstUpcomingIdx < 0) firstUpcomingIdx = events.length - 1; // 全部過去なら末尾
+  const html = events.map((ev, idx) => {
     const dateKey = ev.start && (ev.start.date || (ev.start.dateTime || '').split('T')[0]) || '';
     const allDay = !!(ev.start && ev.start.date);
     const timeStr = allDay ? '終日' : formatTime(ev.start.dateTime);
     const done = (ev.summary || '').startsWith('✔️');
     const title = (ev.summary || '').replace(/</g,'&lt;');
     const memo = (ev.description || '').replace(/</g,'&lt;').slice(0, 80);
-    return `<div class="search-result" data-date="${dateKey}" style="padding:10px 12px; border:1px solid var(--border, #e5e5e5); border-radius:8px; margin-bottom:6px; cursor:pointer; ${done ? 'opacity:0.55;' : ''}">
-      <div style="font-size:13px; color:#666;">${dateKey} ${timeStr}</div>
+    const isUpcoming = (idx === firstUpcomingIdx);
+    const todayMark = (dateKey === todayKey) ? ' <span style="color:#fff; background:#2563eb; font-size:11px; padding:1px 6px; border-radius:8px; margin-left:6px;">本日</span>' : '';
+    return `<div class="search-result" data-date="${dateKey}" data-anchor="${isUpcoming ? '1' : '0'}" style="padding:10px 12px; border:1px solid var(--border, #e5e5e5); border-radius:8px; margin-bottom:6px; cursor:pointer; ${done ? 'opacity:0.55;' : ''}">
+      <div style="font-size:13px; color:#666;">${dateKey} ${timeStr}${todayMark}</div>
       <div style="font-weight:600; margin-top:2px;">${title}</div>
       ${memo ? `<div style="font-size:12px; color:#888; margin-top:4px; white-space:pre-wrap;">${memo}</div>` : ''}
     </div>`;
   }).join('');
-  resBox.innerHTML = `<div class="muted" style="padding:4px 8px;">${events.length}件</div>` + html;
+  resBox.innerHTML = `<div class="muted" style="padding:4px 8px;">${events.length}件 (本日付近を表示中・上下スクロールで前後)</div>` + html;
   resBox.querySelectorAll('.search-result').forEach(el => {
     el.addEventListener('click', () => {
       const dateKey = el.dataset.date;
@@ -2125,6 +2134,17 @@ function renderSearchResults(events, q) {
       closeSheet('search');
     });
   });
+  // 本日付近 (upcoming要素) を可視位置にスクロール
+  const anchor = resBox.querySelector('.search-result[data-anchor="1"]');
+  if (anchor) {
+    // searchSheet がスクロールコンテナなので、その中で位置調整
+    const sheet = document.getElementById('searchSheet');
+    requestAnimationFrame(() => {
+      const sheetRect = sheet.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      sheet.scrollTop += (anchorRect.top - sheetRect.top) - 80; // 上80pxを残して表示
+    });
+  }
 }
 attachSwipeClose('searchSheet', 'search');
 
