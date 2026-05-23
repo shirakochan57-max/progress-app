@@ -2082,9 +2082,9 @@ async function runSearch() {
   btn.disabled = true; const orig = btn.textContent; btn.textContent = '検索中…';
   resBox.innerHTML = '<div class="muted" style="padding:8px;">検索中…</div>';
   try {
-    const data = await gasCall('search', { query: q, fromDays: 365, toDays: 365, limit: 100 });
+    const data = await gasCall('search', { query: q, fromDays: 365, toDays: 365, limit: 200 });
     const events = (data && data.events) || [];
-    renderSearchResults(events, q);
+    renderSearchResults(events, q, data && data.total);
   } catch (e) {
     resBox.innerHTML = `<div class="muted" style="padding:8px;">検索失敗: ${(e.message||e)}</div>`;
   } finally {
@@ -2092,7 +2092,7 @@ async function runSearch() {
   }
 }
 
-function renderSearchResults(events, q) {
+function renderSearchResults(events, q, total) {
   const resBox = document.getElementById('searchResults');
   if (!events.length) { resBox.innerHTML = '<div class="muted" style="padding:8px;">該当なし</div>'; return; }
   // 開始日昇順(過去→未来)
@@ -2122,7 +2122,10 @@ function renderSearchResults(events, q) {
       ${memo ? `<div style="font-size:12px; color:#888; margin-top:4px; white-space:pre-wrap;">${memo}</div>` : ''}
     </div>`;
   }).join('');
-  resBox.innerHTML = `<div class="muted" style="padding:4px 8px;">${events.length}件 (本日付近を表示中・上下スクロールで前後)</div>` + html;
+  const headerText = (total && total > events.length)
+    ? `全${total}件中 本日付近${events.length}件を表示 (上下スクロールで前後)`
+    : `${events.length}件 (本日付近を表示中・上下スクロールで前後)`;
+  resBox.innerHTML = `<div class="muted" style="padding:4px 8px;">${headerText}</div>` + html;
   resBox.querySelectorAll('.search-result').forEach(el => {
     el.addEventListener('click', () => {
       const dateKey = el.dataset.date;
