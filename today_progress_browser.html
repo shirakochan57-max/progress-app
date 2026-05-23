@@ -688,6 +688,10 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
     <label>タイトル</label>
     <input type="text" id="addTitle" placeholder="予定のタイトル" lang="ja" autocomplete="off" autocorrect="off">
   </div>
+  <div class="form-row">
+    <label>日付</label>
+    <input type="date" id="addDate">
+  </div>
   <div class="form-row" id="addTimeRow" style="display:none;">
     <label>時刻</label>
     <div class="time-pair">
@@ -1812,6 +1816,7 @@ document.getElementById('settingsTest').addEventListener('click', async () => {
 
 document.getElementById('addCard').addEventListener('click', () => {
   if (!getGasUrl()) { openSheet('settings'); return; }
+  document.getElementById('addDate').value = fmtDate(currentDate);
   openSheet('add');
 });
 document.getElementById('addBackdrop').addEventListener('click', () => closeSheet('add'));
@@ -1830,7 +1835,9 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
   const timeRow = document.getElementById('addTimeRow');
   const allDay = (timeRow.style.display === 'none' || !timeRow.style.display);
   const memo = document.getElementById('addMemo').value;
-  const dateKey = fmtDate(currentDate);
+  // 日付フィールドの値を使用(空ならcurrentDate)
+  const dateKey = document.getElementById('addDate').value || fmtDate(currentDate);
+  const targetDate = parseDateKey(dateKey);
   const btn = document.getElementById('addSubmit');
   btn.disabled = true; btn.textContent = '登録中…';
   try {
@@ -1846,19 +1853,22 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
       const e = document.getElementById('addEnd').value;
       await gasCall('create', {
         summary: title,
-        startTime: localISO(currentDate, s),
-        endTime: localISO(currentDate, e),
+        startTime: localISO(targetDate, s),
+        endTime: localISO(targetDate, e),
         description: memo
       });
     }
-    showToast('登録しました');
+    showToast(dateKey === fmtDate(currentDate) ? '登録しました' : `${dateKey} に登録しました`);
     closeSheet('add');
     document.getElementById('addTitle').value = '';
     document.getElementById('addMemo').value = '';
     // フォームを終日デフォルトの初期状態に戻す
     document.getElementById('addTimeRow').style.display = 'none';
     document.getElementById('addTimeToggle').textContent = '＋ 時間を指定する';
-    await refresh();
+    // 表示中の日付に登録した場合のみリスト更新(別日に登録した場合はそのまま)
+    if (dateKey === fmtDate(currentDate)) {
+      await refresh();
+    }
   } catch (e) {
     showToast('登録失敗: ' + (e.message || e));
   } finally {
