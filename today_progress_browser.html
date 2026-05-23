@@ -605,6 +605,7 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
         <span id="weekday" class="muted"></span>
       </div>
       <div class="icon-row">
+        <button class="icon-btn" id="searchBtn" aria-label="検索">🔍</button>
         <button class="icon-btn" id="settingsBtn" aria-label="設定">⚙</button>
         <button class="icon-btn" id="refreshBtn" aria-label="更新">⟳</button>
       </div>
@@ -735,6 +736,24 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
   <div id="extractResults" style="margin-top:12px;"></div>
   <div class="sheet-actions" id="extractActions" style="display:none;">
     <button class="btn primary" id="bulkRegisterBtn">一括登録</button>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="searchBackdrop"></div>
+<div class="sheet" id="searchSheet">
+  <div class="sheet-handle"></div>
+  <h3>予定を検索</h3>
+  <div class="form-row">
+    <label>キーワード</label>
+    <div class="time-pair">
+      <input type="text" id="searchInput" placeholder="タイトル・メモを検索" autocomplete="off">
+      <button class="btn primary" id="searchRunBtn" style="flex: 0 0 88px; min-width: 88px;">検索</button>
+    </div>
+    <div class="muted" style="font-size:12px; margin-top:4px;">過去1年〜未来1年から検索</div>
+  </div>
+  <div id="searchResults" style="margin-top:8px;"></div>
+  <div class="sheet-actions">
+    <button class="btn secondary" id="searchCloseBtn">閉じる</button>
   </div>
 </div>
 
@@ -2038,6 +2057,73 @@ document.querySelectorAll('.tab').forEach(t => {
   });
 });
 document.getElementById('refreshBtn').addEventListener('click', refresh);
+
+// ============= 検索機能 =============
+document.getElementById('searchBtn').addEventListener('click', () => {
+  if (!getGasUrl()) { openSheet('settings'); return; }
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchResults').innerHTML = '';
+  openSheet('search');
+  setTimeout(() => document.getElementById('searchInput').focus(), 100);
+});
+document.getElementById('searchBackdrop').addEventListener('click', () => closeSheet('search'));
+document.getElementById('searchCloseBtn').addEventListener('click', () => closeSheet('search'));
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+});
+document.getElementById('searchRunBtn').addEventListener('click', runSearch);
+
+async function runSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  const resBox = document.getElementById('searchResults');
+  if (!q) { resBox.innerHTML = '<div class="muted" style="padding:8px;">キーワードを入力</div>'; return; }
+  const btn = document.getElementById('searchRunBtn');
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = '検索中…';
+  resBox.innerHTML = '<div class="muted" style="padding:8px;">検索中…</div>';
+  try {
+    const data = await gasCall('search', { query: q, fromDays: 365, toDays: 365, limit: 100 });
+    const events = (data && data.events) || [];
+    renderSearchResults(events, q);
+  } catch (e) {
+    resBox.innerHTML = `<div class="muted" style="padding:8px;">検索失敗: ${(e.message||e)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
+function renderSearchResults(events, q) {
+  const resBox = document.getElementById('searchResults');
+  if (!events.length) { resBox.innerHTML = '<div class="muted" style="padding:8px;">該当なし</div>'; return; }
+  events.sort((a, b) => {
+    const aKey = a.start && (a.start.date || (a.start.dateTime || '').split('T')[0]) || '';
+    const bKey = b.start && (b.start.date || (b.start.dateTime || '').split('T')[0]) || '';
+    return aKey.localeCompare(bKey);
+  });
+  const html = events.map(ev => {
+    const dateKey = ev.start && (ev.start.date || (ev.start.dateTime || '').split('T')[0]) || '';
+    const allDay = !!(ev.start && ev.start.date);
+    const timeStr = allDay ? '終日' : formatTime(ev.start.dateTime);
+    const done = (ev.summary || '').startsWith('✔️');
+    const title = (ev.summary || '').replace(/</g,'&lt;');
+    const memo = (ev.description || '').replace(/</g,'&lt;').slice(0, 80);
+    return `<div class="search-result" data-date="${dateKey}" style="padding:10px 12px; border:1px solid var(--border, #e5e5e5); border-radius:8px; margin-bottom:6px; cursor:pointer; ${done ? 'opacity:0.55;' : ''}">
+      <div style="font-size:13px; color:#666;">${dateKey} ${timeStr}</div>
+      <div style="font-weight:600; margin-top:2px;">${title}</div>
+      ${memo ? `<div style="font-size:12px; color:#888; margin-top:4px; white-space:pre-wrap;">${memo}</div>` : ''}
+    </div>`;
+  }).join('');
+  resBox.innerHTML = `<div class="muted" style="padding:4px 8px;">${events.length}件</div>` + html;
+  resBox.querySelectorAll('.search-result').forEach(el => {
+    el.addEventListener('click', () => {
+      const dateKey = el.dataset.date;
+      if (!dateKey) return;
+      currentDate = parseDateKey(dateKey);
+      updateDateLabel(); syncTabs(); refresh();
+      closeSheet('search');
+    });
+  });
+}
+attachSwipeClose('searchSheet', 'search');
 
 function attachSwipeClose(sheetId, name) {
   const el = document.getElementById(sheetId);
