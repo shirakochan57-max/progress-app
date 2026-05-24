@@ -393,6 +393,20 @@ html, body {
   background: #f2f2f7; color: #6e6e73;
   border-radius: 6px; font-weight: 500;
 }
+.memo-save-btn {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 3px 10px;
+  background: #007aff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.memo-save-btn:active { background: #0062cc; }
+.memo-input { min-height: 110px; }
+.progress-log { min-height: 50px; }
 
 textarea {
   font-size: 16px;
@@ -1250,49 +1264,44 @@ function renderCard(ev) {
   const progLabel = document.createElement('span');
   progLabel.className = 'memo-label';
   progLabel.textContent = '進捗メモ';
-  const progBadge = document.createElement('span');
-  progBadge.className = 'memo-badge';
-  progBadge.textContent = 'ローカル保存';
+  const progSaveBtn = document.createElement('button');
+  progSaveBtn.className = 'memo-save-btn';
+  progSaveBtn.type = 'button';
+  progSaveBtn.textContent = 'ローカル保存';
   progLblRow.appendChild(progLabel);
-  progLblRow.appendChild(progBadge);
+  progLblRow.appendChild(progSaveBtn);
   const progLog = document.createElement('textarea');
   progLog.className = 'progress-log';
-  progLog.value = getProgressLog(ev.id);
-  progLog.placeholder = '（まだ進捗はありません）入力して「ローカル保存」を押すと✔時刻付きで保存。「保存」でカレンダーメモへ';
-  progLog.style.minHeight = '90px';
-  progLog.addEventListener('blur', () => {
-    const v = progLog.value;
-    if (v.trim()) {
-      localStorage.setItem('progress_' + ev.id, v);
-    } else {
-      localStorage.removeItem('progress_' + ev.id);
-    }
-  });
-  const progSaveBtn = document.createElement('button');
-  progSaveBtn.className = 'add-progress-btn';
-  progSaveBtn.textContent = 'ローカル保存';
+  let baselineValue = getProgressLog(ev.id);
+  progLog.value = baselineValue;
+  progLog.placeholder = '（まだ進捗はありません）追記したい内容を末尾に入力し「ローカル保存」を押すと✔時刻付きで保存';
   function progLocalSave() {
-    const orig = getProgressLog(ev.id);
     const current = progLog.value;
-    if (current === orig) { showToast('変更なし'); return; }
+    if (current === baselineValue) { showToast('変更なし'); return; }
     let newPart = '';
-    if (orig && current.startsWith(orig)) {
-      newPart = current.substring(orig.length).replace(/^\n+/, '');
-    } else if (!orig) {
+    if (baselineValue && current.startsWith(baselineValue)) {
+      newPart = current.substring(baselineValue.length).replace(/^\n+/, '');
+    } else if (!baselineValue) {
       newPart = current;
     }
     newPart = newPart.trim();
     const d = new Date();
     const stamp = pad(d.getHours()) + ':' + pad(d.getMinutes());
     if (newPart) {
-      const entry = '✔ ' + stamp + ' ' + newPart;
-      const baseTrimmed = orig.trim();
+      const entry = '✔️ ' + stamp + ' ' + newPart;
+      const baseTrimmed = baselineValue.trim();
       const next = baseTrimmed ? baseTrimmed + '\n' + entry : entry;
       localStorage.setItem('progress_' + ev.id, next);
       progLog.value = next;
+      baselineValue = next;
       showToast('進捗メモに追記しました');
     } else {
-      localStorage.setItem('progress_' + ev.id, current);
+      if (current.trim()) {
+        localStorage.setItem('progress_' + ev.id, current);
+      } else {
+        localStorage.removeItem('progress_' + ev.id);
+      }
+      baselineValue = current;
       showToast('保存しました');
     }
   }
@@ -1302,7 +1311,6 @@ function renderCard(ev) {
   });
   progSec.appendChild(progLblRow);
   progSec.appendChild(progLog);
-  progSec.appendChild(progSaveBtn);
   body.appendChild(progSec);
 
   card.appendChild(body);
