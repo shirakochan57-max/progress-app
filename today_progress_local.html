@@ -1259,9 +1259,10 @@ function renderCard(ev) {
   const progLog = document.createElement('textarea');
   progLog.className = 'progress-log';
   progLog.value = getProgressLog(ev.id);
-  progLog.placeholder = '（まだ進捗はありません）';
+  progLog.placeholder = '（まだ進捗はありません）入力して「ローカル保存」を押すと✔時刻付きで保存。「保存」でカレンダーメモへ';
+  progLog.style.minHeight = '90px';
   progLog.addEventListener('blur', () => {
-    // 直接編集した内容をlocalStorageに反映
+    // 直接編集した内容をlocalStorageに反映（タイムスタンプは付けない）
     const v = progLog.value;
     if (v.trim()) {
       localStorage.setItem('progress_' + ev.id, v);
@@ -1269,40 +1270,45 @@ function renderCard(ev) {
       localStorage.removeItem('progress_' + ev.id);
     }
   });
+  // ローカル保存ボタン: 新規追加部分に ✔ HH:MM を付与してlocalStorageへ保存
+  const progSaveBtn = document.createElement('button');
+  progSaveBtn.className = 'add-progress-btn';
+  progSaveBtn.textContent = 'ローカル保存';
+  function progLocalSave() {
+    const orig = getProgressLog(ev.id);
+    const current = progLog.value;
+    if (current === orig) { showToast('変更なし'); return; }
+    // 末尾に追記された部分を抽出 (orig が prefix の場合のみ "新規部分" 判定)
+    let newPart = '';
+    if (orig && current.startsWith(orig)) {
+      newPart = current.substring(orig.length).replace(/^\n+/, '');
+    } else if (!orig) {
+      newPart = current;
+    }
+    newPart = newPart.trim();
+    const d = new Date();
+    const stamp = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    if (newPart) {
+      const entry = '✔ ' + stamp + ' ' + newPart;
+      const baseTrimmed = orig.trim();
+      const next = baseTrimmed ? baseTrimmed + '\n' + entry : entry;
+      localStorage.setItem('progress_' + ev.id, next);
+      progLog.value = next;
+      showToast('進捗メモに追記しました');
+    } else {
+      // 中間編集など末尾追加でないケース: 現在値をそのまま保存
+      localStorage.setItem('progress_' + ev.id, current);
+      showToast('保存しました');
+    }
+  }
+  progSaveBtn.addEventListener('click', e => { e.stopPropagation(); progLocalSave(); });
+  progLog.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); progLocalSave(); }
+  });
   progSec.appendChild(progLblRow);
   progSec.appendChild(progLog);
+  progSec.appendChild(progSaveBtn);
   body.appendChild(progSec);
-
-  const addSec = document.createElement('div');
-  addSec.className = 'memo-section';
-  const addLabel = document.createElement('span');
-  addLabel.className = 'memo-label';
-  addLabel.textContent = '追記';
-  const addInput = document.createElement('textarea');
-  addInput.className = 'append-input';
-  addInput.placeholder = '入力して「ローカル保存」を押すと✔日時付きで進捗メモへ。「保存」を押すと直接カレンダーメモへ';
-  addInput.style.minHeight = '60px';
-  function localSaveAppend() {
-    const t = addInput.value.trim();
-    if (!t) return;
-    const next = appendProgressLog(ev.id, t);
-    progLog.value = next;
-    addInput.value = '';
-  }
-  addInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      localSaveAppend();
-    }
-  });
-  const localSaveBtn = document.createElement('button');
-  localSaveBtn.className = 'add-progress-btn';
-  localSaveBtn.textContent = '＋ ローカル保存';
-  localSaveBtn.addEventListener('click', e => { e.stopPropagation(); localSaveAppend(); });
-  addSec.appendChild(addLabel);
-  addSec.appendChild(addInput);
-  addSec.appendChild(localSaveBtn);
-  body.appendChild(addSec);
 
   card.appendChild(body);
 
