@@ -696,16 +696,29 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
   <div class="sheet-handle"></div>
   <h3>予定を振替</h3>
   <div class="form-row">
-    <label>① 振替先の日付（次のアクションをする日）</label>
+    <label>① いつ（振替先の日付）</label>
     <input type="date" id="rescheduleDate">
   </div>
   <div class="form-row">
-    <label>② 次のアクションの内容（具体的に）</label>
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="rescheduleAllDay" style="width:18px; height:18px;"> 終日にする
+    </label>
+  </div>
+  <div class="form-row" id="rescheduleTimeRow">
+    <label>② 何時（開始〜終了）</label>
+    <div class="time-pair">
+      <input type="time" id="rescheduleStart" value="10:00">
+      <span class="muted">〜</span>
+      <input type="time" id="rescheduleEnd" value="11:00">
+    </div>
+  </div>
+  <div class="form-row">
+    <label>③ 何をするか（具体的に）</label>
     <textarea id="rescheduleAction" placeholder="例：〇〇さんに電話する／資料の目次だけ作る／メールを下書きする" lang="ja" autocomplete="off" autocorrect="off"></textarea>
   </div>
   <div class="form-row">
     <div class="help-text">
-      ※ 日付と次のアクション内容の両方を入力しないと振替できません。<br>
+      ※ 日付・時刻（または終日）・内容の3つすべてを入力しないと振替できません。<br>
       これは無計画な先延ばしを防ぐための仕様です。
     </div>
   </div>
@@ -1883,20 +1896,53 @@ function openReschedule(card, ev) {
   const tomorrow = new Date(currentDate); tomorrow.setDate(tomorrow.getDate() + 1);
   document.getElementById('rescheduleDate').value = fmtDate(tomorrow);
   document.getElementById('rescheduleAction').value = '';
+  // 元イベントの状態から終日/時刻の初期値を決定
+  const allDayCb = document.getElementById('rescheduleAllDay');
+  const startEl = document.getElementById('rescheduleStart');
+  const endEl = document.getElementById('rescheduleEnd');
+  if (isMultiDay(ev)) {
+    // 複数日予定: 終日固定(時刻入力不可)
+    allDayCb.checked = true;
+    allDayCb.disabled = true;
+  } else {
+    allDayCb.disabled = false;
+    const isAD = isAllDay(ev);
+    allDayCb.checked = isAD;
+    if (isAD) {
+      startEl.value = '10:00';
+      endEl.value = '11:00';
+    } else {
+      startEl.value = formatTime(getStartISO(ev)) || '10:00';
+      endEl.value = formatTime(getEndISO(ev)) || '11:00';
+    }
+  }
+  updateRescheduleTimeRowVisibility();
   checkRescheduleValid();
   openSheet('reschedule');
+}
+function updateRescheduleTimeRowVisibility() {
+  const allDay = document.getElementById('rescheduleAllDay').checked;
+  document.getElementById('rescheduleTimeRow').style.display = allDay ? 'none' : '';
 }
 function checkRescheduleValid() {
   const d = document.getElementById('rescheduleDate').value;
   const a = document.getElementById('rescheduleAction').value.trim();
-  document.getElementById('rescheduleSubmit').disabled = !(d && a);
+  const allDay = document.getElementById('rescheduleAllDay').checked;
+  const s = document.getElementById('rescheduleStart').value;
+  const e = document.getElementById('rescheduleEnd').value;
+  const timeOk = allDay || (s && e && s < e);
+  document.getElementById('rescheduleSubmit').disabled = !(d && a && timeOk);
 }
 async function doReschedule() {
   if (!currentReschedule) return;
   const { card, ev } = currentReschedule;
   const newDate = document.getElementById('rescheduleDate').value;
   const action = document.getElementById('rescheduleAction').value.trim();
+  const newAllDay = document.getElementById('rescheduleAllDay').checked;
+  const newStartHM = document.getElementById('rescheduleStart').value;
+  const newEndHM = document.getElementById('rescheduleEnd').value;
   if (!newDate || !action) return;
+  if (!newAllDay && (!newStartHM || !newEndHM || newStartHM >= newEndHM)) return;
   const btn = document.getElementById('rescheduleSubmit');
   btn.disabled = true;
   const orig = btn.textContent;
@@ -1905,7 +1951,8 @@ async function doReschedule() {
     const memoEl = card.querySelector('.memo-input');
     const existingDesc = memoEl ? memoEl.value : (ev.description || '');
     const stamp = nowStamp();
-    const note = `🔄 [${stamp}] ${fmtDate(currentDate)} から ${newDate} に振替\n次のアクション: ${action}`;
+    const timeInfo = newAllDay ? '終日' : `${newStartHM}〜${newEndHM}`;
+    const note = `🔄 [${stamp}] ${fmtDate(currentDate)} から ${newDate} ${timeInfo} に振替\n次のアクション: ${action}`;
     const newDesc = existingDesc.trim() ? existingDesc.trim() + '\n' + note : note;
 
     // 単発複数日予定の振替: 開始日変更 (終了日超え時は単発1日に置換)
@@ -1945,9 +1992,10 @@ async function doReschedule() {
       return;
     }
 
+    // 振替先の日時はユーザー入力値を使用 (元イベントの時刻は引き継がない)
     const dateObj = parseDateKey(newDate);
     let created;
-    if (isAllDay(ev)) {
+    if (newAllDay) {
       created = await gasCall('create', {
         summary: ev.summary,
         startTime: newDate + 'T00:00:00',
@@ -1956,12 +2004,10 @@ async function doReschedule() {
         description: newDesc
       });
     } else {
-      const startHM = formatTime(getStartISO(ev)) || '10:00';
-      const endHM = formatTime(getEndISO(ev)) || '11:00';
       created = await gasCall('create', {
         summary: ev.summary,
-        startTime: localISO(dateObj, startHM),
-        endTime: localISO(dateObj, endHM),
+        startTime: localISO(dateObj, newStartHM),
+        endTime: localISO(dateObj, newEndHM),
         description: newDesc
       });
     }
@@ -2126,6 +2172,12 @@ document.getElementById('rescheduleBackdrop').addEventListener('click', () => cl
 document.getElementById('rescheduleCancel').addEventListener('click', () => closeSheet('reschedule'));
 document.getElementById('rescheduleDate').addEventListener('input', checkRescheduleValid);
 document.getElementById('rescheduleAction').addEventListener('input', checkRescheduleValid);
+document.getElementById('rescheduleStart').addEventListener('input', checkRescheduleValid);
+document.getElementById('rescheduleEnd').addEventListener('input', checkRescheduleValid);
+document.getElementById('rescheduleAllDay').addEventListener('change', () => {
+  updateRescheduleTimeRowVisibility();
+  checkRescheduleValid();
+});
 document.getElementById('rescheduleSubmit').addEventListener('click', doReschedule);
 attachSwipeClose('rescheduleSheet', 'reschedule');
 document.getElementById('importCard').addEventListener('click', () => {
