@@ -773,16 +773,15 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
     </div>
   </div>
   <div class="form-row">
-    <label>または直接貼り付け</label>
-    <textarea id="docPaste" placeholder="テキストを貼り付け"></textarea>
+    <label>または直接貼り付け（1行 = 1予定）</label>
+    <textarea id="docPaste" placeholder="例:&#10;歯磨き&#10;10:00 散歩&#10;14:00〜15:00 ミーティング"></textarea>
+    <div class="muted" style="font-size:12px; margin-top:4px;">
+      時刻を含む行（例: 10:00 / 14:00〜15:00）は時間指定、それ以外は終日として登録されます
+    </div>
   </div>
   <div class="sheet-actions">
     <button class="btn secondary" id="importCancel">閉じる</button>
-    <button class="btn primary" id="extractBtn">予定を抽出する</button>
-  </div>
-  <div id="extractResults" style="margin-top:12px;"></div>
-  <div class="sheet-actions" id="extractActions" style="display:none;">
-    <button class="btn primary" id="bulkRegisterBtn">一括登録</button>
+    <button class="btn primary" id="bulkRegisterBtn">登録する</button>
   </div>
 </div>
 
@@ -2185,104 +2184,73 @@ document.getElementById('docLoadBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('extractBtn').addEventListener('click', () => {
+document.getElementById('bulkRegisterBtn').addEventListener('click', async () => {
   const raw = document.getElementById('docPaste').value;
   if (!raw.trim()) { showToast('テキストがありません'); return; }
   const items = parseScheduleText(raw);
-  renderExtractSlots(items);
-  if (items.length === 0) showToast('予定が見つかりません');
-});
-
-function renderExtractSlots(items) {
-  const container = document.getElementById('extractResults');
-  container.innerHTML = '';
-  const slots = items.slice(0, 15);
-  slots.forEach((it, idx) => {
-    const slot = document.createElement('div');
-    slot.className = 'extract-slot';
-    slot.dataset.idx = idx;
-    const head = document.createElement('div');
-    head.className = 'extract-head';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox'; cb.checked = true; cb.dataset.f = 'sel';
-    const ti = document.createElement('input');
-    ti.type = 'text'; ti.value = it.title || ''; ti.dataset.f = 'title';
-    head.appendChild(cb); head.appendChild(ti);
-    const times = document.createElement('div');
-    times.className = 'extract-times';
-    const adl = document.createElement('label');
-    const ad = document.createElement('input');
-    ad.type = 'checkbox'; ad.checked = !!it.allDay; ad.dataset.f = 'allDay';
-    adl.appendChild(ad);
-    const adt = document.createElement('span'); adt.textContent = '終日';
-    adl.appendChild(adt);
-    const st = document.createElement('input');
-    st.type = 'time'; st.value = it.start || '10:00'; st.dataset.f = 'start';
-    const sp = document.createElement('span'); sp.textContent = '〜'; sp.className = 'muted';
-    const en = document.createElement('input');
-    en.type = 'time'; en.value = it.end || '11:00'; en.dataset.f = 'end';
-    times.appendChild(adl); times.appendChild(st); times.appendChild(sp); times.appendChild(en);
-    function applyAd() {
-      const v = ad.checked;
-      st.style.visibility = v ? 'hidden' : 'visible';
-      en.style.visibility = v ? 'hidden' : 'visible';
-      sp.style.visibility = v ? 'hidden' : 'visible';
-    }
-    ad.addEventListener('change', applyAd);
-    applyAd();
-    const memo = document.createElement('textarea');
-    memo.value = it.memo || ''; memo.dataset.f = 'memo';
-    memo.placeholder = 'メモ';
-    slot.appendChild(head); slot.appendChild(times); slot.appendChild(memo);
-    container.appendChild(slot);
-  });
-  document.getElementById('extractActions').style.display = slots.length ? '' : 'none';
-}
-
-document.getElementById('bulkRegisterBtn').addEventListener('click', async () => {
-  const slots = document.querySelectorAll('.extract-slot');
+  if (items.length === 0) { showToast('予定が見つかりません'); return; }
   const dateKey = fmtDate(currentDate);
   const btn = document.getElementById('bulkRegisterBtn');
   btn.disabled = true; btn.textContent = '登録中…';
   let ok = 0, ng = 0;
-  for (const slot of slots) {
-    const sel = slot.querySelector('[data-f="sel"]').checked;
-    if (!sel) continue;
-    const title = slot.querySelector('[data-f="title"]').value.trim();
+  const newEvents = [];
+  for (const it of items) {
+    const title = (it.title || '').trim();
     if (!title) continue;
-    const allDay = slot.querySelector('[data-f="allDay"]').checked;
-    const memo = slot.querySelector('[data-f="memo"]').value;
+    const allDay = !!it.allDay;
+    const memo = it.memo || '';
     try {
+      let startISO, endISO;
       if (allDay) {
-        await gasCall('create', {
+        startISO = dateKey + 'T00:00:00';
+        endISO = addDays(dateKey, 1) + 'T00:00:00';
+        const created = await gasCall('create', {
           summary: title,
-          startTime: dateKey + 'T00:00:00',
-          endTime: addDays(dateKey, 1) + 'T00:00:00',
+          startTime: startISO,
+          endTime: endISO,
           allDay: true, description: memo
         });
+        if (created && created.id) {
+          newEvents.push({
+            id: created.id, summary: title, description: memo, allDay: true,
+            start: { date: dateKey },
+            end: { date: addDays(dateKey, 1) }
+          });
+        }
       } else {
-        const s = slot.querySelector('[data-f="start"]').value;
-        const e = slot.querySelector('[data-f="end"]').value;
-        await gasCall('create', {
+        const s = it.start || '10:00';
+        const e = it.end || '11:00';
+        startISO = localISO(currentDate, s);
+        endISO = localISO(currentDate, e);
+        const created = await gasCall('create', {
           summary: title,
-          startTime: localISO(currentDate, s),
-          endTime: localISO(currentDate, e),
+          startTime: startISO,
+          endTime: endISO,
           description: memo
         });
+        if (created && created.id) {
+          newEvents.push({
+            id: created.id, summary: title, description: memo, allDay: false,
+            start: { dateTime: startISO },
+            end: { dateTime: endISO }
+          });
+        }
       }
       ok++;
     } catch (e) {
       console.error(e); ng++;
     }
   }
-  btn.disabled = false; btn.textContent = '一括登録';
-  showToast(`${ok}件登録 / ${ng}件失敗`);
+  btn.disabled = false; btn.textContent = '登録する';
+  showToast(`${ok}件登録${ng ? ` / ${ng}件失敗` : ''}`);
   closeSheet('import');
   document.getElementById('docUrl').value = '';
   document.getElementById('docPaste').value = '';
-  document.getElementById('extractResults').innerHTML = '';
-  document.getElementById('extractActions').style.display = 'none';
-  await refresh();
+  for (const ne of newEvents) eventsCache.push(ne);
+  if (newEvents.length) {
+    renderEvents();
+    persistCache();
+  }
 });
 
 
