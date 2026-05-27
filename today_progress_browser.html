@@ -1884,13 +1884,14 @@ function openReschedule(card, ev) {
   const startEl = document.getElementById('rescheduleStart');
   const endEl = document.getElementById('rescheduleEnd');
   if (isMultiDay(ev)) {
+    // 複数日予定: 終日固定(時刻入力不可)
     allDayCb.checked = true;
     allDayCb.disabled = true;
   } else {
+    // デフォルトは時間指定モード (終日チェックは外す)
     allDayCb.disabled = false;
-    const isAD = isAllDay(ev);
-    allDayCb.checked = isAD;
-    if (isAD) {
+    allDayCb.checked = false;
+    if (isAllDay(ev)) {
       startEl.value = '10:00';
       endEl.value = '11:00';
     } else {

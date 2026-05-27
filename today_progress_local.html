@@ -1905,10 +1905,11 @@ function openReschedule(card, ev) {
     allDayCb.checked = true;
     allDayCb.disabled = true;
   } else {
+    // デフォルトは時間指定モード (終日チェックは外す)
     allDayCb.disabled = false;
-    const isAD = isAllDay(ev);
-    allDayCb.checked = isAD;
-    if (isAD) {
+    allDayCb.checked = false;
+    // 元が時間指定なら元の時刻を初期値に、終日なら 10:00〜11:00
+    if (isAllDay(ev)) {
       startEl.value = '10:00';
       endEl.value = '11:00';
     } else {
