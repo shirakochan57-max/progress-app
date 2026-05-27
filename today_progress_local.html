@@ -370,6 +370,26 @@ html, body {
 .pill-btn.reschedule-pill {
   background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
 }
+.pill-btn.split-pill {
+  background: #ede9fe; color: #6d28d9; border: 1px solid #c4b5fd;
+}
+.pill-btn.split-pill.active {
+  background: #7c3aed; color: #fff; border-color: #7c3aed;
+}
+.split-section {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px; background: #f5f3ff;
+  border: 1px dashed #c4b5fd; border-radius: 10px;
+}
+.split-section .split-hint { font-size: 12px; color: #6d28d9; }
+.split-input {
+  width: 100%; min-height: 90px;
+  border: 1px solid #c4b5fd; border-radius: 8px;
+  padding: 8px 10px; font-size: 14px;
+  font-family: inherit; line-height: 1.5;
+  background: #fff; resize: vertical;
+}
+.split-input:focus { outline: none; border-color: #7c3aed; }
 .pill-btn:disabled { opacity: 0.5; cursor: default; }
 .head-spacer { flex: 1; }
 
@@ -1190,6 +1210,12 @@ function renderCard(ev) {
   reschedBtn.addEventListener('click', e => { e.stopPropagation(); openReschedule(card, ev); });
   head.appendChild(reschedBtn);
 
+  const splitBtn = document.createElement('button');
+  splitBtn.className = 'pill-btn split-pill';
+  splitBtn.textContent = '✂ 分解';
+  splitBtn.addEventListener('click', e => { e.stopPropagation(); onSplitClick(); });
+  head.appendChild(splitBtn);
+
   const delBtn = document.createElement('button');
   delBtn.className = 'pill-btn delete-pill';
   delBtn.textContent = '🗑';
@@ -1319,6 +1345,87 @@ function renderCard(ev) {
   progSec.appendChild(progLblRow);
   progSec.appendChild(progLog);
   body.appendChild(progSec);
+
+  // 分解セクション (初期非表示)
+  const splitSec = document.createElement('div');
+  splitSec.className = 'split-section';
+  splitSec.style.display = 'none';
+  const splitHint = document.createElement('div');
+  splitHint.className = 'split-hint';
+  splitHint.textContent = '1行 = 1タスク。記入後にもう一度「✂ 分解」を押すと、行ごとに別カードへ分解します';
+  const splitInput = document.createElement('textarea');
+  splitInput.className = 'split-input';
+  splitInput.placeholder = '例:\n水の準備\n公園まで行く\nうんちの処理';
+  splitSec.appendChild(splitHint);
+  splitSec.appendChild(splitInput);
+  body.appendChild(splitSec);
+
+  async function onSplitClick() {
+    const opened = splitSec.style.display !== 'none';
+    if (!opened) {
+      splitSec.style.display = '';
+      splitBtn.classList.add('active');
+      splitBtn.textContent = '✂ 実行';
+      setTimeout(() => splitInput.focus(), 30);
+      return;
+    }
+    const lines = splitInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      splitSec.style.display = 'none';
+      splitBtn.classList.remove('active');
+      splitBtn.textContent = '✂ 分解';
+      return;
+    }
+    splitBtn.disabled = true;
+    splitBtn.textContent = '分解中…';
+    try {
+      const memoText = memo.value || '';
+      const allDay = isAllDay(ev);
+      const baseStart = ev.start && (ev.start.dateTime || ev.start.date);
+      const baseEnd = ev.end && (ev.end.dateTime || ev.end.date);
+      const dateKey = getEventDateKey(ev);
+      // 各行に対して新規イベントを作成 (順次)
+      const newEvents = [];
+      for (const line of lines) {
+        const payload = {
+          summary: line,
+          description: memoText
+        };
+        if (allDay) {
+          payload.allDay = true;
+          payload.startTime = dateKey + 'T00:00:00';
+          payload.endTime = addDays(dateKey, 1) + 'T00:00:00';
+        } else {
+          payload.startTime = String(baseStart).split('+')[0].split('Z')[0];
+          payload.endTime = String(baseEnd).split('+')[0].split('Z')[0];
+        }
+        const created = await gasCall('create', payload);
+        if (!created || !created.id) throw new Error('作成失敗: ' + line);
+        newEvents.push({
+          id: created.id,
+          summary: line,
+          description: memoText,
+          allDay: allDay,
+          start: allDay ? { date: dateKey } : { dateTime: baseStart },
+          end:   allDay ? { date: addDays(dateKey, 1) } : { dateTime: baseEnd }
+        });
+      }
+      // 元イベント削除
+      await gasCall('delete', { eventId: ev.id });
+      // UI更新
+      card.remove();
+      eventsCache = eventsCache.filter(e => e.id !== ev.id);
+      for (const ne of newEvents) eventsCache.push(ne);
+      renderEvents();
+      persistCache();
+      showToast(`${lines.length}個のカードに分解しました`);
+    } catch (err) {
+      console.error('split error', err);
+      showToast('分解失敗: ' + (err.message || err));
+      splitBtn.disabled = false;
+      splitBtn.textContent = '✂ 実行';
+    }
+  }
 
   card.appendChild(body);
 
