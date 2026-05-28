@@ -108,7 +108,35 @@ html, body {
 .action-card.import-card   { --accent: #8b5cf6; --accent-text: #7c3aed; }
 .action-card.add-card      { --accent: #3b82f6; --accent-text: #2563eb; }
 .action-card.roulette-card { --accent: #10b981; --accent-text: #047857; }
+.action-card.photo-card    { --accent: #ec4899; --accent-text: #be185d; }
 .action-card:active { opacity: 0.7; transform: scale(0.99); }
+
+.card-photo {
+  margin-top: 6px;
+  display: block;
+  max-width: 220px; max-height: 220px;
+  border-radius: 10px;
+  border: 1px solid #e5e5ea;
+  cursor: pointer;
+}
+.photo-lightbox {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: none;
+  align-items: center; justify-content: center;
+  z-index: 100;
+}
+.photo-lightbox.open { display: flex; }
+.photo-lightbox img {
+  max-width: 96vw; max-height: 92vh;
+  border-radius: 8px;
+}
+.photo-lightbox .close-hint {
+  position: absolute; top: 16px; right: 20px;
+  color: #fff; font-size: 14px;
+  background: rgba(255,255,255,0.15);
+  padding: 6px 12px; border-radius: 20px;
+}
 
 /* ルーレット回転中のハイライト */
 .card.roulette-spinning {
@@ -302,6 +330,12 @@ html, body {
   border-bottom: 1px solid transparent;
   font-family: inherit;
   width: 100%;
+  /* textarea として複数行折り返し対応 */
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 .title-input:focus { outline: none; border-bottom-color: #007aff; }
 .card.done .title-input { color: #8e8e93; text-decoration: line-through; }
@@ -655,10 +689,19 @@ textarea:focus, input:focus { outline: none; border-color: #007aff; }
       <div class="action-icon">＋</div>
       <div class="action-label">新規予定を追加</div>
     </div>
+    <div class="action-card photo-card" id="photoCard">
+      <div class="action-icon">📷</div>
+      <div class="action-label">写真でタスク作成</div>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
     <div class="action-card roulette-card" id="rouletteCard">
       <div class="action-icon">🎲</div>
       <div class="action-label">ルーレット（終日の中から次の1つを決める）</div>
     </div>
+  </div>
+  <div class="photo-lightbox" id="photoLightbox">
+    <div class="close-hint">タップで閉じる</div>
+    <img id="photoLightboxImg" alt="">
   </div>
   <div id="rouletteBannerSlot"></div>
 
@@ -1007,6 +1050,121 @@ function persistCache() {
   try { setCachedEvents(fmtDate(currentDate), eventsCache); } catch (e) {}
 }
 
+// ========= 写真添付 (localStorage, 端末ローカル) =========
+const PHOTO_PREFIX = 'photo_';
+function getCardPhoto(eventId) {
+  try { return localStorage.getItem(PHOTO_PREFIX + eventId) || ''; } catch (e) { return ''; }
+}
+function setCardPhoto(eventId, dataUrl) {
+  try { localStorage.setItem(PHOTO_PREFIX + eventId, dataUrl); return true; }
+  catch (e) { console.error('photo保存失敗', e); return false; }
+}
+function removeCardPhoto(eventId) {
+  try { localStorage.removeItem(PHOTO_PREFIX + eventId); } catch (e) {}
+}
+// 表示中の日付のeventsCacheから次の「タスクN」番号を計算
+function nextTaskNumber() {
+  const re = /^タスク(\d+)$/;
+  let max = 0;
+  for (const ev of eventsCache) {
+    const t = plainTitle(ev);
+    const m = t.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+// 画像をcanvasで長辺max1024px・JPEG80%に圧縮し DataURL を返す
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1024;
+        let { width, height } = img;
+        if (width > max || height > max) {
+          if (width >= height) { height = Math.round(height * max / width); width = max; }
+          else { width = Math.round(width * max / height); height = max; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('画像読み込みエラー'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('ファイル読み込みエラー'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ========= 未完了タスクの自動持ち越し =========
+const LAST_CARRY_KEY = 'last_carry_check_date';
+async function autoCarryUndoneTasks() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayKey = fmtDate(today);
+  const lastCheck = localStorage.getItem(LAST_CARRY_KEY);
+  if (lastCheck === todayKey) return; // 今日は既に実行済
+  if (fmtDate(currentDate) !== todayKey) return; // 今日表示時のみ動作
+  if (!getGasUrl()) return;
+
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  const ydKey = fmtDate(yesterday);
+
+  let ydEvents;
+  try {
+    const data = await gasCall('list', { date: ydKey });
+    ydEvents = data.events || [];
+  } catch (e) {
+    console.error('autoCarry: 昨日取得失敗', e);
+    return;
+  }
+
+  // 対象: 完了していない + 終日 + 複数日でない + 繰り返しインスタンスでない
+  const toCarry = ydEvents.filter(ev => {
+    if (isDone(ev)) return false;
+    if (!isAllDay(ev)) return false;
+    if (isMultiDay(ev)) return false;
+    if (ev.id && /_\d{8}T\d{6}Z/.test(String(ev.id))) return false;
+    return true;
+  });
+
+  if (toCarry.length === 0) {
+    localStorage.setItem(LAST_CARRY_KEY, todayKey);
+    return;
+  }
+
+  let success = 0;
+  for (const ev of toCarry) {
+    try {
+      await gasCall('update', {
+        eventId: ev.id,
+        allDay: true,
+        startTime: todayKey + 'T00:00:00',
+        endTime: addDays(todayKey, 1) + 'T00:00:00'
+      });
+      success++;
+    } catch (e) {
+      console.error('carry失敗', ev.summary, e);
+    }
+  }
+  localStorage.setItem(LAST_CARRY_KEY, todayKey);
+  // キャッシュ無効化(昨日と今日)
+  try { localStorage.removeItem(EVENTS_CACHE_PREFIX + ydKey); } catch (e) {}
+  try { localStorage.removeItem(EVENTS_CACHE_PREFIX + todayKey); } catch (e) {}
+  if (success > 0) {
+    showToast(`${success}件のタスクを昨日から持ち越しました`);
+    // 表示中が今日のままなら最新を取得して再描画
+    if (fmtDate(currentDate) === todayKey) await refresh();
+  }
+}
+
 function renderEvents() {
   const incomplete = document.getElementById('cardsIncomplete');
   const done = document.getElementById('cardsDone');
@@ -1175,14 +1333,27 @@ function renderCard(ev) {
   const startTime = allDay ? '' : formatTime(getStartISO(ev));
   const endTime = allDay ? '' : formatTime(getEndISO(ev));
 
-  const titleInput = document.createElement('input');
-  titleInput.type = 'text';
+  // タイトル: 長文も折り返して全部見えるように textarea を使用
+  const titleInput = document.createElement('textarea');
   titleInput.className = 'title-input';
+  titleInput.rows = 1;
   titleInput.value = plainTitle(ev);
   titleInput.dataset.field = 'title';
   titleInput.setAttribute('lang', 'ja');
   titleInput.setAttribute('autocomplete', 'off');
   titleInput.setAttribute('autocorrect', 'off');
+  // Enterで改行させず blur (保存は他箇所のロジックで)
+  titleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); }
+  });
+  // 自動高さ調整
+  function autosizeTitle() {
+    titleInput.style.height = 'auto';
+    titleInput.style.height = titleInput.scrollHeight + 'px';
+  }
+  titleInput.addEventListener('input', autosizeTitle);
+  // 描画直後にサイズ調整 (フレーム待ち)
+  requestAnimationFrame(autosizeTitle);
   card.appendChild(titleInput);
 
   const head = document.createElement('div');
@@ -1396,11 +1567,14 @@ function renderCard(ev) {
       const baseStart = ev.start && (ev.start.dateTime || ev.start.date);
       const baseEnd = ev.end && (ev.end.dateTime || ev.end.date);
       const dateKey = getEventDateKey(ev);
+      // 元タスク名を取得 (✔️プレフィックスは除く)
+      const parentTitle = plainTitle(ev);
       // 各行に対して新規イベントを作成 (順次)
       const newEvents = [];
       for (const line of lines) {
+        const newTitle = `（${parentTitle}）${line}`;
         const payload = {
-          summary: line,
+          summary: newTitle,
           description: memoText
         };
         if (allDay) {
@@ -1415,7 +1589,7 @@ function renderCard(ev) {
         if (!created || !created.id) throw new Error('作成失敗: ' + line);
         newEvents.push({
           id: created.id,
-          summary: line,
+          summary: newTitle,
           description: memoText,
           allDay: allDay,
           start: allDay ? { date: dateKey } : { dateTime: baseStart },
@@ -1437,6 +1611,22 @@ function renderCard(ev) {
       splitBtn.disabled = false;
       splitBtn.textContent = '✂ 実行';
     }
+  }
+
+  // 写真がlocalStorageにあればカード本文末尾に表示
+  const photoData = getCardPhoto(ev.id);
+  if (photoData) {
+    const img = document.createElement('img');
+    img.src = photoData;
+    img.className = 'card-photo';
+    img.alt = '添付写真';
+    img.addEventListener('click', e => {
+      e.stopPropagation();
+      const lb = document.getElementById('photoLightbox');
+      document.getElementById('photoLightboxImg').src = photoData;
+      lb.classList.add('open');
+    });
+    body.appendChild(img);
   }
 
   card.appendChild(body);
@@ -2041,6 +2231,8 @@ async function deleteCardEvent(ev) {
     if (card) card.remove();
     eventsCache = eventsCache.filter(e => e.id !== ev.id);
     persistCache();
+    // ローカル写真も削除
+    removeCardPhoto(ev.id);
     gasCall('delete', { eventId: ev.id }).catch(err => {
       showToast('削除失敗(サーバー側): ' + (err.message || err));
     });
@@ -2165,6 +2357,67 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
   } finally {
     btn.disabled = false; btn.textContent = '登録する';
   }
+});
+
+// ========= 写真でタスク作成 =========
+document.getElementById('photoCard').addEventListener('click', () => {
+  if (!getGasUrl()) { openSheet('settings'); return; }
+  document.getElementById('photoInput').value = '';
+  document.getElementById('photoInput').click();
+});
+document.getElementById('photoInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const photoCardBtn = document.getElementById('photoCard');
+  const origLabel = photoCardBtn.querySelector('.action-label').textContent;
+  photoCardBtn.style.pointerEvents = 'none';
+  photoCardBtn.querySelector('.action-label').textContent = '処理中…';
+  try {
+    const dataUrl = await compressImage(file);
+    const num = nextTaskNumber();
+    const title = 'タスク' + num;
+    const memoText = '📷 写真';
+    const dateKey = fmtDate(currentDate);
+    const startISO = dateKey + 'T00:00:00';
+    const endISO = addDays(dateKey, 1) + 'T00:00:00';
+    const created = await gasCall('create', {
+      summary: title,
+      startTime: startISO,
+      endTime: endISO,
+      allDay: true,
+      description: memoText
+    });
+    if (!created || !created.id) throw new Error('カレンダー登録失敗');
+    // 画像をlocalStorageへ
+    const saved = setCardPhoto(created.id, dataUrl);
+    if (!saved) {
+      showToast('画像保存失敗(容量超過の可能性): ' + title + 'はタイトルのみ作成');
+    } else {
+      showToast(title + ' を作成しました');
+    }
+    // eventsCacheに反映
+    eventsCache.push({
+      id: created.id,
+      summary: title,
+      description: memoText,
+      allDay: true,
+      start: { date: dateKey },
+      end: { date: addDays(dateKey, 1) }
+    });
+    renderEvents();
+    persistCache();
+  } catch (err) {
+    console.error(err);
+    showToast('失敗: ' + (err.message || err));
+  } finally {
+    photoCardBtn.style.pointerEvents = '';
+    photoCardBtn.querySelector('.action-label').textContent = origLabel;
+    e.target.value = '';
+  }
+});
+// 写真ライトボックス: クリックで閉じる
+document.getElementById('photoLightbox').addEventListener('click', () => {
+  document.getElementById('photoLightbox').classList.remove('open');
 });
 
 document.getElementById('rouletteCard').addEventListener('click', startRoulette);
@@ -2427,7 +2680,11 @@ attachSwipeClose('settingsSheet', 'settings');
 
 updateDateLabel();
 syncTabs();
-refresh();
+(async () => {
+  await refresh();
+  // 初回描画後にバックグラウンドで未完了持ち越し処理
+  autoCarryUndoneTasks().catch(e => console.error('autoCarry error', e));
+})();
 </script>
 </body>
 </html>
