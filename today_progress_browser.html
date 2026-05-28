@@ -953,7 +953,7 @@ function sortEvents(events) {
       const bS = getStartISO(b) || '';
       return aS.localeCompare(bS);
     }
-    return (a.summary || '').localeCompare(b.summary || '');
+    return 0; // 終日予定は eventsCache 挿入順を保持 (新規追加が先頭に来る)
   });
 }
 
@@ -1590,8 +1590,10 @@ function renderCard(ev) {
     const oldId = ev.id;
     card.remove();
     eventsCache = eventsCache.filter(e => e.id !== oldId);
-    for (const te of tempEvents) eventsCache.push(te);
+    // 分解後の新カードを先頭に挿入
+    eventsCache = [...tempEvents, ...eventsCache];
     renderEvents();
+    saveCardOrder();
     persistCache();
     showToast(`${lines.length}個のカードに分解しました`);
     splitSec.style.display = 'none';
@@ -2325,8 +2327,9 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
         start: allDay ? { date: dateKey } : { dateTime: startISO },
         end:   allDay ? { date: addDays(dateKey, 1) } : { dateTime: endISO }
       };
-      eventsCache.push(newEv);
+      eventsCache.unshift(newEv);
       renderEvents();
+      saveCardOrder();
       setCachedEvents(dateKey, eventsCache);
     } else if (dateKey !== fmtDate(currentDate)) {
       try { localStorage.removeItem(EVENTS_CACHE_PREFIX + dateKey); } catch (err) {}
@@ -2367,7 +2370,7 @@ document.getElementById('photoInput').addEventListener('change', async (e) => {
     } else {
       showToast(title + ' を作成しました');
     }
-    eventsCache.push({
+    eventsCache.unshift({
       id: tempId,
       summary: title,
       description: memoText,
@@ -2376,6 +2379,7 @@ document.getElementById('photoInput').addEventListener('change', async (e) => {
       end: { date: addDays(dateKey, 1) }
     });
     renderEvents();
+    saveCardOrder();
     persistCache();
     photoCardBtn.style.pointerEvents = '';
     photoCardBtn.querySelector('.action-label').textContent = origLabel;
@@ -2516,9 +2520,10 @@ document.getElementById('bulkRegisterBtn').addEventListener('click', async () =>
   closeSheet('import');
   document.getElementById('docUrl').value = '';
   document.getElementById('docPaste').value = '';
-  for (const ne of newEvents) eventsCache.push(ne);
   if (newEvents.length) {
+    eventsCache = [...newEvents, ...eventsCache];
     renderEvents();
+    saveCardOrder();
     persistCache();
   }
 });

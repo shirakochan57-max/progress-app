@@ -954,7 +954,7 @@ function sortEvents(events) {
       const bS = getStartISO(b) || '';
       return aS.localeCompare(bS);
     }
-    return (a.summary || '').localeCompare(b.summary || '');
+    return 0; // 終日予定は eventsCache 挿入順を保持 (新規追加が先頭に来る)
   });
 }
 
@@ -1606,8 +1606,10 @@ function renderCard(ev) {
     const oldId = ev.id;
     card.remove();
     eventsCache = eventsCache.filter(e => e.id !== oldId);
-    for (const te of tempEvents) eventsCache.push(te);
+    // 分解後の新カードを先頭に挿入 (1行目が一番上)
+    eventsCache = [...tempEvents, ...eventsCache];
     renderEvents();
+    saveCardOrder();
     persistCache();
     showToast(`${lines.length}個のカードに分解しました`);
     // 入力欄リセット
@@ -2358,8 +2360,9 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
         start: allDay ? { date: dateKey } : { dateTime: startISO },
         end:   allDay ? { date: addDays(dateKey, 1) } : { dateTime: endISO }
       };
-      eventsCache.push(newEv);
+      eventsCache.unshift(newEv);
       renderEvents();
+      saveCardOrder();
       setCachedEvents(dateKey, eventsCache);
     } else if (dateKey !== fmtDate(currentDate)) {
       // 別日に登録した場合はその日のキャッシュを無効化(次回開いた時に再取得)
@@ -2401,7 +2404,7 @@ document.getElementById('photoInput').addEventListener('change', async (e) => {
     } else {
       showToast(title + ' を作成しました');
     }
-    eventsCache.push({
+    eventsCache.unshift({
       id: tempId,
       summary: title,
       description: memoText,
@@ -2410,6 +2413,7 @@ document.getElementById('photoInput').addEventListener('change', async (e) => {
       end: { date: addDays(dateKey, 1) }
     });
     renderEvents();
+    saveCardOrder();
     persistCache();
     // UI即時リセット
     photoCardBtn.style.pointerEvents = '';
@@ -2552,10 +2556,11 @@ document.getElementById('bulkRegisterBtn').addEventListener('click', async () =>
   closeSheet('import');
   document.getElementById('docUrl').value = '';
   document.getElementById('docPaste').value = '';
-  // ローカル状態に反映(再取得不要)
-  for (const ne of newEvents) eventsCache.push(ne);
+  // ローカル状態に反映(再取得不要) - 新規追加分を先頭に挿入
   if (newEvents.length) {
+    eventsCache = [...newEvents, ...eventsCache];
     renderEvents();
+    saveCardOrder();
     persistCache();
   }
 });
