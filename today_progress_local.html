@@ -322,6 +322,37 @@ html, body {
 .card.done .card-body { display: none; }
 .card.done.expanded .card-body { display: flex; flex-direction: column; gap: 10px; }
 
+/* === 折りたたみ表示 (デフォルト): 時刻と題のみ === */
+.card:not(.expanded) {
+  gap: 4px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.card:not(.expanded) .card-head {
+  order: 1;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.card:not(.expanded) .title-input {
+  order: 2;
+  pointer-events: none;
+  border: none; background: transparent;
+  padding: 0 2px; min-height: 0;
+  font-size: 16px; font-weight: 500;
+  cursor: pointer;
+}
+.card:not(.expanded) .card-body { display: none; }
+.card:not(.expanded) .card-head .pill-btn,
+.card:not(.expanded) .card-head .drag-handle,
+.card:not(.expanded) .card-head .head-spacer {
+  display: none;
+}
+.card:not(.expanded) .time-pill {
+  height: 28px; padding: 4px 10px; font-size: 12px;
+}
+/* 展開中: 時刻ピルをタップで折りたたみ */
+.card.expanded .card-head .time-pill { cursor: pointer; }
+
 .title-input {
   font-size: 17px;
   border: none; background: transparent;
@@ -925,6 +956,17 @@ function getEventDateKey(ev) {
 function getStartISO(ev) { return ev.start && ev.start.dateTime ? ev.start.dateTime : null; }
 function getEndISO(ev) { return ev.end && ev.end.dateTime ? ev.end.dateTime : null; }
 function isDone(ev) { return (ev.summary || '').startsWith('✔️'); }
+// 時刻ピル表示用テキスト: "10:00-11:00" / "終日" / "✔︎"
+function timePillText(ev, opts) {
+  opts = opts || {};
+  const done = opts.done != null ? opts.done : isDone(ev);
+  const allDay = opts.allDay != null ? opts.allDay : isAllDay(ev);
+  if (done) return '✔︎';
+  if (allDay) return '終日';
+  const s = formatTime(getStartISO(ev));
+  const e = formatTime(getEndISO(ev));
+  return (s && e) ? `${s}-${e}` : (s || '—');
+}
 // 単発の複数日終日予定かどうか（繰り返しインスタンスは除外）
 function isMultiDay(ev) {
   if (!isAllDay(ev)) return false;
@@ -1396,7 +1438,7 @@ function renderCard(ev) {
 
   const pill = document.createElement('span');
   pill.className = 'time-pill' + (allDay ? ' allday' : '') + (isDone(ev) ? ' done-pill' : '');
-  pill.textContent = isDone(ev) ? '✔︎' : (allDay ? '終日' : (startTime || '—'));
+  pill.textContent = timePillText(ev, { done: isDone(ev), allDay });
   head.appendChild(pill);
 
   const spacer = document.createElement('span');
@@ -1665,12 +1707,34 @@ function renderCard(ev) {
 
   card.appendChild(body);
 
-  if (isDone(ev)) {
-    head.addEventListener('click', (e) => {
-      if (e.target.closest('button') || e.target === titleInput) return;
-      card.classList.toggle('expanded');
+  // === 折りたたみ/展開 (全カード共通) ===
+  // デフォルトは折りたたみ。時刻と題のみ表示。
+  // 折りたたみ中: カード内どこタップでも展開 (他カードは自動折りたたみ=アコーディオン)
+  // 展開中: 時刻ピルタップで折りたたみ (他のUI操作は通常通り)
+  function resizeTextareaOf(el) {
+    const ti = el && el.querySelector('.title-input');
+    if (!ti) return;
+    requestAnimationFrame(() => {
+      ti.style.height = 'auto';
+      ti.style.height = ti.scrollHeight + 'px';
     });
   }
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    if (card.classList.contains('expanded')) {
+      if (e.target.closest('.time-pill')) {
+        e.stopPropagation();
+        card.classList.remove('expanded');
+        resizeTextareaOf(card);
+      }
+      return;
+    }
+    document.querySelectorAll('.card.expanded').forEach(c => {
+      if (c !== card) { c.classList.remove('expanded'); resizeTextareaOf(c); }
+    });
+    card.classList.add('expanded');
+    resizeTextareaOf(card);
+  });
 
   return card;
 }
@@ -1936,7 +2000,7 @@ async function saveCardEvent(card, ev, btn) {
   const pill = card.querySelector('.time-pill');
   if (pill) {
     pill.className = 'time-pill' + (nowAllDay ? ' allday' : '') + (isDone(ev) ? ' done-pill' : '');
-    pill.textContent = isDone(ev) ? '✔︎' : (nowAllDay ? '終日' : formatTime(getStartISO(ev)));
+    pill.textContent = timePillText(ev, { done: isDone(ev), allDay: nowAllDay });
   }
   card.classList.toggle('allday', nowAllDay);
 
@@ -2060,7 +2124,7 @@ async function toggleDone(ev, btn) {
       if (pill) {
         const allDay = isAllDay(ev);
         pill.className = 'time-pill' + (allDay ? ' allday' : '') + (newDone ? ' done-pill' : '');
-        pill.textContent = newDone ? '✔︎' : (allDay ? '終日' : formatTime(getStartISO(ev)));
+        pill.textContent = timePillText(ev, { done: newDone, allDay });
       }
       btn.textContent = newDone ? '戻す' : '完了';
       btn.className = 'pill-btn ' + (newDone ? 'undo-pill' : 'done-pill');
@@ -2085,7 +2149,7 @@ async function toggleDone(ev, btn) {
         if (pill2) {
           const allDay = isAllDay(ev);
           pill2.className = 'time-pill' + (allDay ? ' allday' : '') + (wasDone ? ' done-pill' : '');
-          pill2.textContent = wasDone ? '✔︎' : (allDay ? '終日' : formatTime(getStartISO(ev)));
+          pill2.textContent = timePillText(ev, { done: wasDone, allDay });
         }
         btn.textContent = wasDone ? '戻す' : '完了';
         btn.className = 'pill-btn ' + (wasDone ? 'undo-pill' : 'done-pill');
