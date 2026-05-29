@@ -685,11 +685,67 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .muted { color: var(--text-muted); font-size: 13px; }
 .help-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
+/* ===================== Multi-day (iPad/Mac) week & 3-day view ===================== */
+/* タブレット/PC: 3日or1週間のカレンダー風グリッド表示 */
+.cards.multiday { padding: 0; gap: 0; }
+.cards.multiday .cards-section { display: none; } /* single-day用は隠す */
+.day-columns {
+  display: grid;
+  gap: 1.5px;
+  background: var(--border);
+  border-top: 1.5px solid var(--border);
+  border-bottom: 1.5px solid var(--border);
+  min-height: calc(100vh - 240px);
+}
+.day-column {
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  min-height: 200px;
+  overflow: hidden;
+}
+.day-column-header {
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  border-bottom: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.day-column-header.today {
+  background: var(--ink);
+  color: var(--inverted);
+}
+.day-column-header .dc-weekday { font-size: 11px; opacity: 0.8; letter-spacing: 1px; }
+.day-column-header.weekend { color: var(--text-muted); }
+.day-column-header.today.weekend { color: var(--inverted); }
+.day-column-cards {
+  padding: 6px 4px;
+  display: flex; flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+}
+.day-column .card:not(.expanded) {
+  padding: 4px 8px !important;
+  gap: 6px;
+}
+.day-column .card:not(.expanded) .time-pill { min-width: 0; font-size: 12px; }
+.day-column .card:not(.expanded) .time-pill.allday { font-size: 10px; padding: 1px 6px; }
+.day-column .card:not(.expanded) .title-input { font-size: 13px; }
+.day-column .day-column-empty {
+  padding: 14px 10px;
+  font-size: 12px; color: var(--text-muted);
+  text-align: center; font-style: italic;
+}
+
 /* ===================== Responsive: iPad portrait & wider ===================== */
 @media (min-width: 700px) {
   .app {
-    max-width: 1100px;
-    padding: 0 16px;
+    max-width: 100%;
+    padding: 0;
     padding-bottom: calc(40px + env(safe-area-inset-bottom));
   }
   .header {
@@ -697,69 +753,32 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     padding-top: calc(12px + env(safe-area-inset-top));
     border-radius: 0;
     background: var(--bg);
+    position: relative; top: auto;
   }
   .tabs { max-width: 360px; }
   .date-row { gap: 16px; }
   .date-label { font-size: 18px; }
   #datePicker { font-size: 17px; }
-  .bulk-memo-wrap { padding: 16px 0 0; }
-  .bulk-memo-btn { font-size: 17px; min-height: 68px; }
+  .bulk-memo-wrap { padding: 12px 16px 0; }
+  .bulk-memo-btn { font-size: 16px; min-height: 60px; }
   .action-cards {
-    padding: 16px 0 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    padding: 12px 16px;
+    justify-content: flex-start;
+    gap: 16px;
   }
-  .cards {
-    padding: 16px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-  .cards-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 14px;
-    align-items: start;
-  }
-  .cards-section.done-section { padding-top: 4px; }
-  .card { padding: 14px; }
-  .title-input { font-size: 18px; }
+  .day-columns { grid-template-columns: repeat(3, 1fr); }
+  .sheet { max-width: 720px; left: 50%; transform: translateX(-50%) translateY(100%); }
+  .sheet.open { transform: translateX(-50%) translateY(0); }
 }
 
 /* ===================== Responsive: iPad landscape & desktop ===================== */
 @media (min-width: 1024px) {
   body { background: var(--bg); }
-  .app {
-    max-width: 1280px;
-    padding: 0 24px;
-  }
-  .header {
-    padding: 16px 0;
-    background: var(--bg);
-  }
-  .tabs { max-width: 420px; }
-  .cards-section {
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    gap: 16px;
-  }
-  .sheet { max-width: 720px; left: 50%; transform: translateX(-50%) translateY(100%); }
-  .sheet.open { transform: translateX(-50%) translateY(0); }
-}
-
-/* ===================== iPad portrait specific tweaks ===================== */
-@media (min-width: 700px) and (max-width: 1023px) {
-  .cards-section {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-/* Reduce sticky behavior on tablets so cards fit more comfortably */
-@media (min-width: 700px) {
-  .header {
-    position: relative;
-    top: auto;
-  }
+  .app { max-width: 100%; padding: 0; }
+  .header { padding: 14px 24px; padding-top: calc(14px + env(safe-area-inset-top)); }
+  .tabs { max-width: 360px; }
+  .action-cards { padding: 12px 24px; }
+  .day-columns { grid-template-columns: repeat(7, 1fr); }
 }
 </style>
 </head>
@@ -1146,6 +1165,105 @@ async function fetchEvents(date) {
   return data.events || [];
 }
 
+// ========= Multi-day view (タブレット/PC) =========
+function getViewDates() {
+  const w = window.innerWidth;
+  if (w >= 1024) {
+    // 1週間 (currentDate を含む週、日曜始まり)
+    const d = new Date(currentDate);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - d.getDay());
+    return Array.from({ length: 7 }, (_, i) => {
+      const x = new Date(d);
+      x.setDate(d.getDate() + i);
+      return x;
+    });
+  }
+  if (w >= 700) {
+    // 3日 (前日/当日/翌日)
+    return [-1, 0, 1].map(off => {
+      const x = new Date(currentDate);
+      x.setHours(0, 0, 0, 0);
+      x.setDate(x.getDate() + off);
+      return x;
+    });
+  }
+  return null;
+}
+function renderDayColumn(dateObj, events) {
+  const dateKey = fmtDate(dateObj);
+  const col = document.createElement('div');
+  col.className = 'day-column';
+  col.dataset.date = dateKey;
+  const header = document.createElement('div');
+  header.className = 'day-column-header';
+  const todayKey = fmtDate(new Date());
+  if (dateKey === todayKey) header.classList.add('today');
+  const day = dateObj.getDay();
+  if (day === 0 || day === 6) header.classList.add('weekend');
+  const wkn = '日月火水木金土'[day];
+  header.innerHTML = `<span>${dateObj.getMonth()+1}/${pad(dateObj.getDate())}</span><span class="dc-weekday">${wkn}</span>`;
+  header.addEventListener('click', () => {
+    currentDate = new Date(dateObj);
+    currentDate.setHours(0, 0, 0, 0);
+    updateDateLabel(); syncTabs(); refresh();
+  });
+  col.appendChild(header);
+  const list = document.createElement('div');
+  list.className = 'day-column-cards';
+  const sorted = sortEvents(events);
+  if (sorted.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'day-column-empty';
+    empty.textContent = '—';
+    list.appendChild(empty);
+  } else {
+    const incomp = sorted.filter(e => !isDone(e));
+    const dn = sorted.filter(isDone);
+    for (const ev of incomp) list.appendChild(renderCard(ev));
+    for (const ev of dn) list.appendChild(renderCard(ev));
+  }
+  col.appendChild(list);
+  return col;
+}
+async function refreshMultiDay(days) {
+  const status = document.getElementById('cardsStatus');
+  const incompleteSec = document.getElementById('cardsIncomplete');
+  const doneSec = document.getElementById('cardsDone');
+  const container = document.getElementById('cards');
+  if (status) status.style.display = 'none';
+  if (incompleteSec) incompleteSec.innerHTML = '';
+  if (doneSec) doneSec.innerHTML = '';
+  container.classList.add('multiday');
+  let cols = container.querySelector('.day-columns');
+  if (!cols) {
+    cols = document.createElement('div');
+    cols.className = 'day-columns';
+    container.appendChild(cols);
+  }
+  cols.innerHTML = '';
+  // 1) キャッシュ即時表示
+  for (const d of days) {
+    const dateKey = fmtDate(d);
+    const cached = getCachedEvents(dateKey) || [];
+    cols.appendChild(renderDayColumn(d, cached));
+    if (dateKey === fmtDate(currentDate) && cached.length) eventsCache = cached;
+  }
+  // 2) バックグラウンド取得 → 該当列を差し替え
+  await Promise.all(days.map(async (d) => {
+    const dateKey = fmtDate(d);
+    try {
+      const fresh = await fetchEvents(d);
+      setCachedEvents(dateKey, fresh);
+      const oldCol = cols.querySelector(`.day-column[data-date="${dateKey}"]`);
+      if (oldCol) oldCol.replaceWith(renderDayColumn(d, fresh));
+      if (dateKey === fmtDate(currentDate)) eventsCache = fresh;
+    } catch (e) {
+      console.error('多日取得失敗', dateKey, e);
+    }
+  }));
+}
+
 // ========= 日付別キャッシュ (localStorage) =========
 const EVENTS_CACHE_PREFIX = 'events_cache_';
 function getCachedEvents(dateKey) {
@@ -1309,6 +1427,18 @@ async function autoCarryUndoneTasks() {
 }
 
 function renderEvents() {
+  const container = document.getElementById('cards');
+  // multi-day表示中は currentDate の列のみ差し替え
+  if (container.classList.contains('multiday')) {
+    const dateKey = fmtDate(currentDate);
+    const col = container.querySelector(`.day-column[data-date="${dateKey}"]`);
+    if (col) {
+      const newCol = renderDayColumn(currentDate, eventsCache);
+      col.replaceWith(newCol);
+    }
+    persistCache();
+    return;
+  }
   const incomplete = document.getElementById('cardsIncomplete');
   const done = document.getElementById('cardsDone');
   const status = document.getElementById('cardsStatus');
@@ -1847,9 +1977,18 @@ function clearRouletteWinner() {
   const slot = document.getElementById('rouletteBannerSlot');
   if (slot) slot.innerHTML = '';
 }
+function getRouletteCandidates() {
+  // multi-day表示中は currentDate の列のみ、そうでなければ #cardsIncomplete
+  const dateKey = fmtDate(currentDate);
+  const col = document.querySelector(`.day-column[data-date="${dateKey}"]`);
+  if (col) {
+    return [...col.querySelectorAll('.card.allday')].filter(c => !c.classList.contains('done'));
+  }
+  return [...document.querySelectorAll('#cardsIncomplete .card.allday')];
+}
 function pickRandomCard(excludeId) {
   // 終日（時刻指定のない）未完了のみが抽選対象
-  const cards = [...document.querySelectorAll('#cardsIncomplete .card.allday')];
+  const cards = getRouletteCandidates();
   const candidates = excludeId ? cards.filter(c => c.dataset.eventId !== excludeId) : cards;
   if (!candidates.length) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];
@@ -1892,8 +2031,8 @@ let rouletteRunning = false;
 async function startRoulette() {
   if (rouletteRunning) return;
   clearRouletteWinner();
-  // 終日（時刻指定なし）の未完了のみが対象
-  const cards = [...document.querySelectorAll('#cardsIncomplete .card.allday')];
+  // 終日（時刻指定なし）の未完了のみが対象 (currentDate)
+  const cards = getRouletteCandidates();
   if (!cards.length) {
     showToast('終日の未完了予定がありません');
     return;
@@ -2023,9 +2162,13 @@ async function refresh() {
   const status = document.getElementById('cardsStatus');
   const incompleteSec = document.getElementById('cardsIncomplete');
   const doneSec = document.getElementById('cardsDone');
+  const container = document.getElementById('cards');
   if (!getGasUrl()) {
     if (incompleteSec) incompleteSec.innerHTML = '';
     if (doneSec) doneSec.innerHTML = '';
+    const oldCols = container.querySelector('.day-columns');
+    if (oldCols) oldCols.remove();
+    container.classList.remove('multiday');
     status.style.display = '';
     status.innerHTML =
       '<div class="error-box">' +
@@ -2034,6 +2177,15 @@ async function refresh() {
     document.getElementById('openSettingsBtn').addEventListener('click', () => openSheet('settings'));
     return;
   }
+  // viewport が広ければ multi-day 表示に切り替え
+  const days = getViewDates();
+  if (days) {
+    return refreshMultiDay(days);
+  }
+  // 1日表示に戻すときは multi-day の DOM を片付ける
+  const oldCols = container.querySelector('.day-columns');
+  if (oldCols) oldCols.remove();
+  container.classList.remove('multiday');
   const dateKey = fmtDate(currentDate);
   // 1) キャッシュがあれば即表示
   const cached = getCachedEvents(dateKey);
@@ -2876,6 +3028,25 @@ function attachSwipeClose(sheetId, name) {
 attachSwipeClose('addSheet', 'add');
 attachSwipeClose('importSheet', 'import');
 attachSwipeClose('settingsSheet', 'settings');
+
+// viewport が変わったら表示モードを切り替え (debounce)
+let _resizeTimer = null;
+let _lastMultiKey = null;
+function currentMultiKey() {
+  const w = window.innerWidth;
+  return w >= 1024 ? 'week' : (w >= 700 ? '3day' : 'single');
+}
+_lastMultiKey = currentMultiKey();
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    const k = currentMultiKey();
+    if (k !== _lastMultiKey) {
+      _lastMultiKey = k;
+      refresh();
+    }
+  }, 200);
+});
 
 updateDateLabel();
 syncTabs();
