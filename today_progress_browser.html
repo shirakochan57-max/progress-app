@@ -805,9 +805,9 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 <div class="app">
   <div class="header">
     <div class="tabs">
-      <button class="tab" data-offset="-1">昨日</button>
-      <button class="tab active" data-offset="0">今日</button>
-      <button class="tab" data-offset="1">明日</button>
+      <button class="tab" data-action="prev" aria-label="前の日">←</button>
+      <button class="tab active" data-action="today">今日</button>
+      <button class="tab" data-action="next" aria-label="次の日">→</button>
     </div>
     <div class="date-row">
       <div class="date-label">
@@ -2879,10 +2879,10 @@ function updateDateLabel() {
 function syncTabs() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const cur = new Date(currentDate); cur.setHours(0, 0, 0, 0);
-  const diff = Math.round((cur.getTime() - today.getTime()) / 86400000);
+  const isToday = cur.getTime() === today.getTime();
   document.querySelectorAll('.tab').forEach(t => {
-    const off = parseInt(t.dataset.offset, 10);
-    t.classList.toggle('active', off === diff);
+    // 今日ボタンのみ、今日表示中に active 化。前/次の矢印は常に非アクティブ。
+    t.classList.toggle('active', t.dataset.action === 'today' && isToday);
   });
 }
 document.getElementById('datePicker').addEventListener('change', e => {
@@ -2892,9 +2892,17 @@ document.getElementById('datePicker').addEventListener('change', e => {
 });
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
-    const off = parseInt(t.dataset.offset, 10);
-    const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() + off);
-    currentDate = d;
+    const action = t.dataset.action;
+    if (action === 'today') {
+      const d = new Date(); d.setHours(0,0,0,0);
+      currentDate = d;
+    } else if (action === 'prev') {
+      const d = new Date(currentDate); d.setHours(0,0,0,0); d.setDate(d.getDate() - 1);
+      currentDate = d;
+    } else if (action === 'next') {
+      const d = new Date(currentDate); d.setHours(0,0,0,0); d.setDate(d.getDate() + 1);
+      currentDate = d;
+    }
     updateDateLabel(); syncTabs(); refresh();
   });
 });
