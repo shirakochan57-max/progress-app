@@ -1025,6 +1025,27 @@ function localISO(date, hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return `${fmtDate(date)}T${pad(h)}:${pad(m)}:00`;
 }
+// "HH:MM" に分を足して "HH:MM" を返す (24時を超えたら 23:59 に丸める)
+function addMinutesToHM(hm, mins) {
+  if (!hm || !/^\d{1,2}:\d{2}$/.test(hm)) return hm;
+  const [h, m] = hm.split(':').map(Number);
+  let total = h * 60 + m + mins;
+  if (total >= 24 * 60) total = 24 * 60 - 1;
+  if (total < 0) total = 0;
+  return pad(Math.floor(total / 60)) + ':' + pad(total % 60);
+}
+// start入力の change で end を start+10分に自動更新するハンドラを取り付ける
+function attachAutoEndOnStartChange(startEl, endEl, addMins) {
+  if (!startEl || !endEl) return;
+  const mins = (addMins == null) ? 10 : addMins;
+  startEl.addEventListener('change', () => {
+    if (!startEl.value) return;
+    endEl.value = addMinutesToHM(startEl.value, mins);
+    // 検証ハンドラ等に通知 (input イベントを発火)
+    endEl.dispatchEvent(new Event('input', { bubbles: true }));
+    endEl.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
 function addDays(dateKey, n) {
   const d = parseDateKey(dateKey);
   d.setDate(d.getDate() + n);
@@ -1782,6 +1803,8 @@ function renderCard(ev) {
   timeRow.appendChild(startInput);
   timeRow.appendChild(sep);
   timeRow.appendChild(endInput);
+  // 開始時刻を変えたら自動で終了=開始+10分にする (必要なら手動で延長)
+  attachAutoEndOnStartChange(startInput, endInput, 10);
 
   function applyAllDay() {
     const v = allDayCb.checked;
@@ -2812,6 +2835,9 @@ document.getElementById('rescheduleDate').addEventListener('input', checkResched
 document.getElementById('rescheduleAction').addEventListener('input', checkRescheduleValid);
 document.getElementById('rescheduleStart').addEventListener('input', checkRescheduleValid);
 document.getElementById('rescheduleEnd').addEventListener('input', checkRescheduleValid);
+// 開始時刻を変えたら終了=開始+10分に自動更新 (新規追加・振替シート)
+attachAutoEndOnStartChange(document.getElementById('addStart'), document.getElementById('addEnd'), 10);
+attachAutoEndOnStartChange(document.getElementById('rescheduleStart'), document.getElementById('rescheduleEnd'), 10);
 document.getElementById('rescheduleAllDay').addEventListener('change', () => {
   updateRescheduleTimeRowVisibility();
   checkRescheduleValid();
