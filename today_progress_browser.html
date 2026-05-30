@@ -10,6 +10,8 @@
 <style>
 :root {
   color-scheme: light;
+  /* iOS/Android のネイティブ日付・時刻ピッカーの選択色を黒に統一 (青→ink) */
+  accent-color: #1a1a1a;
   /* BOOX Go 7 風モノクロパレット (クリーム紙 + 黒) */
   --bg: #f1ece0;          /* 紙のような背景 */
   --surface: #faf6ec;     /* カード等の少し明るい面 */
@@ -20,6 +22,10 @@
   --border-soft: #c2bca9; /* 弱い枠線 */
   --ink: #1a1a1a;         /* 黒インク */
   --inverted: #faf6ec;    /* 反転時のクリーム */
+}
+/* ネイティブの input (date/time) の青選択色も黒に */
+input[type="date"], input[type="time"], input[type="datetime-local"] {
+  accent-color: var(--ink);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
