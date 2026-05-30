@@ -873,10 +873,11 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .day-columns[data-days="5"] .card:not(.expanded) .time-pill,
 .day-columns[data-days="7"] .card:not(.expanded) .time-pill {
   white-space: normal;
-  word-break: keep-all;
-  line-height: 1.15;
-  font-size: 11px;
-  padding: 2px 6px;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  line-height: 1.1;
+  font-size: 10px;
+  padding: 1px 4px;
   height: auto;
   max-width: 100%;
   text-align: center;
@@ -887,9 +888,24 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   min-width: 50px;
 }
 /* 7日表示はさらにキツいので一段小さく */
-.day-columns[data-days="7"] .card:not(.expanded) .time-pill { font-size: 10px; padding: 1px 4px; }
-.day-columns[data-days="7"] .card:not(.expanded) .time-pill.allday { font-size: 9px; padding: 1px 4px; }
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill { font-size: 9px; padding: 1px 3px; }
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill.allday { font-size: 9px; padding: 1px 3px; }
 .day-columns[data-days="7"] .card:not(.expanded) .title-input { font-size: 11px; min-width: 44px; }
+/* 5/7日表示の日付ヘッダ (曜日が潰れて見える問題への対応) */
+.day-columns[data-days="5"] .day-column-header,
+.day-columns[data-days="7"] .day-column-header {
+  padding: 6px 4px;
+  font-size: 11px;
+  gap: 3px;
+  letter-spacing: 0.2px;
+}
+.day-columns[data-days="5"] .day-column-header .dc-weekday,
+.day-columns[data-days="7"] .day-column-header .dc-weekday {
+  font-size: 9px;
+  letter-spacing: 0;
+}
+.day-columns[data-days="7"] .day-column-header { padding: 6px 2px; font-size: 10px; gap: 2px; }
+.day-columns[data-days="7"] .day-column-header .dc-weekday { font-size: 8px; }
 /* 多日表示で展開されたカード: 列幅が狭いのでアクションを折り返し&圧縮で全部見える状態にする */
 .day-column .card.expanded .card-head {
   flex-wrap: wrap;
