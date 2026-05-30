@@ -2077,8 +2077,9 @@ async function startRoulette() {
     showToast('終日の未完了予定がありません');
     return;
   }
+  const cardsContainer = cards[0].closest('.cards') || document.querySelector('.cards');
   if (cards.length === 1) {
-    document.querySelector('.cards').classList.add('roulette-won');
+    if (cardsContainer) cardsContainer.classList.add('roulette-won');
     cards[0].classList.add('roulette-winner');
     cards[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     showRouletteBanner(cards[0]);
@@ -2086,34 +2087,10 @@ async function startRoulette() {
   }
 
   rouletteRunning = true;
+  if (cardsContainer) cardsContainer.classList.add('roulette-running');
 
-  // 全画面オーバーレイを作って、その中にタイル状で予定タイトルを並べる
-  const overlay = document.createElement('div');
-  overlay.className = 'roulette-overlay';
-  const titleEl = document.createElement('div');
-  titleEl.className = 'roulette-overlay-title';
-  titleEl.innerHTML = '🎲 ルーレット回転中…';
-  const subEl = document.createElement('div');
-  subEl.className = 'roulette-overlay-sub';
-  subEl.textContent = `${cards.length}件の終日予定から選びます`;
-  const tilesContainer = document.createElement('div');
-  tilesContainer.className = 'roulette-tiles';
-  const tiles = cards.map(card => {
-    const tile = document.createElement('div');
-    tile.className = 'roulette-tile';
-    tile.dataset.eventId = card.dataset.eventId;
-    const ti = card.querySelector('.title-input');
-    tile.textContent = (ti && ti.value.trim()) || '無題';
-    tilesContainer.appendChild(tile);
-    return tile;
-  });
-  overlay.appendChild(titleEl);
-  overlay.appendChild(subEl);
-  overlay.appendChild(tilesContainer);
-  document.body.appendChild(overlay);
-  // 表示
-  requestAnimationFrame(() => overlay.classList.add('show'));
-  await new Promise(r => setTimeout(r, 350));
+  // 候補カードを画面に映して回す（全画面オーバーレイは使わない）
+  cards[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   // ステップ数を決める
   const baseLoops = 3 + Math.floor(Math.random() * 2);
@@ -2121,8 +2098,8 @@ async function startRoulette() {
   const totalSteps = baseLoops * cards.length + targetOffset;
 
   function highlightAt(idx) {
-    tiles.forEach(t => t.classList.remove('active'));
-    tiles[idx % tiles.length].classList.add('active');
+    cards.forEach(c => c.classList.remove('roulette-spinning'));
+    cards[idx % cards.length].classList.add('roulette-spinning');
   }
 
   for (let i = 0; i < totalSteps; i++) {
@@ -2143,24 +2120,18 @@ async function startRoulette() {
     await new Promise(r => setTimeout(r, delay));
   }
 
-  // 当選タイルを強調
+  // 当選カードを強調
   const winnerIdx = totalSteps % cards.length;
-  tiles.forEach(t => t.classList.remove('active'));
-  tiles[winnerIdx].classList.add('winner');
+  cards.forEach(c => c.classList.remove('roulette-spinning'));
   if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 150]);
 
-  // オーバーレイをそのまま1秒見せる
-  await new Promise(r => setTimeout(r, 1000));
-
-  // オーバーレイをフェードアウトして、実際のカードへ
-  overlay.classList.remove('show');
-  setTimeout(() => overlay.remove(), 350);
-
   const winner = cards[winnerIdx];
-  const container = document.querySelector('.cards');
-  container.classList.add('roulette-won');
+  if (cardsContainer) {
+    cardsContainer.classList.remove('roulette-running');
+    cardsContainer.classList.add('roulette-won');
+  }
   winner.classList.add('roulette-winner');
-  setTimeout(() => winner.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400);
+  setTimeout(() => winner.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
   showRouletteBanner(winner);
 
   rouletteRunning = false;
