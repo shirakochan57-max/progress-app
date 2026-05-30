@@ -73,14 +73,15 @@ html, body {
   white-space: nowrap;
   cursor: pointer;
   color: var(--text);
-  background: transparent;
-  border: none;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
 }
-.date-label-text:active { opacity: 0.6; }
+#datePicker {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  opacity: 0; cursor: pointer;
+  font-size: 16px;
+  border: none; background: transparent;
+  padding: 0; margin: 0;
+}
 .icon-btn {
   width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
@@ -693,116 +694,6 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .btn.secondary { background: transparent; color: var(--text); }
 .btn:active { opacity: 0.6; }
 
-/* 自作カレンダー UI (BOOX 風モノクロ) */
-.date-trigger {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 16px;
-  font-family: inherit;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  letter-spacing: 0.3px;
-}
-.date-trigger:active { background: var(--surface-2); }
-.date-trigger.placeholder { color: var(--text-muted); font-weight: 400; }
-.cal-header {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 12px;
-}
-.cal-today-btn {
-  border: 1.5px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 13px; font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  min-height: 34px;
-  letter-spacing: 0.5px;
-}
-.cal-today-btn:active { background: var(--ink); color: var(--inverted); }
-.cal-nav {
-  display: flex; align-items: center; gap: 6px;
-  flex: 1; justify-content: flex-end;
-}
-.cal-nav-btn {
-  width: 34px; height: 34px;
-  border: 1.5px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  border-radius: 8px;
-  font-size: 16px;
-  font-family: inherit;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  padding: 0;
-}
-.cal-nav-btn:active { background: var(--ink); color: var(--inverted); }
-.cal-month-label {
-  font-size: 15px; font-weight: 700;
-  min-width: 110px; text-align: center;
-  letter-spacing: 0.5px;
-}
-.cal-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  margin-bottom: 4px;
-}
-.cal-wd {
-  text-align: center;
-  font-size: 12px; font-weight: 700;
-  color: var(--text-muted);
-  padding: 4px 0;
-  letter-spacing: 0.5px;
-}
-.cal-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-.cal-cell {
-  aspect-ratio: 1 / 1;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 15px;
-  color: var(--text);
-  border: 1.5px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: 500;
-  padding: 0;
-  min-height: 40px;
-}
-.cal-cell.other-month {
-  color: var(--text-muted);
-  opacity: 0.35;
-}
-.cal-cell.today {
-  border-color: var(--ink);
-}
-.cal-cell.selected {
-  background: var(--ink);
-  color: var(--inverted);
-  border-color: var(--ink);
-}
-.cal-cell.today.selected {
-  border-color: var(--ink);
-}
-.cal-cell:active { background: var(--surface-2); }
-.cal-cell.selected:active { opacity: 0.85; }
-.cal-footer {
-  display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;
-}
-
 .toast {
   position: fixed;
   bottom: calc(30px + env(safe-area-inset-bottom));
@@ -993,10 +884,10 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
       <button class="tab" data-action="next" aria-label="次の日">→</button>
     </div>
     <div class="date-row">
-      <div class="date-label">
-        <button type="button" id="dateLabelText" class="date-label-text" aria-label="日付を選択">--/--/-- -</button>
-        <input type="hidden" id="datePicker">
-      </div>
+      <label class="date-label" for="datePicker">
+        <span id="dateLabelText" class="date-label-text">--/--/-- -</span>
+        <input type="date" id="datePicker" aria-label="日付を選択">
+      </label>
       <div class="icon-row">
         <div class="view-mode-tabs" id="viewModeTabs">
           <button class="vm-tab" data-days="1" aria-label="1日表示">1</button>
@@ -1071,8 +962,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <h3>予定を振替</h3>
   <div class="form-row">
     <label>① いつ（振替先の日付）</label>
-    <button type="button" class="date-trigger" data-target="rescheduleDate">日付を選択</button>
-    <input type="hidden" id="rescheduleDate">
+    <input type="date" id="rescheduleDate">
   </div>
   <div class="form-row">
     <label style="display:flex; align-items:center; gap:8px;">
@@ -1113,8 +1003,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   </div>
   <div class="form-row">
     <label>日付</label>
-    <button type="button" class="date-trigger" data-target="addDate">日付を選択</button>
-    <input type="hidden" id="addDate">
+    <input type="date" id="addDate">
   </div>
   <div class="form-row" id="addTimeRow" style="display:none;">
     <label>時刻</label>
@@ -1176,33 +1065,6 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <div id="searchResults" style="margin-top:8px;"></div>
   <div class="sheet-actions">
     <button class="btn secondary" id="searchCloseBtn">閉じる</button>
-  </div>
-</div>
-
-<!-- 自作カレンダー UI シート (datePicker / addDate / rescheduleDate 共用) -->
-<div class="sheet-backdrop" id="calBackdrop"></div>
-<div class="sheet" id="calSheet">
-  <div class="sheet-handle"></div>
-  <div class="cal-header">
-    <button type="button" class="cal-today-btn" id="calTodayBtn">今日</button>
-    <div class="cal-nav">
-      <button type="button" class="cal-nav-btn" id="calPrevBtn" aria-label="前の月">←</button>
-      <div class="cal-month-label" id="calMonthLabel">----年--月</div>
-      <button type="button" class="cal-nav-btn" id="calNextBtn" aria-label="次の月">→</button>
-    </div>
-  </div>
-  <div class="cal-weekdays">
-    <div class="cal-wd">日</div>
-    <div class="cal-wd">月</div>
-    <div class="cal-wd">火</div>
-    <div class="cal-wd">水</div>
-    <div class="cal-wd">木</div>
-    <div class="cal-wd">金</div>
-    <div class="cal-wd">土</div>
-  </div>
-  <div class="cal-grid" id="calGrid"></div>
-  <div class="cal-footer">
-    <button type="button" class="btn secondary" id="calCancelBtn" style="flex: 0 0 120px;">キャンセル</button>
   </div>
 </div>
 
@@ -2692,9 +2554,7 @@ let currentReschedule = null;
 function openReschedule(card, ev) {
   currentReschedule = { card, ev };
   const tomorrow = new Date(currentDate); tomorrow.setDate(tomorrow.getDate() + 1);
-  const rdInp = document.getElementById('rescheduleDate');
-  rdInp.value = fmtDate(tomorrow);
-  rdInp.dispatchEvent(new Event('change', { bubbles: true })); // 自作カレンダー: トリガーボタンのラベル更新用
+  document.getElementById('rescheduleDate').value = fmtDate(tomorrow);
   document.getElementById('rescheduleAction').value = '';
   const allDayCb = document.getElementById('rescheduleAllDay');
   const startEl = document.getElementById('rescheduleStart');
@@ -2884,9 +2744,7 @@ function resetAddSheet() {
 document.getElementById('addCard').addEventListener('click', () => {
   if (!getGasUrl()) { openSheet('settings'); return; }
   resetAddSheet();
-  const addInp = document.getElementById('addDate');
-  addInp.value = fmtDate(currentDate);
-  addInp.dispatchEvent(new Event('change', { bubbles: true })); // 自作カレンダー: トリガーボタンのラベル更新用
+  document.getElementById('addDate').value = fmtDate(currentDate);
   openSheet('add');
 });
 document.getElementById('addBackdrop').addEventListener('click', () => {
@@ -3184,20 +3042,10 @@ function syncTabs() {
     t.classList.toggle('active', t.dataset.action === 'today' && isToday);
   });
 }
-// datePicker は hidden 化したので change で発火させる
 document.getElementById('datePicker').addEventListener('change', e => {
   if (!e.target.value) return;
   currentDate = parseDateKey(e.target.value);
   updateDateLabel(); syncTabs(); refresh();
-});
-// ヘッダの日付ラベル(ボタン)タップで自作カレンダーを開く
-document.getElementById('dateLabelText').addEventListener('click', (e) => {
-  e.preventDefault(); e.stopPropagation();
-  showCustomDatePicker(fmtDate(currentDate), (newKey) => {
-    const inp = document.getElementById('datePicker');
-    inp.value = newKey;
-    inp.dispatchEvent(new Event('change', { bubbles: true }));
-  });
 });
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
@@ -3332,143 +3180,6 @@ function attachSwipeClose(sheetId, name) {
 attachSwipeClose('addSheet', 'add');
 attachSwipeClose('importSheet', 'import');
 attachSwipeClose('settingsSheet', 'settings');
-
-// ============= 自作カレンダー UI =============
-// iOS ネイティブの <input type="date"> ピッカー(青/白基調)を回避し、
-// BOOX 風モノクロ統一でヘッダ・新規追加・振替の 3 箇所に使う。
-// 使い方: showCustomDatePicker(initialKey, (newKey) => { ... })
-let _calCtx = null; // { onSelect, viewYear, viewMonth, selectedKey }
-
-function showCustomDatePicker(initialKey, onSelect) {
-  let d = initialKey ? parseDateKey(initialKey) : new Date();
-  if (!d || isNaN(d.getTime())) d = new Date();
-  _calCtx = {
-    onSelect,
-    viewYear: d.getFullYear(),
-    viewMonth: d.getMonth(),
-    selectedKey: initialKey || fmtDate(d)
-  };
-  renderCalGrid();
-  openSheet('cal');
-}
-
-function renderCalGrid() {
-  if (!_calCtx) return;
-  const { viewYear, viewMonth, selectedKey } = _calCtx;
-  document.getElementById('calMonthLabel').textContent = `${viewYear}年${viewMonth + 1}月`;
-  const firstDow = new Date(viewYear, viewMonth, 1).getDay(); // 0=日
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const prevDays = new Date(viewYear, viewMonth, 0).getDate();
-  const todayKey = fmtDate(new Date());
-  const grid = document.getElementById('calGrid');
-  grid.innerHTML = '';
-  // 6 行 × 7 列 = 42 セル固定
-  for (let i = 0; i < 42; i++) {
-    const cell = document.createElement('button');
-    cell.type = 'button';
-    cell.className = 'cal-cell';
-    let cy, cm, cd;
-    if (i < firstDow) {
-      // 前月末尾
-      cd = prevDays - firstDow + 1 + i;
-      cm = viewMonth - 1; cy = viewYear;
-      if (cm < 0) { cm = 11; cy--; }
-      cell.classList.add('other-month');
-    } else if (i < firstDow + daysInMonth) {
-      cd = i - firstDow + 1;
-      cm = viewMonth; cy = viewYear;
-    } else {
-      cd = i - firstDow - daysInMonth + 1;
-      cm = viewMonth + 1; cy = viewYear;
-      if (cm > 11) { cm = 0; cy++; }
-      cell.classList.add('other-month');
-    }
-    const key = `${cy}-${pad(cm + 1)}-${pad(cd)}`;
-    cell.textContent = String(cd);
-    cell.dataset.dateKey = key;
-    if (key === todayKey) cell.classList.add('today');
-    if (key === selectedKey) cell.classList.add('selected');
-    cell.addEventListener('click', (ev) => {
-      ev.preventDefault(); ev.stopPropagation();
-      const k = cell.dataset.dateKey;
-      const cb = _calCtx && _calCtx.onSelect;
-      closeSheet('cal');
-      _calCtx = null;
-      if (cb) cb(k);
-    });
-    grid.appendChild(cell);
-  }
-}
-
-document.getElementById('calBackdrop').addEventListener('click', () => {
-  closeSheet('cal'); _calCtx = null;
-});
-document.getElementById('calCancelBtn').addEventListener('click', () => {
-  closeSheet('cal'); _calCtx = null;
-});
-document.getElementById('calPrevBtn').addEventListener('click', (e) => {
-  e.preventDefault(); e.stopPropagation();
-  if (!_calCtx) return;
-  _calCtx.viewMonth--;
-  if (_calCtx.viewMonth < 0) { _calCtx.viewMonth = 11; _calCtx.viewYear--; }
-  renderCalGrid();
-});
-document.getElementById('calNextBtn').addEventListener('click', (e) => {
-  e.preventDefault(); e.stopPropagation();
-  if (!_calCtx) return;
-  _calCtx.viewMonth++;
-  if (_calCtx.viewMonth > 11) { _calCtx.viewMonth = 0; _calCtx.viewYear++; }
-  renderCalGrid();
-});
-document.getElementById('calTodayBtn').addEventListener('click', (e) => {
-  e.preventDefault(); e.stopPropagation();
-  if (!_calCtx) return;
-  const t = new Date();
-  _calCtx.viewYear = t.getFullYear();
-  _calCtx.viewMonth = t.getMonth();
-  renderCalGrid();
-});
-attachSwipeClose('calSheet', 'cal');
-
-// date-trigger ボタン(hidden input と対) を自作カレンダーに紐付け
-function bindDateTrigger(triggerBtn, hiddenInput, opts) {
-  opts = opts || {};
-  const placeholder = opts.placeholder || '日付を選択';
-  const updateLabel = () => {
-    const v = hiddenInput.value;
-    if (!v) {
-      triggerBtn.textContent = placeholder;
-      triggerBtn.classList.add('placeholder');
-    } else {
-      const d = parseDateKey(v);
-      const yy = String(d.getFullYear()).slice(-2);
-      triggerBtn.textContent = `${yy}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${weekdayJP(d)}`;
-      triggerBtn.classList.remove('placeholder');
-    }
-  };
-  triggerBtn.addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation();
-    showCustomDatePicker(hiddenInput.value, (k) => {
-      hiddenInput.value = k;
-      updateLabel();
-      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-  });
-  // 外部から hiddenInput.value を書き換えた時にもラベルを追随させる
-  hiddenInput.addEventListener('change', updateLabel);
-  hiddenInput.addEventListener('input', updateLabel);
-  updateLabel();
-}
-
-bindDateTrigger(
-  document.querySelector('.date-trigger[data-target="rescheduleDate"]'),
-  document.getElementById('rescheduleDate')
-);
-bindDateTrigger(
-  document.querySelector('.date-trigger[data-target="addDate"]'),
-  document.getElementById('addDate')
-);
 
 // 日数選択タブ (1/3/5/7) のクリック処理
 document.querySelectorAll('.vm-tab').forEach(btn => {
