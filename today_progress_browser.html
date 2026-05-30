@@ -787,6 +787,18 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   .ic-wd { font-size: 11px; padding: 2px 0; }
   .ic-cell { font-size: 13px; min-height: 32px; }
 }
+/* 新規追加シート: 時間指定ボタン + 時刻入力欄を 1 行にまとめる (登録ボタンが画面外に出ないよう) */
+.add-time-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.add-time-control > .time-pair { flex: 1; min-width: 180px; margin: 0; }
+.add-time-control > .time-pair input[type="time"] { min-height: 38px; padding: 6px 10px; }
+/* addSheet 内は余白を詰めて全体高さを抑える */
+#addSheet .form-row { margin-bottom: 8px; }
+#addSheet textarea#addMemo { min-height: 56px; }
 
 .toast {
   position: fixed;
@@ -1147,16 +1159,15 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     <div class="inline-cal" id="addDateCal"></div>
     <input type="hidden" id="addDate">
   </div>
-  <div class="form-row" id="addTimeRow" style="display:none;">
-    <label>時刻</label>
-    <div class="time-pair">
-      <input type="time" id="addStart" value="10:00">
-      <span class="muted">〜</span>
-      <input type="time" id="addEnd" value="11:00">
-    </div>
-  </div>
   <div class="form-row">
-    <button type="button" id="addTimeToggle" class="add-progress-btn" style="align-self:flex-start;">＋ 時間を指定する</button>
+    <div class="add-time-control">
+      <button type="button" id="addTimeToggle" class="add-progress-btn">＋ 時間を指定する</button>
+      <div class="time-pair" id="addTimeRow" style="display:none;">
+        <input type="time" id="addStart" value="10:00">
+        <span class="muted">〜</span>
+        <input type="time" id="addEnd" value="11:00">
+      </div>
+    </div>
   </div>
   <div class="form-row">
     <label>メモ</label>
