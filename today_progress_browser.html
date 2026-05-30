@@ -685,23 +685,23 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .muted { color: var(--text-muted); font-size: 13px; }
 .help-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
-/* ===================== Multi-day (iPad/Mac) week & 3-day view ===================== */
-/* タブレット/PC: 3日or1週間のカレンダー風グリッド表示 */
+/* ===================== Multi-day (3/5/7日) カレンダー風グリッド ===================== */
 .cards.multiday { padding: 0; gap: 0; }
-.cards.multiday .cards-section { display: none; } /* single-day用は隠す */
+.cards.multiday .cards-section { display: none; }
 .day-columns {
   display: grid;
   gap: 1.5px;
   background: var(--border);
   border-top: 1.5px solid var(--border);
   border-bottom: 1.5px solid var(--border);
-  min-height: calc(100vh - 240px);
 }
+.day-columns[data-days="3"] { grid-template-columns: repeat(3, 1fr); }
+.day-columns[data-days="5"] { grid-template-columns: repeat(5, 1fr); }
+.day-columns[data-days="7"] { grid-template-columns: repeat(7, 1fr); }
 .day-column {
   background: var(--bg);
   display: flex; flex-direction: column;
-  min-height: 200px;
-  overflow: hidden;
+  min-width: 0;
 }
 .day-column-header {
   padding: 8px 10px;
@@ -713,6 +713,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   color: var(--text);
   cursor: pointer;
   display: flex; align-items: baseline; gap: 6px;
+  position: sticky; top: 0; z-index: 5;
 }
 .day-column-header.today {
   background: var(--ink);
@@ -725,8 +726,6 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   padding: 6px 4px;
   display: flex; flex-direction: column;
   gap: 4px;
-  flex: 1;
-  overflow-y: auto;
 }
 .day-column .card:not(.expanded) {
   padding: 4px 8px !important;
@@ -740,6 +739,28 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   font-size: 12px; color: var(--text-muted);
   text-align: center; font-style: italic;
 }
+
+/* ===================== 日数選択アイコン (1日/3日/5日/7日) ===================== */
+.view-mode-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 6px;
+}
+.vm-tab {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px; font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0;
+}
+.vm-tab:active { opacity: 0.6; }
+.vm-tab.active { background: var(--ink); color: var(--inverted); }
 
 /* ===================== Responsive: iPad portrait & wider ===================== */
 @media (min-width: 700px) {
@@ -766,7 +787,6 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     justify-content: flex-start;
     gap: 16px;
   }
-  .day-columns { grid-template-columns: repeat(3, 1fr); }
   .sheet { max-width: 720px; left: 50%; transform: translateX(-50%) translateY(100%); }
   .sheet.open { transform: translateX(-50%) translateY(0); }
 }
@@ -778,7 +798,6 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   .header { padding: 14px 24px; padding-top: calc(14px + env(safe-area-inset-top)); }
   .tabs { max-width: 360px; }
   .action-cards { padding: 12px 24px; }
-  .day-columns { grid-template-columns: repeat(7, 1fr); }
 }
 </style>
 </head>
@@ -796,6 +815,12 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
         <span id="weekday" class="muted"></span>
       </div>
       <div class="icon-row">
+        <div class="view-mode-tabs" id="viewModeTabs">
+          <button class="vm-tab" data-days="1" aria-label="1日表示">1</button>
+          <button class="vm-tab" data-days="3" aria-label="3日表示">3</button>
+          <button class="vm-tab" data-days="5" aria-label="5日表示">5</button>
+          <button class="vm-tab" data-days="7" aria-label="1週間表示">7</button>
+        </div>
         <button class="icon-btn" id="searchBtn" aria-label="検索">🔍</button>
         <button class="icon-btn" id="settingsBtn" aria-label="設定">⚙</button>
         <button class="icon-btn" id="refreshBtn" aria-label="更新">⟳</button>
@@ -1164,10 +1189,24 @@ async function fetchEvents(date) {
   return data.events || [];
 }
 
-// ========= Multi-day view (タブレット/PC) =========
-function getViewDates() {
+// ========= Multi-day view (1/3/5/7日 ユーザー選択) =========
+const VIEW_MODE_KEY = 'view_mode_days';
+function getViewMode() {
+  const v = parseInt(localStorage.getItem(VIEW_MODE_KEY), 10);
+  if (v === 1 || v === 3 || v === 5 || v === 7) return v;
   const w = window.innerWidth;
-  if (w >= 1024) {
+  if (w >= 1024) return 7;
+  if (w >= 700) return 3;
+  return 1;
+}
+function setViewMode(n) {
+  if (![1, 3, 5, 7].includes(n)) return;
+  localStorage.setItem(VIEW_MODE_KEY, String(n));
+}
+function getViewDates() {
+  const n = getViewMode();
+  if (n <= 1) return null;
+  if (n === 7) {
     const d = new Date(currentDate);
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - d.getDay());
@@ -1177,15 +1216,19 @@ function getViewDates() {
       return x;
     });
   }
-  if (w >= 700) {
-    return [-1, 0, 1].map(off => {
-      const x = new Date(currentDate);
-      x.setHours(0, 0, 0, 0);
-      x.setDate(x.getDate() + off);
-      return x;
-    });
-  }
-  return null;
+  const half = Math.floor(n / 2);
+  return Array.from({ length: n }, (_, i) => {
+    const x = new Date(currentDate);
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() - half + i);
+    return x;
+  });
+}
+function syncViewModeTabs() {
+  const mode = getViewMode();
+  document.querySelectorAll('.vm-tab').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.days, 10) === mode);
+  });
 }
 function renderDayColumn(dateObj, events) {
   const dateKey = fmtDate(dateObj);
@@ -1238,6 +1281,7 @@ async function refreshMultiDay(days) {
     cols.className = 'day-columns';
     container.appendChild(cols);
   }
+  cols.dataset.days = days.length;
   cols.innerHTML = '';
   for (const d of days) {
     const dateKey = fmtDate(d);
@@ -2982,24 +3026,17 @@ attachSwipeClose('addSheet', 'add');
 attachSwipeClose('importSheet', 'import');
 attachSwipeClose('settingsSheet', 'settings');
 
-// viewport が変わったら表示モードを切り替え (debounce)
-let _resizeTimer = null;
-let _lastMultiKey = null;
-function currentMultiKey() {
-  const w = window.innerWidth;
-  return w >= 1024 ? 'week' : (w >= 700 ? '3day' : 'single');
-}
-_lastMultiKey = currentMultiKey();
-window.addEventListener('resize', () => {
-  clearTimeout(_resizeTimer);
-  _resizeTimer = setTimeout(() => {
-    const k = currentMultiKey();
-    if (k !== _lastMultiKey) {
-      _lastMultiKey = k;
-      refresh();
-    }
-  }, 200);
+// 日数選択タブ (1/3/5/7) のクリック処理
+document.querySelectorAll('.vm-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const n = parseInt(btn.dataset.days, 10);
+    if (!n) return;
+    setViewMode(n);
+    syncViewModeTabs();
+    refresh();
+  });
 });
+syncViewModeTabs();
 
 updateDateLabel();
 syncTabs();
