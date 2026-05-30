@@ -408,6 +408,22 @@ html, body {
   cursor: pointer;
   line-height: 1.4;
 }
+/* 折りたたみ表示用 div (textarea は float around できないので div を使う) */
+.title-display {
+  display: none;
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: inherit;
+  color: var(--text);
+}
+.card:not(.expanded) .title-display {
+  display: block;
+  order: 2; flex: 1; min-width: 0;
+  font-size: 15px; font-weight: 500;
+  line-height: 1.4;
+}
+.card:not(.expanded) .title-input { display: none; }
+.card.done .title-display { color: var(--text-muted); text-decoration: line-through; }
 .card:not(.expanded) .card-body { display: none; }
 .card:not(.expanded) .card-head .pill-btn,
 .card:not(.expanded) .card-head .drag-handle,
@@ -857,33 +873,24 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   display: flex; flex-direction: column;
   gap: 4px;
 }
-/* 多日表示:
-   - 終日(allday) / 完了(done) は短いピル → タイトル横並び (収まらなければ折り返し)
-   - 時刻指定 (それ以外) は広いピル → ピルとタイトルを縦並びに (1行目に無理に詰めない) */
+/* 多日表示: ピルを float left して、タイトルテキストがピルの右と下の余白を回り込むようにする */
+/* これによりピル下の無駄な余白が消え、2行目以降は列の左端から表示される */
 .day-column .card:not(.expanded) {
   padding: 4px 8px !important;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 6px;
+  display: block;
+  overflow: hidden; /* clearfix (float を内包) */
+}
+.day-column .card:not(.expanded) .card-head {
+  float: left;
+  margin: 1px 6px 0 0;
+  display: block;
 }
 .day-column .card:not(.expanded) .time-pill { min-width: 0; font-size: 12px; padding: 2px 6px; }
 .day-column .card:not(.expanded) .time-pill.allday { font-size: 10px; padding: 1px 6px; }
-.day-column .card:not(.expanded) .title-input {
+.day-column .card:not(.expanded) .title-display {
   font-size: 13px;
-  flex: 1;
-  min-width: 60px;
-}
-/* 時刻指定 (allday でも done でもない) は強制的にタイトルを次の行へ */
-.day-column .card:not(.expanded):not(.allday):not(.done) {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-.day-column .card:not(.expanded):not(.allday):not(.done) .title-input {
-  width: 100%;
-  flex: none;
-  min-width: 0;
+  line-height: 1.4;
+  /* float の右側 → 折り返し時はピル下から続く (自然な回り込み) */
 }
 
 /* 5日表示: ピル内テキストも折り返し可能に + サイズダウン */
@@ -898,12 +905,12 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   max-width: 100%;
   text-align: center;
 }
-.day-columns[data-days="5"] .card:not(.expanded) .title-input { font-size: 12px; min-width: 50px; }
+.day-columns[data-days="5"] .card:not(.expanded) .title-display { font-size: 12px; }
 
 /* 7日表示: さらに圧縮 */
 .day-columns[data-days="7"] .card:not(.expanded) .time-pill { font-size: 9px; padding: 1px 3px; }
 .day-columns[data-days="7"] .card:not(.expanded) .time-pill.allday { font-size: 9px; padding: 1px 3px; }
-.day-columns[data-days="7"] .card:not(.expanded) .title-input { font-size: 11px; min-width: 44px; }
+.day-columns[data-days="7"] .card:not(.expanded) .title-display { font-size: 11px; }
 /* 5/7日表示の日付ヘッダ (曜日が潰れて見える問題への対応) */
 .day-columns[data-days="5"] .day-column-header,
 .day-columns[data-days="7"] .day-column-header {
@@ -1931,7 +1938,7 @@ function renderCard(ev) {
   const startTime = allDay ? '' : formatTime(getStartISO(ev));
   const endTime = allDay ? '' : formatTime(getEndISO(ev));
 
-  // タイトル: 長文も折り返して全部見えるように textarea を使用
+  // タイトル: 編集用 textarea (展開時に使用)
   const titleInput = document.createElement('textarea');
   titleInput.className = 'title-input';
   titleInput.rows = 1;
@@ -1940,6 +1947,10 @@ function renderCard(ev) {
   titleInput.setAttribute('lang', 'ja');
   titleInput.setAttribute('autocomplete', 'off');
   titleInput.setAttribute('autocorrect', 'off');
+  // 折りたたみ時の表示用 div (textarea は float around できないので div を使う)
+  const titleDisplay = document.createElement('div');
+  titleDisplay.className = 'title-display';
+  titleDisplay.textContent = plainTitle(ev);
   // Enterで改行させず blur (保存は他箇所のロジックで)
   titleInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); }
@@ -1949,10 +1960,13 @@ function renderCard(ev) {
     titleInput.style.height = 'auto';
     titleInput.style.height = titleInput.scrollHeight + 'px';
   }
-  titleInput.addEventListener('input', autosizeTitle);
-  // 描画直後にサイズ調整 (フレーム待ち)
+  // 編集中は textarea の高さと表示用 div を同期
+  titleInput.addEventListener('input', () => {
+    autosizeTitle();
+    titleDisplay.textContent = titleInput.value;
+  });
   requestAnimationFrame(autosizeTitle);
-  card.appendChild(titleInput);
+  // ※ titleInput と titleDisplay の append は head の後に行う (float の起点になるよう)
 
   const head = document.createElement('div');
   head.className = 'card-head';
@@ -2049,6 +2063,9 @@ function renderCard(ev) {
   head.appendChild(collapseBtn);
 
   card.appendChild(head);
+  // head の後に title を append: 折りたたみ多日表示で head を float left → title が回り込む
+  card.appendChild(titleDisplay);
+  card.appendChild(titleInput);
 
   const body = document.createElement('div');
   body.className = 'card-body';
@@ -2561,6 +2578,9 @@ async function saveCardEvent(card, ev, btn) {
   const endInput = card.querySelector('[data-field="end"]');
   const memo = card.querySelector('[data-field="description"]');
   const newTitle = (isDone(ev) ? '✔️ ' : '') + titleInput.value.trim();
+  // 折りたたみ表示用 div も同期
+  const titleDisplay = card.querySelector('.title-display');
+  if (titleDisplay) titleDisplay.textContent = titleInput.value.trim();
   const wasAllDay = isAllDay(ev);
   const nowAllDay = allDayCb.checked;
   const dateKey = (card.dataset.date || fmtDate(currentDate)).split('T')[0];
