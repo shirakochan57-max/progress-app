@@ -858,11 +858,17 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 }
 .day-column .card:not(.expanded) {
   padding: 4px 8px !important;
-  gap: 6px;
+  /* 多日表示は列幅が狭いので、時刻ピルとタイトルを縦並びに */
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 .day-column .card:not(.expanded) .time-pill { min-width: 0; font-size: 12px; }
 .day-column .card:not(.expanded) .time-pill.allday { font-size: 10px; padding: 1px 6px; }
-.day-column .card:not(.expanded) .title-input { font-size: 13px; }
+.day-column .card:not(.expanded) .title-input {
+  font-size: 13px;
+  width: 100%; /* 列幅いっぱいで自然に折り返す */
+}
 /* 多日表示で展開されたカード: 列幅が狭いのでアクションを折り返し&圧縮で全部見える状態にする */
 .day-column .card.expanded .card-head {
   flex-wrap: wrap;
