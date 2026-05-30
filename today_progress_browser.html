@@ -868,6 +868,27 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   font-size: 13px;
   min-width: 60px; /* これ未満になるなら次の行に折り返す */
 }
+/* 5/7日表示は列が非常に狭いので、時刻ピル自体のテキストも折り返し可能にして列内に収める */
+.day-columns[data-days="5"] .card:not(.expanded) .time-pill,
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill {
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.15;
+  font-size: 11px;
+  padding: 2px 6px;
+  height: auto;
+  max-width: 100%;
+  text-align: center;
+}
+.day-columns[data-days="5"] .card:not(.expanded) .title-input,
+.day-columns[data-days="7"] .card:not(.expanded) .title-input {
+  font-size: 12px;
+  min-width: 50px;
+}
+/* 7日表示はさらにキツいので一段小さく */
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill { font-size: 10px; padding: 1px 4px; }
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill.allday { font-size: 9px; padding: 1px 4px; }
+.day-columns[data-days="7"] .card:not(.expanded) .title-input { font-size: 11px; min-width: 44px; }
 /* 多日表示で展開されたカード: 列幅が狭いのでアクションを折り返し&圧縮で全部見える状態にする */
 .day-column .card.expanded .card-head {
   flex-wrap: wrap;
