@@ -55,24 +55,38 @@ html, body {
 }
 .tab.active { background: var(--ink); color: var(--inverted); border-color: var(--ink); }
 .tab:active { opacity: 0.75; }
-.date-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.date-label { display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; letter-spacing: 0.5px; }
+.date-row { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.date-label {
+  position: relative;
+  display: inline-flex; align-items: center;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.date-label-text {
+  padding: 6px 4px 6px 0;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text);
+}
 #datePicker {
-  font-size: 17px; background: transparent; border: none;
-  padding: 6px 0; color: var(--text); font-weight: 700;
-  min-height: 36px; font-family: inherit;
-  letter-spacing: 0.5px;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  opacity: 0; cursor: pointer;
+  font-size: 16px;
+  border: none; background: transparent;
+  padding: 0; margin: 0;
 }
 .icon-btn {
-  width: 40px; height: 40px;
+  width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 10px;
   border: 1.5px solid var(--border);
   background: transparent;
-  font-size: 18px; color: var(--text);
+  font-size: 16px; color: var(--text);
+  flex-shrink: 0;
 }
 .icon-btn:active { background: var(--ink); color: var(--inverted); }
-.icon-row { display: flex; gap: 6px; align-items: center; }
+.icon-row { display: flex; gap: 4px; align-items: center; flex: 1; justify-content: flex-end; min-width: 0; }
 
 .bulk-memo-wrap {
   padding: 12px 12px 0;
@@ -796,17 +810,17 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 /* ===================== 日数選択アイコン (1日/3日/5日/7日) ===================== */
 .view-mode-tabs {
   display: inline-flex;
-  gap: 4px;
-  margin-right: 6px;
+  gap: 3px;
+  margin-right: 4px;
 }
 .vm-tab {
-  width: 34px; height: 34px;
+  width: 30px; height: 32px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 8px;
   border: 1.5px solid var(--border);
   background: transparent;
   color: var(--text);
-  font-size: 13px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   font-family: inherit;
   cursor: pointer;
   padding: 0;
@@ -830,9 +844,10 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     position: relative; top: auto;
   }
   .tabs { max-width: 360px; }
-  .date-row { gap: 16px; }
-  .date-label { font-size: 18px; }
-  #datePicker { font-size: 17px; }
+  .date-row { gap: 12px; }
+  .date-label { font-size: 16px; }
+  .icon-btn { width: 40px; height: 40px; font-size: 18px; }
+  .vm-tab { width: 34px; height: 36px; font-size: 13px; }
   .bulk-memo-wrap { padding: 12px 16px 0; }
   .bulk-memo-btn { font-size: 16px; min-height: 60px; }
   .action-cards {
@@ -863,10 +878,10 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
       <button class="tab" data-action="next" aria-label="次の日">→</button>
     </div>
     <div class="date-row">
-      <div class="date-label">
-        <input type="date" id="datePicker">
-        <span id="weekday" class="muted"></span>
-      </div>
+      <label class="date-label" for="datePicker">
+        <span id="dateLabelText" class="date-label-text">--/--/-- -</span>
+        <input type="date" id="datePicker" aria-label="日付を選択">
+      </label>
       <div class="icon-row">
         <div class="view-mode-tabs" id="viewModeTabs">
           <button class="vm-tab" data-days="1" aria-label="1日表示">1</button>
@@ -1905,8 +1920,7 @@ function renderCard(ev) {
   timeRow.appendChild(startInput);
   timeRow.appendChild(sep);
   timeRow.appendChild(endInput);
-  // 開始時刻を変えたら自動で終了=開始+10分にする (必要なら手動で延長)
-  attachAutoEndOnStartChange(startInput, endInput, 10);
+  // 既存カードの編集では auto-end を適用しない (ユーザーが既に設定した end を勝手に書き換えないため)
 
   function applyAllDay() {
     const v = allDayCb.checked;
@@ -2509,50 +2523,15 @@ async function toggleDone(ev, btn) {
     // 楽観的UI: 先に画面を更新してから背景同期
     const oldTitle = ev.summary;
     ev.summary = newTitle;
-    const card = document.querySelector(`.card[data-event-id="${ev.id}"]`);
-    if (card) {
-      card.classList.toggle('done', newDone);
-      const ti = card.querySelector('.title-input');
-      if (ti) ti.value = plainTitle(ev);
-      const pill = card.querySelector('.time-pill');
-      if (pill) {
-        const allDay = isAllDay(ev);
-        pill.className = 'time-pill' + (allDay ? ' allday' : '') + (newDone ? ' done-pill' : '');
-        pill.textContent = timePillText(ev, { done: newDone, allDay });
-      }
-      btn.textContent = newDone ? '戻す' : '完了';
-      btn.className = 'pill-btn ' + (newDone ? 'undo-pill' : 'done-pill');
-      const incompleteSec = document.getElementById('cardsIncomplete');
-      const doneSec = document.getElementById('cardsDone');
-      if (newDone) doneSec.appendChild(card);
-      else incompleteSec.appendChild(card);
-      saveCardOrder();
-      persistCache();
-    }
+    persistCache();
+    // 完了/未完了の切替を即時並び替えへ反映 (展開状態は維持)
+    renderEvents();
     btn.disabled = false;
     gasCall('update', { eventId: ev.id, summary: newTitle }).catch(err => {
       console.error('toggleDone sync error', err);
       ev.summary = oldTitle;
-      if (card) {
-        const wasDone = isDone({ summary: oldTitle });
-        card.classList.toggle('done', wasDone);
-        const ti2 = card.querySelector('.title-input');
-        if (ti2) ti2.value = plainTitle(ev);
-        const pill2 = card.querySelector('.time-pill');
-        if (pill2) {
-          const allDay = isAllDay(ev);
-          pill2.className = 'time-pill' + (allDay ? ' allday' : '') + (wasDone ? ' done-pill' : '');
-          pill2.textContent = timePillText(ev, { done: wasDone, allDay });
-        }
-        btn.textContent = wasDone ? '戻す' : '完了';
-        btn.className = 'pill-btn ' + (wasDone ? 'undo-pill' : 'done-pill');
-        const incompleteSec2 = document.getElementById('cardsIncomplete');
-        const doneSec2 = document.getElementById('cardsDone');
-        if (wasDone) doneSec2.appendChild(card);
-        else incompleteSec2.appendChild(card);
-        saveCardOrder();
-        persistCache();
-      }
+      persistCache();
+      renderEvents();
       showToast('更新失敗(元に戻しました): ' + (err.message || err));
     });
     return;
@@ -2745,27 +2724,54 @@ document.getElementById('settingsTest').addEventListener('click', async () => {
   }
 });
 
+// 新規追加シートを初期状態に戻す (キャンセル/背景タップ時に呼ぶ)
+function resetAddSheet() {
+  document.getElementById('addTitle').value = '';
+  document.getElementById('addMemo').value = '';
+  document.getElementById('addStart').value = '10:00';
+  document.getElementById('addEnd').value = '11:00';
+  const row = document.getElementById('addTimeRow');
+  row.style.display = 'none';
+  row.dataset.open = '0';
+  document.getElementById('addTimeToggle').textContent = '＋ 時間を指定する';
+}
 document.getElementById('addCard').addEventListener('click', () => {
   if (!getGasUrl()) { openSheet('settings'); return; }
+  resetAddSheet();
   document.getElementById('addDate').value = fmtDate(currentDate);
   openSheet('add');
 });
-document.getElementById('addBackdrop').addEventListener('click', () => closeSheet('add'));
-document.getElementById('addCancel').addEventListener('click', () => closeSheet('add'));
-document.getElementById('addTimeToggle').addEventListener('click', () => {
+document.getElementById('addBackdrop').addEventListener('click', () => {
+  closeSheet('add');
+  resetAddSheet();
+});
+document.getElementById('addCancel').addEventListener('click', () => {
+  closeSheet('add');
+  resetAddSheet();
+});
+// 「時間を指定する」: dataset で状態管理 (computed style 依存をやめて確実に動かす)
+document.getElementById('addTimeToggle').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
   const row = document.getElementById('addTimeRow');
   const btn = document.getElementById('addTimeToggle');
-  // computed styleで判定 (style.display='' 後でも正しく動くように)
-  const isHidden = window.getComputedStyle(row).display === 'none';
-  row.style.display = isHidden ? '' : 'none';
-  btn.textContent = isHidden ? '× 終日に戻す' : '＋ 時間を指定する';
+  const isOpen = row.dataset.open === '1';
+  if (isOpen) {
+    row.style.display = 'none';
+    row.dataset.open = '0';
+    btn.textContent = '＋ 時間を指定する';
+  } else {
+    row.style.display = '';
+    row.dataset.open = '1';
+    btn.textContent = '× 終日に戻す';
+  }
 });
 document.getElementById('addSubmit').addEventListener('click', async () => {
   const title = document.getElementById('addTitle').value.trim();
   if (!title) { showToast('タイトルを入力'); return; }
-  // 時間行が表示されていれば時間指定、隠れていれば終日
+  // 時間行が開いていれば時間指定、閉じていれば終日 (dataset で判定)
   const timeRow = document.getElementById('addTimeRow');
-  const allDay = window.getComputedStyle(timeRow).display === 'none';
+  const allDay = timeRow.dataset.open !== '1';
   const memo = document.getElementById('addMemo').value;
   // 日付フィールドの値を使用(空ならcurrentDate)
   const dateKey = document.getElementById('addDate').value || fmtDate(currentDate);
@@ -2797,10 +2803,7 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
     }
     showToast(dateKey === fmtDate(currentDate) ? '登録しました' : `${dateKey} に登録しました`);
     closeSheet('add');
-    document.getElementById('addTitle').value = '';
-    document.getElementById('addMemo').value = '';
-    document.getElementById('addTimeRow').style.display = 'none';
-    document.getElementById('addTimeToggle').textContent = '＋ 時間を指定する';
+    resetAddSheet();
     if (dateKey === fmtDate(currentDate) && created && created.id) {
       const newEv = {
         id: created.id,
@@ -3016,8 +3019,13 @@ document.getElementById('bulkRegisterBtn').addEventListener('click', async () =>
 
 
 function updateDateLabel() {
+  const d = currentDate;
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const wk = weekdayJP(d);
+  document.getElementById('dateLabelText').textContent = `${yy}/${mm}/${dd} ${wk}`;
   document.getElementById('datePicker').value = fmtDate(currentDate);
-  document.getElementById('weekday').textContent = '（' + weekdayJP(currentDate) + '）';
 }
 function syncTabs() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
