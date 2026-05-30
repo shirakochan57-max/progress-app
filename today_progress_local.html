@@ -27,15 +27,6 @@
 input[type="date"], input[type="time"], input[type="datetime-local"] {
   accent-color: var(--ink);
 }
-/* Mac Safari でネイティブ日付ピッカー(ドロップダウン)を拡大 (font-size に連動する) */
-/* iPhone/iPad は OS のフルスクリーンピッカーなので影響なし */
-@media (min-width: 700px) {
-  .form-row input[type="date"] {
-    font-size: 28px;
-    min-height: 56px;
-    padding: 12px 16px;
-  }
-}
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0;
@@ -704,6 +695,86 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .btn.secondary { background: transparent; color: var(--text); }
 .btn:active { opacity: 0.6; }
 
+/* インライン自作カレンダー (シート内に直接展開、別シートを開かないので親シート閉じバグが構造的に発生しない) */
+.inline-cal {
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ic-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.ic-nav {
+  width: 32px; height: 32px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.ic-nav:active { background: var(--ink); color: var(--inverted); }
+.ic-month {
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.5px;
+  flex: 1; text-align: center;
+}
+.ic-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.ic-wd {
+  text-align: center;
+  font-size: 11px; font-weight: 700;
+  color: var(--text-muted);
+  padding: 2px 0;
+  letter-spacing: 0.5px;
+}
+.ic-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.ic-cell {
+  aspect-ratio: 1 / 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  color: var(--text);
+  border: 1.5px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  padding: 0;
+}
+.ic-cell.other { color: var(--text-muted); opacity: 0.35; }
+.ic-cell.today { border-color: var(--ink); }
+.ic-cell.selected { background: var(--ink); color: var(--inverted); border-color: var(--ink); }
+.ic-cell:active { background: var(--surface-2); }
+.ic-cell.selected:active { opacity: 0.85; }
+/* Mac/iPad 横向き等の広い画面でカレンダー全体を約3倍の面積に拡大 */
+@media (min-width: 700px) {
+  .inline-cal { padding: 16px; }
+  .ic-header { margin-bottom: 10px; }
+  .ic-month { font-size: 20px; }
+  .ic-nav { width: 44px; height: 44px; font-size: 18px; border-radius: 8px; }
+  .ic-wd { font-size: 16px; padding: 8px 0; }
+  .ic-cell { font-size: 20px; font-weight: 600; border-radius: 8px; }
+  .ic-grid, .ic-weekdays { gap: 4px; }
+}
+
 .toast {
   position: fixed;
   bottom: calc(30px + env(safe-area-inset-bottom));
@@ -972,7 +1043,8 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <h3>予定を振替</h3>
   <div class="form-row">
     <label>① いつ（振替先の日付）</label>
-    <input type="date" id="rescheduleDate">
+    <div class="inline-cal" id="rescheduleDateCal"></div>
+    <input type="hidden" id="rescheduleDate">
   </div>
   <div class="form-row">
     <label style="display:flex; align-items:center; gap:8px;">
@@ -1013,7 +1085,8 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   </div>
   <div class="form-row">
     <label>日付</label>
-    <input type="date" id="addDate">
+    <div class="inline-cal" id="addDateCal"></div>
+    <input type="hidden" id="addDate">
   </div>
   <div class="form-row" id="addTimeRow" style="display:none;">
     <label>時刻</label>
@@ -2598,7 +2671,9 @@ let currentReschedule = null;
 function openReschedule(card, ev) {
   currentReschedule = { card, ev };
   const tomorrow = new Date(currentDate); tomorrow.setDate(tomorrow.getDate() + 1);
-  document.getElementById('rescheduleDate').value = fmtDate(tomorrow);
+  const rdInp = document.getElementById('rescheduleDate');
+  rdInp.value = fmtDate(tomorrow);
+  rdInp.dispatchEvent(new Event('change', { bubbles: true })); // インライン自作カレンダーの表示同期
   document.getElementById('rescheduleAction').value = '';
   // 元イベントの状態から終日/時刻の初期値を決定
   const allDayCb = document.getElementById('rescheduleAllDay');
@@ -2794,7 +2869,9 @@ function resetAddSheet() {
 document.getElementById('addCard').addEventListener('click', () => {
   if (!getGasUrl()) { openSheet('settings'); return; }
   resetAddSheet();
-  document.getElementById('addDate').value = fmtDate(currentDate);
+  const addInp = document.getElementById('addDate');
+  addInp.value = fmtDate(currentDate);
+  addInp.dispatchEvent(new Event('change', { bubbles: true })); // インライン自作カレンダーの表示同期
   openSheet('add');
 });
 document.getElementById('addBackdrop').addEventListener('click', () => {
@@ -3238,6 +3315,113 @@ function attachSwipeClose(sheetId, name) {
 attachSwipeClose('addSheet', 'add');
 attachSwipeClose('importSheet', 'import');
 attachSwipeClose('settingsSheet', 'settings');
+
+// ============= インライン自作カレンダー =============
+// シート内の <input type="date"> を置き換える、常時展開型の自作カレンダー。
+// 別シートを開かないため、前回試作で発生した「親シートも一緒に閉じる」バグは構造的に起きない。
+function setupInlineCalendar(containerId, hiddenInputId) {
+  const container = document.getElementById(containerId);
+  const hidden = document.getElementById(hiddenInputId);
+  if (!container || !hidden) return null;
+
+  let viewYear, viewMonth;
+  const syncViewFromValue = () => {
+    const v = hidden.value;
+    let d = v ? parseDateKey(v) : new Date();
+    if (!d || isNaN(d.getTime())) d = new Date();
+    viewYear = d.getFullYear();
+    viewMonth = d.getMonth();
+  };
+
+  container.innerHTML = `
+    <div class="ic-header">
+      <button type="button" class="ic-nav ic-prev" aria-label="前の月">←</button>
+      <div class="ic-month"></div>
+      <button type="button" class="ic-nav ic-next" aria-label="次の月">→</button>
+    </div>
+    <div class="ic-weekdays">
+      <div class="ic-wd">日</div><div class="ic-wd">月</div><div class="ic-wd">火</div>
+      <div class="ic-wd">水</div><div class="ic-wd">木</div><div class="ic-wd">金</div>
+      <div class="ic-wd">土</div>
+    </div>
+    <div class="ic-grid"></div>
+  `;
+  const monthLabel = container.querySelector('.ic-month');
+  const grid = container.querySelector('.ic-grid');
+
+  const render = () => {
+    monthLabel.textContent = `${viewYear}年${viewMonth + 1}月`;
+    grid.innerHTML = '';
+    const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+    const todayKey = fmtDate(new Date());
+    const selectedKey = hidden.value;
+    for (let i = 0; i < 42; i++) {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'ic-cell';
+      let cy, cm, cd;
+      if (i < firstDow) {
+        cd = prevDays - firstDow + 1 + i;
+        cm = viewMonth - 1; cy = viewYear;
+        if (cm < 0) { cm = 11; cy--; }
+        cell.classList.add('other');
+      } else if (i < firstDow + daysInMonth) {
+        cd = i - firstDow + 1;
+        cm = viewMonth; cy = viewYear;
+      } else {
+        cd = i - firstDow - daysInMonth + 1;
+        cm = viewMonth + 1; cy = viewYear;
+        if (cm > 11) { cm = 0; cy++; }
+        cell.classList.add('other');
+      }
+      const key = `${cy}-${pad(cm + 1)}-${pad(cd)}`;
+      cell.textContent = String(cd);
+      cell.dataset.dateKey = key;
+      if (key === todayKey) cell.classList.add('today');
+      if (key === selectedKey) cell.classList.add('selected');
+      cell.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        hidden.value = key;
+        // 別月のセルを選んだら表示月も追従
+        viewYear = cy; viewMonth = cm;
+        render();
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      grid.appendChild(cell);
+    }
+  };
+
+  container.querySelector('.ic-prev').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    viewMonth--;
+    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+    render();
+  });
+  container.querySelector('.ic-next').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    viewMonth++;
+    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+    render();
+  });
+
+  // 外部から hidden.value が変わったら表示月を再同期 + 再描画
+  // (自身の cell click も dispatch するが、change リスナー自身は dispatch しないので無限ループにはならない)
+  hidden.addEventListener('change', () => {
+    syncViewFromValue();
+    render();
+  });
+
+  syncViewFromValue();
+  render();
+
+  return { refresh: () => { syncViewFromValue(); render(); } };
+}
+
+setupInlineCalendar('addDateCal', 'addDate');
+setupInlineCalendar('rescheduleDateCal', 'rescheduleDate');
 
 // 日数選択タブ (1/3/5/7) のクリック処理
 document.querySelectorAll('.vm-tab').forEach(btn => {
