@@ -1910,19 +1910,15 @@ function renderCard(ev) {
   progSec.appendChild(progLog);
   body.appendChild(progSec);
 
-  // 分解セクション (初期非表示)
+  // 分解セクション (初期非表示)。timeRow(終日チェック)直下に置き、操作距離を短くする。
   const splitSec = document.createElement('div');
   splitSec.className = 'split-section';
   splitSec.style.display = 'none';
-  const splitHint = document.createElement('div');
-  splitHint.className = 'split-hint';
-  splitHint.textContent = '1行 = 1タスク。記入後にもう一度「✂ 分解」を押すと、行ごとに別カードへ分解します';
   const splitInput = document.createElement('textarea');
   splitInput.className = 'split-input';
-  splitInput.placeholder = '例:\n水の準備\n公園まで行く\nうんちの処理';
-  splitSec.appendChild(splitHint);
+  splitInput.placeholder = '';
   splitSec.appendChild(splitInput);
-  body.appendChild(splitSec);
+  body.insertBefore(splitSec, memoSec);
 
   async function onSplitClick() {
     const opened = splitSec.style.display !== 'none';
