@@ -1793,6 +1793,49 @@ function renderCard(ev) {
   splitBtn.addEventListener('click', e => { e.stopPropagation(); onSplitClick(); });
   head.appendChild(splitBtn);
 
+  // 📷 写真添付ボタン (ローカル保存。新規タスク作成の写真機能と同じ仕様)
+  const photoBtn = document.createElement('button');
+  photoBtn.className = 'pill-btn photo-pill';
+  photoBtn.textContent = '📷';
+  photoBtn.title = '写真を撮影/選択して保存';
+  const photoFileInput = document.createElement('input');
+  photoFileInput.type = 'file';
+  photoFileInput.accept = 'image/*';
+  photoFileInput.setAttribute('capture', 'environment');
+  photoFileInput.style.display = 'none';
+  photoBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    photoFileInput.value = '';
+    photoFileInput.click();
+  });
+  photoFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const origText = photoBtn.textContent;
+    photoBtn.disabled = true;
+    photoBtn.textContent = '…';
+    try {
+      const dataUrl = await compressImage(file);
+      const saved = setCardPhoto(ev.id, dataUrl);
+      if (!saved) {
+        showToast('画像保存失敗(容量超過の可能性)');
+      } else {
+        showToast('写真を保存しました');
+        // 展開状態を保ったまま再描画してサムネイルを反映
+        renderEvents();
+      }
+    } catch (err) {
+      console.error('card photo error', err);
+      showToast('失敗: ' + (err.message || err));
+    } finally {
+      photoBtn.disabled = false;
+      photoBtn.textContent = origText;
+      e.target.value = '';
+    }
+  });
+  head.appendChild(photoBtn);
+  card.appendChild(photoFileInput);
+
   const delBtn = document.createElement('button');
   delBtn.className = 'pill-btn delete-pill';
   delBtn.textContent = '🗑';
