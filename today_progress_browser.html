@@ -27,6 +27,15 @@
 input[type="date"], input[type="time"], input[type="datetime-local"] {
   accent-color: var(--ink);
 }
+/* Mac Safari でネイティブ日付ピッカー(ドロップダウン)を拡大 (font-size に連動する) */
+/* iPhone/iPad は OS のフルスクリーンピッカーなので影響なし */
+@media (min-width: 700px) {
+  .form-row input[type="date"] {
+    font-size: 28px;
+    min-height: 56px;
+    padding: 12px 16px;
+  }
+}
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0;
