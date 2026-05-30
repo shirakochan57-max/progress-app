@@ -133,8 +133,13 @@ html, body {
 .action-card.photo-card    { --accent: var(--ink); --accent-text: var(--text); }
 .action-card:active { opacity: 0.6; }
 
-.card-photo {
+.card-photos {
   margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.card-photo {
   display: block;
   max-width: 220px; max-height: 220px;
   border-radius: 10px;
@@ -142,6 +147,7 @@ html, body {
   filter: grayscale(1) contrast(1.1);
   cursor: pointer;
 }
+.card-photos .card-photo { margin-top: 0; max-width: 140px; max-height: 140px; }
 .photo-lightbox {
   position: fixed; inset: 0;
   background: rgba(26,26,26,0.92);
@@ -1418,13 +1424,44 @@ function swapEventId(tempId, realId) {
 }
 
 // ========= 写真添付 (localStorage, 端末ローカル) =========
+// 保存形式: photo_<eventId> に JSON配列 (string[]) を格納。旧形式 (data: で始まる単一文字列) も互換読み込み。
 const PHOTO_PREFIX = 'photo_';
+function getCardPhotos(eventId) {
+  try {
+    const raw = localStorage.getItem(PHOTO_PREFIX + eventId);
+    if (!raw) return [];
+    if (raw.startsWith('data:')) return [raw]; // 旧形式 (単一dataURL)
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.filter(s => typeof s === 'string' && s);
+    } catch (e) {}
+    return [];
+  } catch (e) { return []; }
+}
 function getCardPhoto(eventId) {
-  try { return localStorage.getItem(PHOTO_PREFIX + eventId) || ''; } catch (e) { return ''; }
+  // 後方互換: 1枚目を返す
+  const arr = getCardPhotos(eventId);
+  return arr.length ? arr[0] : '';
+}
+function setCardPhotos(eventId, arr) {
+  try {
+    if (!arr || arr.length === 0) {
+      localStorage.removeItem(PHOTO_PREFIX + eventId);
+    } else {
+      localStorage.setItem(PHOTO_PREFIX + eventId, JSON.stringify(arr));
+    }
+    return true;
+  } catch (e) { console.error('photo保存失敗', e); return false; }
 }
 function setCardPhoto(eventId, dataUrl) {
-  try { localStorage.setItem(PHOTO_PREFIX + eventId, dataUrl); return true; }
-  catch (e) { console.error('photo保存失敗', e); return false; }
+  // 後方互換: 単一の写真をセット (既存写真を置き換え)
+  return setCardPhotos(eventId, dataUrl ? [dataUrl] : []);
+}
+function addCardPhoto(eventId, dataUrl) {
+  // 既存の写真配列に追加 (2枚目以降を蓄積)
+  const arr = getCardPhotos(eventId);
+  arr.push(dataUrl);
+  return setCardPhotos(eventId, arr);
 }
 function removeCardPhoto(eventId) {
   try { localStorage.removeItem(PHOTO_PREFIX + eventId); } catch (e) {}
@@ -1800,11 +1837,12 @@ function renderCard(ev) {
     photoBtn.textContent = '…';
     try {
       const dataUrl = await compressImage(file);
-      const saved = setCardPhoto(ev.id, dataUrl);
+      const saved = addCardPhoto(ev.id, dataUrl);
       if (!saved) {
         showToast('画像保存失敗(容量超過の可能性)');
       } else {
-        showToast('写真を保存しました');
+        const total = getCardPhotos(ev.id).length;
+        showToast(`写真を追加しました (${total}枚)`);
         // 展開状態を保ったまま再描画してサムネイルを反映
         renderEvents();
       }
@@ -2040,20 +2078,25 @@ function renderCard(ev) {
     })();
   }
 
-  // 写真がlocalStorageにあればカード本文末尾に表示
-  const photoData = getCardPhoto(ev.id);
-  if (photoData) {
-    const img = document.createElement('img');
-    img.src = photoData;
-    img.className = 'card-photo';
-    img.alt = '添付写真';
-    img.addEventListener('click', e => {
-      e.stopPropagation();
-      const lb = document.getElementById('photoLightbox');
-      document.getElementById('photoLightboxImg').src = photoData;
-      lb.classList.add('open');
+  // 写真がlocalStorageにあれば全てカード本文末尾にサムネイル表示 (タップでライトボックス)
+  const photos = getCardPhotos(ev.id);
+  if (photos.length) {
+    const photoBox = document.createElement('div');
+    photoBox.className = 'card-photos';
+    photos.forEach((url, idx) => {
+      const img = document.createElement('img');
+      img.src = url;
+      img.className = 'card-photo';
+      img.alt = `添付写真 ${idx + 1}`;
+      img.addEventListener('click', e => {
+        e.stopPropagation();
+        const lb = document.getElementById('photoLightbox');
+        document.getElementById('photoLightboxImg').src = url;
+        lb.classList.add('open');
+      });
+      photoBox.appendChild(img);
     });
-    body.appendChild(img);
+    body.appendChild(photoBox);
   }
 
   card.appendChild(body);
