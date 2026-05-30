@@ -435,6 +435,31 @@ html, body {
   display: flex; align-items: center; gap: 6px;
   flex-wrap: wrap;
 }
+/* 展開時はアクションを横1列に並べる。終日pillは body のチェックボックスと重複するので非表示。 */
+.card.expanded .card-head {
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+}
+.card.expanded .card-head::-webkit-scrollbar { display: none; }
+.card.expanded .time-pill { display: none; }
+.card.expanded .card-head .head-spacer { display: none; }
+.card.expanded .card-head .pill-btn {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  font-size: 12px;
+  min-height: 32px;
+}
+.card.expanded .card-head .pill-btn.undo-pill {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.card.expanded .card-head .pill-btn.delete-pill,
+.card.expanded .card-head .pill-btn.collapse-pill {
+  min-width: 32px;
+  padding: 6px 8px;
+}
 .drag-handle {
   display: flex; align-items: center; justify-content: center;
   color: var(--text-muted); font-size: 18px;
@@ -1716,21 +1741,11 @@ function renderCard(ev) {
   const head = document.createElement('div');
   head.className = 'card-head';
 
-  const drag = document.createElement('span');
-  drag.className = 'drag-handle';
-  drag.textContent = '⋮⋮';
-  drag.title = '長押しでドラッグして並び替え';
-  setupCardDrag(card, drag);
-  head.appendChild(drag);
-
+  // ドラッグハンドル(⋮⋮)は不要なので非表示。並び替えは時刻ソート+終日セクション挿入順で十分。
   const pill = document.createElement('span');
   pill.className = 'time-pill' + (allDay ? ' allday' : '') + (isDone(ev) ? ' done-pill' : '');
   pill.textContent = timePillText(ev, { done: isDone(ev), allDay });
   head.appendChild(pill);
-
-  const spacer = document.createElement('span');
-  spacer.className = 'head-spacer';
-  head.appendChild(spacer);
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'pill-btn save-pill';
@@ -1823,11 +1838,7 @@ function renderCard(ev) {
   const memoLabel = document.createElement('span');
   memoLabel.className = 'memo-label';
   memoLabel.textContent = 'メモ';
-  const memoBadge = document.createElement('span');
-  memoBadge.className = 'memo-badge';
-  memoBadge.textContent = 'カレンダー連動';
   memoLblRow.appendChild(memoLabel);
-  memoLblRow.appendChild(memoBadge);
   const memo = document.createElement('textarea');
   memo.value = ev.description || '';
   memo.dataset.field = 'description';
@@ -1857,7 +1868,7 @@ function renderCard(ev) {
   // blurによる横取り保存を廃止したため、ボタン押下時の差分判定が正しく動く。
   let baselineValue = getProgressLog(ev.id);
   progLog.value = baselineValue;
-  progLog.placeholder = '（まだ進捗はありません）追記したい内容を末尾に入力し「ローカル保存」を押すと✔時刻付きで保存';
+  progLog.placeholder = '';
   // ※ blurでの自動保存はあえて削除。ボタンを押した時のみ保存される。
   function progLocalSave() {
     const current = progLog.value;
