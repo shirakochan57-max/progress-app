@@ -1919,7 +1919,9 @@ function renderCard(ev) {
     const baseStart = ev.start && (ev.start.dateTime || ev.start.date);
     const baseEnd = ev.end && (ev.end.dateTime || ev.end.date);
     const dateKey = getEventDateKey(ev);
-    const parentTitle = plainTitle(ev);
+    // 親タイトルは titleInput の現在値を優先 (ユーザーが保存前に書き換えた場合も反映)
+    const editedTitle = (titleInput.value || '').trim();
+    const parentTitle = editedTitle || plainTitle(ev);
 
     // 即時UI反映
     const tempEvents = lines.map(line => ({
