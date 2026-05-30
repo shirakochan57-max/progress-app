@@ -1473,6 +1473,8 @@ async function autoCarryUndoneTasks() {
 
 function renderEvents() {
   const container = document.getElementById('cards');
+  // 再描画前に展開中のカードIDを記憶 (描画後に復元)
+  const expandedIds = [...document.querySelectorAll('.card.expanded')].map(c => c.dataset.eventId);
   // multi-day表示中は currentDate の列のみ差し替え
   if (container.classList.contains('multiday')) {
     const dateKey = fmtDate(currentDate);
@@ -1480,6 +1482,10 @@ function renderEvents() {
     if (col) {
       const newCol = renderDayColumn(currentDate, eventsCache);
       col.replaceWith(newCol);
+      expandedIds.forEach(id => {
+        const c = newCol.querySelector(`.card[data-event-id="${id}"]`);
+        if (c) c.classList.add('expanded');
+      });
     }
     persistCache();
     return;
@@ -1503,6 +1509,10 @@ function renderEvents() {
     else incomplete.appendChild(card);
   }
   applyCardOrder();
+  expandedIds.forEach(id => {
+    const c = container.querySelector(`.card[data-event-id="${id}"]`);
+    if (c) c.classList.add('expanded');
+  });
   persistCache();
 }
 
@@ -1609,36 +1619,44 @@ function setupCardDrag(card, handle) {
 }
 
 function saveCardOrder() {
-  const incomplete = [...document.querySelectorAll('#cardsIncomplete .card')].map(c => c.dataset.eventId);
-  const done = [...document.querySelectorAll('#cardsDone .card')].map(c => c.dataset.eventId);
+  // 時刻ありカードは常に時刻順なので保存対象外。終日カードのみドラッグ順を保存。
+  const incomplete = [...document.querySelectorAll('#cardsIncomplete .card.allday')].map(c => c.dataset.eventId);
+  const done = [...document.querySelectorAll('#cardsDone .card.allday')].map(c => c.dataset.eventId);
   localStorage.setItem('card_order_' + fmtDate(currentDate), JSON.stringify({ incomplete, done }));
 }
 function applyCardOrder() {
+  // 時刻ありカードは常に sortEvents の時刻順 (上)、終日カードはその下に保存順で並べる。
   const saved = localStorage.getItem('card_order_' + fmtDate(currentDate));
-  if (!saved) return;
-  let data;
-  try { data = JSON.parse(saved); } catch { return; }
-  if (!data || (!data.incomplete && !data.done)) return;
+  let data = null;
+  if (saved) {
+    try { data = JSON.parse(saved); } catch {}
+  }
   const incompleteSec = document.getElementById('cardsIncomplete');
   const doneSec = document.getElementById('cardsDone');
-  const allCards = {};
-  [...document.querySelectorAll('.card[data-event-id]')].forEach(c => {
-    allCards[c.dataset.eventId] = c;
-  });
-  (data.incomplete || []).forEach(id => {
-    const c = allCards[id];
-    if (c && !c.classList.contains('done')) {
-      incompleteSec.appendChild(c);
-      delete allCards[id];
+  function reorderSection(section, savedIds) {
+    if (!section) return;
+    const allCards = [...section.children].filter(c => c.classList && c.classList.contains('card'));
+    if (allCards.length === 0) return;
+    const timedCards = allCards.filter(c => !c.classList.contains('allday'));
+    const allDayCards = allCards.filter(c => c.classList.contains('allday'));
+    let orderedAllDay = allDayCards;
+    if (savedIds && savedIds.length && allDayCards.length) {
+      const seen = new Set();
+      const savedOrdered = [];
+      for (const id of savedIds) {
+        const c = allDayCards.find(c => c.dataset.eventId === id);
+        if (c && !seen.has(id)) { savedOrdered.push(c); seen.add(id); }
+      }
+      const unsaved = allDayCards.filter(c => !seen.has(c.dataset.eventId));
+      // 新規(未保存)カードを先頭、その後に保存済みカードを保存順で配置
+      orderedAllDay = [...unsaved, ...savedOrdered];
     }
-  });
-  (data.done || []).forEach(id => {
-    const c = allCards[id];
-    if (c && c.classList.contains('done')) {
-      doneSec.appendChild(c);
-      delete allCards[id];
-    }
-  });
+    section.innerHTML = '';
+    for (const c of timedCards) section.appendChild(c);
+    for (const c of orderedAllDay) section.appendChild(c);
+  }
+  reorderSection(incompleteSec, data && data.incomplete);
+  reorderSection(doneSec, data && data.done);
 }
 
 function renderCard(ev) {
@@ -2319,8 +2337,9 @@ async function saveCardEvent(card, ev, btn) {
     }
   });
   persistCache();
-  btn.textContent = '✓';
-  setTimeout(() => { btn.textContent = orig; }, 700);
+  // 時刻変更や終日↔時間指定の切替を即時に並び替えへ反映 (展開状態は維持)
+  renderEvents();
+  showToast('保存しました');
 
   // === 背景同期 ===
   (async () => {
@@ -2345,8 +2364,8 @@ async function saveCardEvent(card, ev, btn) {
         ]);
         if (!created || !created.id) throw new Error('作成失敗');
         newId = created.id;
-        ev.id = newId;
-        card.dataset.eventId = newId;
+        // renderEvents()で旧IDのまま描画されている新カードと内部状態を新IDへ差し替え
+        swapEventId(eventId, newId);
       } else if (nowAllDay) {
         await gasCall('update', { eventId, summary: newTitle, description: memo.value });
       } else {
