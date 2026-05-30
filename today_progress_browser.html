@@ -763,15 +763,13 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .ic-cell.selected { background: var(--ink); color: var(--inverted); border-color: var(--ink); }
 .ic-cell:active { background: var(--surface-2); }
 .ic-cell.selected:active { opacity: 0.85; }
-/* Mac/iPad 横向き等の広い画面でカレンダー全体を約3倍の面積に拡大 */
+/* Mac/iPad 横向き等の広い画面でカレンダー全体を少しだけ拡大 */
 @media (min-width: 700px) {
-  .inline-cal { padding: 16px; }
-  .ic-header { margin-bottom: 10px; }
-  .ic-month { font-size: 20px; }
-  .ic-nav { width: 44px; height: 44px; font-size: 18px; border-radius: 8px; }
-  .ic-wd { font-size: 16px; padding: 8px 0; }
-  .ic-cell { font-size: 20px; font-weight: 600; border-radius: 8px; }
-  .ic-grid, .ic-weekdays { gap: 4px; }
+  .inline-cal { padding: 12px; max-width: 360px; }
+  .ic-month { font-size: 15px; }
+  .ic-nav { width: 34px; height: 34px; font-size: 14px; }
+  .ic-wd { font-size: 12px; padding: 4px 0; }
+  .ic-cell { font-size: 15px; }
 }
 
 .toast {
