@@ -856,21 +856,35 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   display: flex; flex-direction: column;
   gap: 4px;
 }
+/* 多日表示: 時刻ピルを絶対配置 + タイトル1行目だけ text-indent でずらす */
+/* これにより「2行目以降は左端から(ピルの下の余白も使う)」レイアウトを実現 */
 .day-column .card:not(.expanded) {
   padding: 4px 8px !important;
-  /* 列幅が足りる時は 1 行、足りない時だけタイトルが次の行へ自動折り返し */
-  flex-wrap: wrap;
-  gap: 4px 6px;
+  display: block;
+  position: relative;
 }
-.day-column .card:not(.expanded) .time-pill { min-width: 0; font-size: 12px; }
+.day-column .card:not(.expanded) .card-head {
+  position: absolute;
+  top: 4px; left: 8px;
+  z-index: 1;
+}
+.day-column .card:not(.expanded) .time-pill { min-width: 0; font-size: 12px; padding: 2px 6px; }
 .day-column .card:not(.expanded) .time-pill.allday { font-size: 10px; padding: 1px 6px; }
 .day-column .card:not(.expanded) .title-input {
   font-size: 13px;
-  min-width: 60px; /* これ未満になるなら次の行に折り返す */
+  display: block;
+  width: 100%;
+  padding: 0;
+  min-width: 0;
+  text-indent: 90px; /* 時刻ピル幅相当 (1行目はピルの右から開始、2行目以降は左端から) */
 }
-/* 5/7日表示は列が非常に狭いので、時刻ピル自体のテキストも折り返し可能にして列内に収める */
-.day-columns[data-days="5"] .card:not(.expanded) .time-pill,
-.day-columns[data-days="7"] .card:not(.expanded) .time-pill {
+.day-column .card.allday:not(.expanded) .title-input,
+.day-column .card.done:not(.expanded) .title-input {
+  text-indent: 38px; /* 終日/✓は短いピル */
+}
+
+/* 5日表示: ピルもタイトルも一段小さく、ピル内テキストも折り返し可能に */
+.day-columns[data-days="5"] .card:not(.expanded) .time-pill {
   white-space: normal;
   word-break: break-all;
   overflow-wrap: anywhere;
@@ -878,18 +892,20 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   font-size: 10px;
   padding: 1px 4px;
   height: auto;
-  max-width: 100%;
+  max-width: 80px;
   text-align: center;
 }
-.day-columns[data-days="5"] .card:not(.expanded) .title-input,
-.day-columns[data-days="7"] .card:not(.expanded) .title-input {
-  font-size: 12px;
-  min-width: 50px;
-}
-/* 7日表示はさらにキツいので一段小さく */
-.day-columns[data-days="7"] .card:not(.expanded) .time-pill { font-size: 9px; padding: 1px 3px; }
-.day-columns[data-days="7"] .card:not(.expanded) .time-pill.allday { font-size: 9px; padding: 1px 3px; }
-.day-columns[data-days="7"] .card:not(.expanded) .title-input { font-size: 11px; min-width: 44px; }
+.day-columns[data-days="5"] .card:not(.expanded) .time-pill.allday { font-size: 10px; max-width: none; }
+.day-columns[data-days="5"] .card:not(.expanded) .title-input { font-size: 12px; text-indent: 75px; }
+.day-columns[data-days="5"] .card.allday:not(.expanded) .title-input,
+.day-columns[data-days="5"] .card.done:not(.expanded) .title-input { text-indent: 32px; }
+
+/* 7日表示: さらに圧縮 */
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill { font-size: 9px; padding: 1px 3px; max-width: 60px; }
+.day-columns[data-days="7"] .card:not(.expanded) .time-pill.allday { font-size: 9px; padding: 1px 3px; max-width: none; }
+.day-columns[data-days="7"] .card:not(.expanded) .title-input { font-size: 11px; text-indent: 55px; }
+.day-columns[data-days="7"] .card.allday:not(.expanded) .title-input,
+.day-columns[data-days="7"] .card.done:not(.expanded) .title-input { text-indent: 26px; }
 /* 5/7日表示の日付ヘッダ (曜日が潰れて見える問題への対応) */
 .day-columns[data-days="5"] .day-column-header,
 .day-columns[data-days="7"] .day-column-header {
