@@ -2955,6 +2955,16 @@ document.getElementById('addCancel').addEventListener('click', () => {
   closeSheet('add');
   resetAddSheet();
 });
+// 現在時刻を 5 分単位で切り上げて HH:MM 形式で返す (例: 11:01 → 11:05, 11:13 → 11:15)
+function nowRoundedUp5HM() {
+  const d = new Date();
+  let h = d.getHours();
+  let m = d.getMinutes();
+  const r = m % 5;
+  if (r !== 0) m += 5 - r;
+  if (m >= 60) { m = 0; h = (h + 1) % 24; }
+  return pad(h) + ':' + pad(m);
+}
 // 「時間を指定する」: dataset で状態管理 (computed style 依存をやめて確実に動かす)
 document.getElementById('addTimeToggle').addEventListener('click', (e) => {
   e.preventDefault();
@@ -2967,6 +2977,10 @@ document.getElementById('addTimeToggle').addEventListener('click', (e) => {
     row.dataset.open = '0';
     btn.textContent = '＋ 時間を指定する';
   } else {
+    // 開く時: 現在時刻 (5 分単位切り上げ) を start に、end = start + 1時間 に自動設定
+    const startHM = nowRoundedUp5HM();
+    document.getElementById('addStart').value = startHM;
+    document.getElementById('addEnd').value = addMinutesToHM(startHM, 60);
     row.style.display = '';
     row.dataset.open = '1';
     btn.textContent = '× 終日に戻す';
