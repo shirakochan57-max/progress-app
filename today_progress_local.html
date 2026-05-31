@@ -2635,7 +2635,8 @@ async function saveCardEvent(card, ev, btn) {
     }
   });
   persistCache();
-  // 時刻変更や終日↔時間指定の切替を即時に並び替えへ反映 (展開状態は維持)
+  // 保存後はカードを自動で折りたたんでから並び替え
+  card.classList.remove('expanded');
   renderEvents();
   showToast('保存しました');
 
@@ -2730,7 +2731,9 @@ async function toggleDone(ev, btn) {
     const oldTitle = ev.summary;
     ev.summary = newTitle;
     persistCache();
-    // 完了/未完了の切替を即時並び替えへ反映 (展開状態は維持)
+    // 完了/未完了の切替後はカードを自動で折りたたんで並び替え
+    const cardEl = btn.closest('.card');
+    if (cardEl) cardEl.classList.remove('expanded');
     renderEvents();
     btn.disabled = false;
     // 背景でサーバー同期(失敗時のみロールバック)
