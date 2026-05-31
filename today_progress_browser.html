@@ -3494,11 +3494,23 @@ function setupInlineCalendar(containerId, hiddenInputId) {
 setupInlineCalendar('addDateCal', 'addDate');
 setupInlineCalendar('rescheduleDateCal', 'rescheduleDate');
 
-// ============= 日記 (Googleカレンダーに「日記」という終日予定として保存) =============
-// 同じ日に既存の「日記」予定があれば description を更新、無ければ新規作成
+// ============= 日記 (保存=Googleカレンダーに「日記」終日予定、閉じる=ローカル下書き保存) =============
+// 開く時の優先順位: ローカル下書き > Googleカレンダーの「日記」予定 > 空
+// 「保存」でGAS同期 → ローカル下書きをクリア (クラウドが正)
+// 「閉じる」でローカル下書きに保存 → 次回開いた時に復元される
+const NOTE_DRAFT_PREFIX = 'note_draft_';
 let _currentDiaryEv = null;
 function findDiaryEvent() {
   return eventsCache.find(ev => isAllDay(ev) && plainTitle(ev) === '日記') || null;
+}
+function loadNoteDraft(dateKey) {
+  try { return localStorage.getItem(NOTE_DRAFT_PREFIX + dateKey); } catch (e) { return null; }
+}
+function saveNoteDraft(dateKey, text) {
+  try { localStorage.setItem(NOTE_DRAFT_PREFIX + dateKey, text); } catch (e) {}
+}
+function clearNoteDraft(dateKey) {
+  try { localStorage.removeItem(NOTE_DRAFT_PREFIX + dateKey); } catch (e) {}
 }
 function openNoteSheet() {
   if (!getGasUrl()) { openSheet('settings'); return; }
@@ -3507,7 +3519,13 @@ function openNoteSheet() {
   document.getElementById('noteSheetTitle').textContent =
     `日記 ${String(d.getFullYear()).slice(-2)}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${weekdayJP(d)}`;
   _currentDiaryEv = findDiaryEvent();
-  document.getElementById('noteText').value = _currentDiaryEv ? (_currentDiaryEv.description || '') : '';
+  // 下書きがあれば優先、無ければカレンダー側の日記内容
+  const draft = loadNoteDraft(dateKey);
+  if (draft !== null) {
+    document.getElementById('noteText').value = draft;
+  } else {
+    document.getElementById('noteText').value = _currentDiaryEv ? (_currentDiaryEv.description || '') : '';
+  }
   openSheet('note');
   setTimeout(() => {
     const ta = document.getElementById('noteText');
@@ -3515,7 +3533,15 @@ function openNoteSheet() {
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }, 100);
 }
-function closeNoteSheetNoSave() {
+// 「閉じる」/ 背景タップ / 下スワイプ: ローカル下書きに保存して閉じる
+function closeNoteSheetSaveLocal() {
+  const text = document.getElementById('noteText').value;
+  const dateKey = fmtDate(currentDate);
+  if (text.trim()) {
+    saveNoteDraft(dateKey, text);
+  } else {
+    clearNoteDraft(dateKey);
+  }
   _currentDiaryEv = null;
   closeSheet('note');
 }
@@ -3558,18 +3584,22 @@ async function saveNoteSheet() {
       persistCache();
       showToast('日記を作成しました');
     }
+    // GAS 保存できたらローカル下書きはクリア (クラウド側が正)
+    clearNoteDraft(dateKey);
     _currentDiaryEv = null;
     closeSheet('note');
   } catch (e) {
-    showToast('保存失敗: ' + (e.message || e));
+    // 失敗時は下書きを残す (再度開いた時に復元できるよう)
+    saveNoteDraft(dateKey, text);
+    showToast('保存失敗(下書き保持): ' + (e.message || e));
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
   }
 }
 document.getElementById('noteCard').addEventListener('click', openNoteSheet);
-document.getElementById('noteBackdrop').addEventListener('click', closeNoteSheetNoSave);
-document.getElementById('noteClose').addEventListener('click', closeNoteSheetNoSave);
+document.getElementById('noteBackdrop').addEventListener('click', closeNoteSheetSaveLocal);
+document.getElementById('noteClose').addEventListener('click', closeNoteSheetSaveLocal);
 document.getElementById('noteSave').addEventListener('click', saveNoteSheet);
 attachSwipeClose('noteSheet', 'note');
 
