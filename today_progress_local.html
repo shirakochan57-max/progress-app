@@ -3918,28 +3918,28 @@ function shibaAction(action) {
   switch (action) {
     case 'feed':
       if (s.coins < 3) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 3; s.hunger = clamp(s.hunger + 25); log = '🍖 もぐもぐ おいしい！';
+      s.coins -= 3; s.hunger = clamp(s.hunger + 8); log = '🍖 もぐもぐ おいしい！';
       break;
     case 'treat':
       if (s.coins < 4) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 4; s.happy = clamp(s.happy + 12); s.hunger = clamp(s.hunger + 5); log = '🦴 やったー！ごほうび';
+      s.coins -= 4; s.happy = clamp(s.happy + 4); s.hunger = clamp(s.hunger + 2); log = '🦴 やったー！ごほうび';
       break;
     case 'play':
       if (s.coins < 5) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 5; s.happy = clamp(s.happy + 25); s.energy = clamp(s.energy - 10); log = '🧸 たのしい！';
+      s.coins -= 5; s.happy = clamp(s.happy + 8); s.energy = clamp(s.energy - 10); log = '🧸 たのしい！';
       break;
     case 'walk':
       if (s.coins < 2) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 2; s.happy = clamp(s.happy + 15); s.energy = clamp(s.energy - 15);
+      s.coins -= 2; s.happy = clamp(s.happy + 5); s.energy = clamp(s.energy - 15);
       if (Math.random() < 0.5) s.hasPoop = true;
       log = '🚶 おさんぽたのしい〜';
       break;
     case 'nap':
-      s.energy = clamp(s.energy + 30); log = '💤 ぐっすり…';
+      s.energy = clamp(s.energy + 10); log = '💤 ぐっすり…';
       break;
     case 'poopClean':
       if (!s.hasPoop) { log = '✨ きれいだよ'; break; }
-      s.hasPoop = false; s.happy = clamp(s.happy + 8); log = '💩 すっきり！ありがと';
+      s.hasPoop = false; s.happy = clamp(s.happy + 3); log = '💩 すっきり！ありがと';
       break;
   }
   saveShiba(s);
