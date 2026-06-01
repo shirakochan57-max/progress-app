@@ -812,45 +812,58 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   font-size: 64px;
   line-height: 1;
   text-align: center;
-  /* グレースケール + 明度up で「白柴」っぽく */
   filter: grayscale(1) brightness(1.18) contrast(1.02);
   display: inline-block;
-  transform-origin: center bottom;
-  animation: shiba-breathe 2.5s ease-in-out infinite;
 }
-/* フローティングアイコンも白柴フィルター + 呼吸アニメ */
+/* フローティングアイコンも白柴フィルター */
 #shibaCard.shiba-floating {
   filter: grayscale(1) brightness(1.18) contrast(1.02);
+}
+/* 枠は動かさず、中の犬 (.shiba-inner) だけ動かす。Y 軸方向の動きは無し (回転・X 移動のみ) */
+.shiba-inner {
+  display: inline-block;
   transform-origin: center bottom;
-  animation: shiba-breathe 2.5s ease-in-out infinite;
+  animation: shiba-idle 1.8s ease-in-out infinite;
 }
-/* 常時アニメ: 呼吸 */
-@keyframes shiba-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
-/* state-happy: 跳ねる */
-@keyframes shiba-bounce {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-4px) scale(1.06); }
-}
-.state-happy { animation: shiba-bounce 0.5s ease-in-out infinite !important; }
-/* state-sleep: ゆっくり呼吸 */
-.state-sleep { animation: shiba-breathe 4s ease-in-out infinite !important; opacity: 0.9; }
-/* state-hungry: 頭が落ちる感じ */
-@keyframes shiba-droop {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(2px) scale(0.99); }
-}
-.state-hungry { animation: shiba-droop 2.4s ease-in-out infinite !important; }
-/* state-sad: 沈む + 暗く */
-.state-sad { animation: shiba-droop 3s ease-in-out infinite !important; opacity: 0.6; }
-/* state-poop: 小刻みに揺れる */
-@keyframes shiba-poop-wiggle {
+/* 常時 (normal): しっぽふりふり風の軽い揺れ */
+@keyframes shiba-idle {
   0%, 100% { transform: rotate(-3deg); }
   50% { transform: rotate(3deg); }
 }
-.state-poop { animation: shiba-poop-wiggle 0.9s ease-in-out infinite !important; }
+/* happy: ボール遊び風 (左右に体ふりふり + 大きめ回転) */
+@keyframes shiba-play {
+  0%   { transform: translateX(-3px) rotate(-9deg); }
+  25%  { transform: translateX(0)    rotate(0deg);  }
+  50%  { transform: translateX(3px)  rotate(9deg);  }
+  75%  { transform: translateX(0)    rotate(0deg);  }
+  100% { transform: translateX(-3px) rotate(-9deg); }
+}
+.state-happy .shiba-inner { animation: shiba-play 0.55s ease-in-out infinite; }
+/* sleep: 寝そべる (大きく傾けて、ゆっくり呼吸 = 微回転) */
+@keyframes shiba-sleep {
+  0%, 100% { transform: rotate(-26deg); }
+  50%      { transform: rotate(-22deg); }
+}
+.state-sleep .shiba-inner { animation: shiba-sleep 3.2s ease-in-out infinite; }
+/* hungry: きょろきょろ (左右に頭を振る) */
+@keyframes shiba-look {
+  0%, 100% { transform: rotate(-12deg); }
+  50%      { transform: rotate(12deg); }
+}
+.state-hungry .shiba-inner { animation: shiba-look 1.1s ease-in-out infinite; }
+/* sad: しょんぼり (動きほぼなし + 透過) */
+@keyframes shiba-sad {
+  0%, 100% { transform: rotate(-1deg); }
+  50%      { transform: rotate(1deg); }
+}
+.state-sad .shiba-inner { animation: shiba-sad 4s ease-in-out infinite; opacity: 0.6; }
+/* poop: しゃがんで小刻みに揺れる */
+@keyframes shiba-poop {
+  0%, 100% { transform: rotate(-5deg); }
+  33%      { transform: rotate(5deg);  }
+  66%      { transform: rotate(-2deg); }
+}
+.state-poop .shiba-inner { animation: shiba-poop 0.65s ease-in-out infinite; }
 .shiba-mood { font-size: 13px; color: var(--text-muted); margin-top: 6px; letter-spacing: 0.5px; }
 .shiba-coins {
   display: flex; align-items: center; gap: 6px;
@@ -1193,7 +1206,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   </div>
 
   <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
-  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">🐕</div>
+  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0"><span class="shiba-inner">🐕</span></div>
   <div class="photo-lightbox" id="photoLightbox">
     <div class="close-hint">タップで閉じる</div>
     <img id="photoLightboxImg" alt="">
@@ -1348,7 +1361,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <div class="sheet-handle"></div>
   <h3>豆柴ちゃん</h3>
   <div class="shiba-display">
-    <div class="shiba-emoji" id="shibaEmoji">🐶</div>
+    <div class="shiba-emoji" id="shibaEmoji"><span class="shiba-inner">🐶</span></div>
     <div class="shiba-mood" id="shibaMood">ごきげん</div>
   </div>
   <div class="shiba-coins">
@@ -3805,6 +3818,19 @@ attachSwipeClose('noteSheet', 'note');
 
 // ============= 豆柴ちゃん (タマゴッチ風のやる気増進システム) =============
 // 状態に応じて emoji を変え、CSS の state-X クラスでアニメを切り替える
+// アニメは中の .shiba-inner にだけ効く (枠は固定)
+function setShibaEmoji(containerId, emojiChar) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  let inner = el.querySelector('.shiba-inner');
+  if (!inner) {
+    inner = document.createElement('span');
+    inner.className = 'shiba-inner';
+    el.innerHTML = '';
+    el.appendChild(inner);
+  }
+  inner.textContent = emojiChar;
+}
 function applyShibaState(s) {
   let state = 'normal';
   if (s.hasPoop) state = 'poop';
@@ -3869,8 +3895,8 @@ function getShibaMood(s) {
 function renderShiba() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
-  document.getElementById('shibaEmoji').textContent = getShibaEmoji(s);
-  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
+  setShibaEmoji('shibaEmoji', getShibaEmoji(s));
+  setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
   document.getElementById('shibaCoins').textContent = s.coins;
@@ -3927,7 +3953,7 @@ function shibaEarnCoin() {
   // 開いてる時は即時反映
   if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
   // フローティングアイコンの emoji と状態クラスを更新
-  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
+  setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
 }
 document.getElementById('shibaCard').addEventListener('click', () => {
@@ -3945,7 +3971,7 @@ attachSwipeClose('shibaSheet', 'shiba');
 (function initShibaFloating() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
-  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
+  setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
 })();
 
