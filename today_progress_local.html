@@ -819,6 +819,12 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 #shibaCard.shiba-floating {
   filter: grayscale(1) brightness(1.18) contrast(1.02);
 }
+/* フローティングアイコンの中の犬は動かさない (シート内だけアニメ) */
+#shibaCard .shiba-inner {
+  animation: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
 /* 枠は動かさず、中の犬 (.shiba-inner) だけ動かす。Y 軸方向の動きは無し (回転・X 移動のみ) */
 .shiba-inner {
   display: inline-block;
@@ -3868,24 +3874,22 @@ function tickShiba(s) {
   const now = Date.now();
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
-    // 放置されると全ステータスが減る (前回の 3 倍速)
-    s.hunger = Math.max(0, s.hunger - Math.floor(elapsedMin / 5)  * 2); // 5分で-2 (空腹に)
-    s.happy  = Math.max(0, s.happy  - Math.floor(elapsedMin / 8)  * 2); // 8分で-2 (退屈で不機嫌)
-    s.energy = Math.max(0, s.energy - Math.floor(elapsedMin / 12) * 2); // 12分で-2 (元気減)
+    // 1 分で全パラメーター -1
+    const dec = Math.floor(elapsedMin);
+    s.hunger = Math.max(0, s.hunger - dec);
+    s.happy  = Math.max(0, s.happy  - dec);
+    s.energy = Math.max(0, s.energy - dec);
     const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
     if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) s.hasPoop = true;
-    s.lastTick = now;
+    // 整数分だけ進めて余りは次回へ繰越 (放置中の取りこぼし防止)
+    s.lastTick = now - (elapsedMin - dec) * 60000;
   }
   return s;
 }
 function getShibaEmoji(s) {
+  // 常に犬の全身イラストのみ。気分は CSS アニメと mood テキストで表現
   if (s.hasPoop) return '🐕💩';
-  if (s.energy <= 15) return '😴';
-  if (s.hunger <= 15) return '🥺';
-  if (s.happy <= 15) return '😢';
-  if (s.happy >= 80 && s.hunger >= 60 && s.energy >= 60) return '🥰';
-  if (s.happy >= 60) return '😊';
-  return '🐶';
+  return '🐕';
 }
 function getShibaMood(s) {
   if (s.hasPoop) return 'うんちしちゃった…';
