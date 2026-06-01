@@ -3860,7 +3860,9 @@ const SHIBA_KEY = 'shiba_state_v1';
 const DEFAULT_SHIBA = {
   coins: 0, totalDone: 0,
   hunger: 60, happy: 60, energy: 60,
-  hasPoop: false, lastTick: Date.now()
+  hasPoop: false, lastTick: Date.now(),
+  // 同期判定用: ユーザー操作時のみ更新 (時間経過の tick では更新しない)
+  modifiedAt: 0
 };
 function loadShiba() {
   try {
@@ -3935,34 +3937,36 @@ function renderShiba() {
 function shibaAction(action) {
   const s = tickShiba(loadShiba());
   let log = '';
+  let userAction = false; // 成功した時のみ true、同期判定の modifiedAt に使う
   const clamp = v => Math.max(0, Math.min(100, v));
   switch (action) {
     case 'feed':
       if (s.coins < 3) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 3; s.hunger = clamp(s.hunger + 8); log = '🍖 もぐもぐ おいしい！';
+      s.coins -= 3; s.hunger = clamp(s.hunger + 8); log = '🍖 もぐもぐ おいしい！'; userAction = true;
       break;
     case 'treat':
       if (s.coins < 4) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 4; s.happy = clamp(s.happy + 4); s.hunger = clamp(s.hunger + 2); log = '🦴 やったー！ごほうび';
+      s.coins -= 4; s.happy = clamp(s.happy + 4); s.hunger = clamp(s.hunger + 2); log = '🦴 やったー！ごほうび'; userAction = true;
       break;
     case 'play':
       if (s.coins < 5) { log = '🪙 コインが足りない'; break; }
-      s.coins -= 5; s.happy = clamp(s.happy + 8); s.energy = clamp(s.energy - 10); log = '🧸 たのしい！';
+      s.coins -= 5; s.happy = clamp(s.happy + 8); s.energy = clamp(s.energy - 10); log = '🧸 たのしい！'; userAction = true;
       break;
     case 'walk':
       if (s.coins < 2) { log = '🪙 コインが足りない'; break; }
       s.coins -= 2; s.happy = clamp(s.happy + 5); s.energy = clamp(s.energy - 15);
       if (Math.random() < 0.5) s.hasPoop = true;
-      log = '🚶 おさんぽたのしい〜';
+      log = '🚶 おさんぽたのしい〜'; userAction = true;
       break;
     case 'nap':
-      s.energy = clamp(s.energy + 10); log = '💤 ぐっすり…';
+      s.energy = clamp(s.energy + 10); log = '💤 ぐっすり…'; userAction = true;
       break;
     case 'poopClean':
       if (!s.hasPoop) { log = '✨ きれいだよ'; break; }
-      s.hasPoop = false; s.happy = clamp(s.happy + 3); log = '💩 すっきり！ありがと';
+      s.hasPoop = false; s.happy = clamp(s.happy + 3); log = '💩 すっきり！ありがと'; userAction = true;
       break;
   }
+  if (userAction) s.modifiedAt = Date.now();
   saveShiba(s);
   document.getElementById('shibaLog').textContent = log;
   renderShiba();
@@ -3983,6 +3987,7 @@ function shibaEarnCoin(ev) {
   const s = tickShiba(loadShiba());
   s.coins += gain;
   s.totalDone += 1;
+  s.modifiedAt = Date.now(); // 同期判定用
   s.happy = Math.min(100, s.happy + 2);
   saveShiba(s);
   // 獲得数の通知
@@ -4028,6 +4033,7 @@ const SHIBA_SYNC_DATE = '2000-01-01';
 let _shibaSyncEventId = null;
 let _shibaPushTimer = null;
 let _shibaPushing = false;
+let _shibaLastPushedModifiedAt = 0; // 同じ状態の重複 push を抑止
 async function shibaPullRemote() {
   if (!getGasUrl()) return null;
   try {
@@ -4072,14 +4078,22 @@ async function shibaPushRemote(state) {
 // 変更を遅延 push (5秒以内の連続変更をまとめる)
 function shibaPushDebounced() {
   if (_shibaPushTimer) clearTimeout(_shibaPushTimer);
-  _shibaPushTimer = setTimeout(() => { shibaPushRemote(loadShiba()); }, 5000);
+  _shibaPushTimer = setTimeout(() => {
+    const s = loadShiba();
+    // ユーザー操作で modifiedAt が更新されてない時は push しない (時間経過のだけの変化を無視)
+    if ((s.modifiedAt || 0) <= _shibaLastPushedModifiedAt) return;
+    shibaPushRemote(s).then(() => {
+      _shibaLastPushedModifiedAt = s.modifiedAt || 0;
+    });
+  }, 5000);
 }
-// リモートが新しければ採用
+// リモートが新しければ採用 (modifiedAt = ユーザー操作タイムスタンプで比較)
 function shibaApplyIfNewer(remote) {
   if (!remote) return false;
   const local = loadShiba();
-  if ((remote.lastTick || 0) > (local.lastTick || 0)) {
+  if ((remote.modifiedAt || 0) > (local.modifiedAt || 0)) {
     try { localStorage.setItem(SHIBA_KEY, JSON.stringify(remote)); } catch (e) {}
+    _shibaLastPushedModifiedAt = remote.modifiedAt || 0; // 採用済み = push 不要
     setShibaEmoji('shibaCard', remote.hasPoop ? '💩' : '🐕');
     applyShibaState(remote);
     const sheet = document.getElementById('shibaSheet');
@@ -4134,12 +4148,14 @@ shibaPushRemote = async function (state) {
 document.getElementById('shibaSyncNow').addEventListener('click', async () => {
   if (!getGasUrl()) { showToast('GAS URL を設定してください'); openSheet('settings'); return; }
   const remote = await shibaPullRemote();
-  if (remote && (remote.lastTick || 0) > (loadShiba().lastTick || 0)) {
+  const local = loadShiba();
+  if (remote && (remote.modifiedAt || 0) > (local.modifiedAt || 0)) {
     shibaApplyIfNewer(remote);
     renderShiba();
     showToast('リモートから取得しました');
   } else {
-    await shibaPushRemote(loadShiba());
+    await shibaPushRemote(local);
+    _shibaLastPushedModifiedAt = local.modifiedAt || 0;
     showToast('リモートへ送信しました');
   }
 });
