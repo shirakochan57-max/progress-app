@@ -3941,10 +3941,12 @@ function tickShiba(s) {
   const now = Date.now();
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
-    const minutes = Math.floor(elapsedMin);
+    // 1 tick = 1.43 分間隔 (元の 1.0 分の 70% スピード)
+    const TICK_MIN = 1.43;
+    const ticks = Math.floor(elapsedMin / TICK_MIN);
     let hDrop = 0, jDrop = 0, eDrop = 0;
-    for (let i = 0; i < minutes; i++) {
-      // 1 分ごとに各パラメーターが 1〜5 のランダムで減る
+    for (let i = 0; i < ticks; i++) {
+      // tick ごとに各パラメーターが 1〜5 のランダムで減る
       hDrop += 1 + Math.floor(Math.random() * 5);
       jDrop += 1 + Math.floor(Math.random() * 5);
       eDrop += 1 + Math.floor(Math.random() * 5);
@@ -3957,13 +3959,15 @@ function tickShiba(s) {
         else eDrop += big;
       }
     }
-    s.hunger = Math.max(0, s.hunger - hDrop);
-    s.happy  = Math.max(0, s.happy  - jDrop);
-    s.energy = Math.max(0, s.energy - eDrop);
+    if (ticks > 0) {
+      s.hunger = Math.max(0, s.hunger - hDrop);
+      s.happy  = Math.max(0, s.happy  - jDrop);
+      s.energy = Math.max(0, s.energy - eDrop);
+      // 整数 tick 分だけ進めて余りは次回へ繰越 (放置中の取りこぼし防止)
+      s.lastTick = now - (elapsedMin - ticks * TICK_MIN) * 60000;
+    }
     const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
     if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) s.hasPoop = true;
-    // 整数分だけ進めて余りは次回へ繰越 (放置中の取りこぼし防止)
-    s.lastTick = now - (elapsedMin - minutes) * 60000;
   }
   return s;
 }
