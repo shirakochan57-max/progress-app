@@ -3816,14 +3816,28 @@ function tickShiba(s) {
   const now = Date.now();
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
-    // 1 分で全パラメーター -1
-    const dec = Math.floor(elapsedMin);
-    s.hunger = Math.max(0, s.hunger - dec);
-    s.happy  = Math.max(0, s.happy  - dec);
-    s.energy = Math.max(0, s.energy - dec);
+    const minutes = Math.floor(elapsedMin);
+    let hDrop = 0, jDrop = 0, eDrop = 0;
+    for (let i = 0; i < minutes; i++) {
+      // 1 分ごとに各パラメーターが 1〜5 のランダムで減る
+      hDrop += 1 + Math.floor(Math.random() * 5);
+      jDrop += 1 + Math.floor(Math.random() * 5);
+      eDrop += 1 + Math.floor(Math.random() * 5);
+      // 7% の確率で突発的な大幅減少 (どこか 1 つに -5〜15 上乗せ)
+      if (Math.random() < 0.07) {
+        const big = 5 + Math.floor(Math.random() * 11);
+        const target = Math.floor(Math.random() * 3);
+        if (target === 0) hDrop += big;
+        else if (target === 1) jDrop += big;
+        else eDrop += big;
+      }
+    }
+    s.hunger = Math.max(0, s.hunger - hDrop);
+    s.happy  = Math.max(0, s.happy  - jDrop);
+    s.energy = Math.max(0, s.energy - eDrop);
     const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
     if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) s.hasPoop = true;
-    s.lastTick = now - (elapsedMin - dec) * 60000;
+    s.lastTick = now - (elapsedMin - minutes) * 60000;
   }
   return s;
 }
