@@ -3866,13 +3866,12 @@ function tickShiba(s) {
   const now = Date.now();
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
-    // 放置されると全ステータスが徐々に減る (タマゴッチ風)
-    s.hunger = Math.max(0, s.hunger - Math.floor(elapsedMin / 15) * 2); // 15分で-2 (空腹に)
-    s.happy  = Math.max(0, s.happy  - Math.floor(elapsedMin / 25) * 2); // 25分で-2 (退屈で不機嫌)
-    s.energy = Math.max(0, s.energy - Math.floor(elapsedMin / 35) * 2); // 35分で-2 (元気減)
-    // 放置時間で確率増 (空腹が低いほど高め)
-    const poopChance = Math.min(0.5, elapsedMin / 60 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
-    if (elapsedMin > 20 && !s.hasPoop && Math.random() < poopChance) s.hasPoop = true;
+    // 放置されると全ステータスが減る (前回の 3 倍速)
+    s.hunger = Math.max(0, s.hunger - Math.floor(elapsedMin / 5)  * 2); // 5分で-2 (空腹に)
+    s.happy  = Math.max(0, s.happy  - Math.floor(elapsedMin / 8)  * 2); // 8分で-2 (退屈で不機嫌)
+    s.energy = Math.max(0, s.energy - Math.floor(elapsedMin / 12) * 2); // 12分で-2 (元気減)
+    const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
+    if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) s.hasPoop = true;
     s.lastTick = now;
   }
   return s;
@@ -3986,6 +3985,94 @@ setInterval(() => {
   const sheet = document.getElementById('shibaSheet');
   if (sheet && sheet.classList.contains('open')) renderShiba();
 }, 30000); // 30秒ごと
+
+// ============= 豆柴ちゃん マルチデバイス同期 =============
+// Googleカレンダーの 2000-01-01 に「豆柴データ」終日予定を作り、description に JSON で保存。
+// last-writer-wins: 各デバイスは lastTick が新しい方を採用。
+const SHIBA_SYNC_DATE = '2000-01-01';
+let _shibaSyncEventId = null;
+let _shibaPushTimer = null;
+let _shibaPushing = false;
+async function shibaPullRemote() {
+  if (!getGasUrl()) return null;
+  try {
+    const data = await gasCall('list', { date: SHIBA_SYNC_DATE });
+    const events = (data && data.events) || [];
+    const ev = events.find(e => (e.summary || '').trim() === '豆柴データ');
+    if (ev) {
+      _shibaSyncEventId = ev.id;
+      if (ev.description) {
+        try { return JSON.parse(ev.description); } catch (e) { return null; }
+      }
+    }
+  } catch (e) { console.warn('shiba pull error', e); }
+  return null;
+}
+async function shibaPushRemote(state) {
+  if (!getGasUrl() || _shibaPushing) return;
+  _shibaPushing = true;
+  try {
+    const json = JSON.stringify(state);
+    if (_shibaSyncEventId) {
+      await gasCall('update', { eventId: _shibaSyncEventId, description: json });
+    } else {
+      // 既存イベントを探してから無ければ作成
+      await shibaPullRemote();
+      if (_shibaSyncEventId) {
+        await gasCall('update', { eventId: _shibaSyncEventId, description: json });
+      } else {
+        const created = await gasCall('create', {
+          summary: '豆柴データ',
+          startTime: SHIBA_SYNC_DATE + 'T00:00:00',
+          endTime: '2000-01-02T00:00:00',
+          allDay: true,
+          description: json
+        });
+        if (created && created.id) _shibaSyncEventId = created.id;
+      }
+    }
+  } catch (e) { console.warn('shiba push error', e); }
+  finally { _shibaPushing = false; }
+}
+// 変更を遅延 push (5秒以内の連続変更をまとめる)
+function shibaPushDebounced() {
+  if (_shibaPushTimer) clearTimeout(_shibaPushTimer);
+  _shibaPushTimer = setTimeout(() => { shibaPushRemote(loadShiba()); }, 5000);
+}
+// リモートが新しければ採用
+function shibaApplyIfNewer(remote) {
+  if (!remote) return false;
+  const local = loadShiba();
+  if ((remote.lastTick || 0) > (local.lastTick || 0)) {
+    try { localStorage.setItem(SHIBA_KEY, JSON.stringify(remote)); } catch (e) {}
+    setShibaEmoji('shibaCard', remote.hasPoop ? '💩' : '🐕');
+    applyShibaState(remote);
+    const sheet = document.getElementById('shibaSheet');
+    if (sheet && sheet.classList.contains('open')) renderShiba();
+    return true;
+  }
+  return false;
+}
+// 起動時: pull して新しければ採用、そうでなければ local を push
+(async function initShibaSync() {
+  // GAS URL がまだ設定されてない可能性があるので少し待つ
+  await new Promise(r => setTimeout(r, 1500));
+  if (!getGasUrl()) return;
+  const remote = await shibaPullRemote();
+  if (!shibaApplyIfNewer(remote)) shibaPushDebounced();
+})();
+// 2 分ごとにリモートを pull (他デバイスの変更を取り込む)
+setInterval(async () => {
+  if (!getGasUrl()) return;
+  const remote = await shibaPullRemote();
+  shibaApplyIfNewer(remote);
+}, 120000);
+// saveShiba をラップして自動 push
+const _shibaOriginalSave = saveShiba;
+saveShiba = function (s) {
+  _shibaOriginalSave(s);
+  shibaPushDebounced();
+};
 
 // 日数選択タブ (1/3/5/7) のクリック処理
 document.querySelectorAll('.vm-tab').forEach(btn => {
