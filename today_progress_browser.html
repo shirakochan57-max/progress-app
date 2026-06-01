@@ -1382,20 +1382,20 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 <div class="sheet-backdrop" id="shibaBackdrop"></div>
 <div class="sheet" id="shibaSheet">
   <div class="sheet-handle"></div>
-  <h3>豆柴ちゃん</h3>
+  <h3 style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+    <span>豆柴ちゃん</span>
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0;">
+      ⭐ Lv.<span id="shibaLevel">0</span>
+      <span class="muted" style="font-size: 11px; font-weight: 500; margin-left: 4px;">次まで <span id="shibaToNext">100</span> pt</span>
+    </span>
+  </h3>
   <div class="shiba-display">
     <div class="shiba-emoji" id="shibaEmoji"><span class="shiba-inner">🐶</span></div>
     <div class="shiba-mood" id="shibaMood">ごきげん</div>
   </div>
-  <div class="shiba-coins" style="flex-direction: column; gap: 4px;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <span style="font-size: 16px; font-weight: 700;">⭐ Lv. <span id="shibaLevel">0</span></span>
-      <span class="muted" style="font-size: 12px;">次まで <span id="shibaToNext">100</span> pt</span>
-    </div>
-    <div style="display: flex; align-items: center; gap: 10px;">
-      🪙 <span id="shibaCoins">0</span> <span class="muted">コイン</span>
-      <span class="muted" style="margin-left: 6px;">完了 <span id="shibaTotalDone">0</span></span>
-    </div>
+  <div class="shiba-coins">
+    🪙 <span id="shibaCoins">0</span> <span class="muted">コイン</span>
+    <span class="muted" style="margin-left: 10px;">完了 <span id="shibaTotalDone">0</span></span>
   </div>
   <div class="shiba-stats">
     <div class="stat-row"><span class="stat-label">満腹</span><div class="stat-bar"><div class="stat-fill" id="hungerFill"></div></div><span class="stat-val" id="hungerVal">50</span></div>
@@ -3880,17 +3880,15 @@ const DEFAULT_SHIBA = {
   sleepMode: false,
   totalPoints: 0
 };
+// レベル 1000 max、各レベル一定 100 pt、Lv 1000 到達に 100,000 pt
 function levelFromPoints(p) {
   if (!p || p <= 0) return 0;
-  let N = Math.floor((-1 + Math.sqrt(1 + p / 12.5)) / 2);
-  while (N < 100 && 50 * (N + 1) * (N + 2) <= p) N++;
-  while (N > 0 && 50 * N * (N + 1) > p) N--;
-  return Math.max(0, Math.min(100, N));
+  return Math.max(0, Math.min(1000, Math.floor(p / 100)));
 }
 function pointsToNextLevel(p) {
   const N = levelFromPoints(p);
-  if (N >= 100) return 0;
-  return 50 * (N + 1) * (N + 2) - (p || 0);
+  if (N >= 1000) return 0;
+  return (N + 1) * 100 - (p || 0);
 }
 function loadShiba() {
   try {
@@ -3940,12 +3938,12 @@ function tickShiba(s) {
     const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
     if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) {
       s.hasPoop = true;
-      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - 15);
+      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - 35);
     }
     const peeChance = Math.min(0.6, elapsedMin / 15 * 0.3);
     if (elapsedMin > 5 && !s.hasPee && Math.random() < peeChance) {
       s.hasPee = true;
-      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - 7);
+      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - 25);
     }
   }
   return s;
