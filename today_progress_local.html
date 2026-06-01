@@ -788,6 +788,77 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   .ic-wd { font-size: 11px; padding: 2px 0; }
   .ic-cell { font-size: 13px; min-height: 32px; }
 }
+/* 豆柴ちゃん フローティングアイコン (右下固定) */
+.shiba-floating {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  right: 16px;
+  z-index: 20;
+  background: var(--bg);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.shiba-floating:active { background: var(--surface-2); }
+/* 豆柴シート */
+.shiba-display {
+  text-align: center;
+  padding: 14px 0;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.shiba-emoji { font-size: 56px; line-height: 1; filter: grayscale(1) contrast(1.1); }
+.shiba-mood { font-size: 13px; color: var(--text-muted); margin-top: 6px; letter-spacing: 0.5px; }
+.shiba-coins {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 15px; font-weight: 700;
+  margin-bottom: 12px;
+  justify-content: center;
+}
+.shiba-coins .muted { color: var(--text-muted); font-weight: 500; font-size: 12px; }
+.shiba-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.stat-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.stat-row > .stat-label { width: 36px; font-weight: 700; letter-spacing: 0.5px; }
+.stat-row > .stat-val { width: 32px; text-align: right; font-size: 11px; color: var(--text-muted); }
+.stat-bar {
+  flex: 1;
+  height: 10px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.stat-fill { height: 100%; background: var(--ink); transition: width 0.3s; }
+.shiba-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.shiba-btn {
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  min-height: 38px;
+}
+.shiba-btn:active { background: var(--surface-2); }
+.shiba-btn:disabled { opacity: 0.35; }
+.shiba-log {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 18px;
+  text-align: center;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
 /* 新規追加シート: 時間指定ボタン + 時刻入力欄を 1 行にまとめる (登録ボタンが画面外に出ないよう) */
 .add-time-control {
   display: flex;
@@ -1078,6 +1149,9 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
       <div class="action-label">ルーレット（終日の中から次の1つを決める）</div>
     </div>
   </div>
+
+  <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
+  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">🐕</div>
   <div class="photo-lightbox" id="photoLightbox">
     <div class="close-hint">タップで閉じる</div>
     <img id="photoLightboxImg" alt="">
@@ -1223,6 +1297,38 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <div id="searchResults" style="margin-top:8px;"></div>
   <div class="sheet-actions">
     <button class="btn secondary" id="searchCloseBtn">閉じる</button>
+  </div>
+</div>
+
+<!-- 豆柴ちゃん シート -->
+<div class="sheet-backdrop" id="shibaBackdrop"></div>
+<div class="sheet" id="shibaSheet">
+  <div class="sheet-handle"></div>
+  <h3>豆柴ちゃん</h3>
+  <div class="shiba-display">
+    <div class="shiba-emoji" id="shibaEmoji">🐶</div>
+    <div class="shiba-mood" id="shibaMood">ごきげん</div>
+  </div>
+  <div class="shiba-coins">
+    🪙 <span id="shibaCoins">0</span> <span class="muted">コイン</span>
+    <span class="muted" style="margin-left: 10px;">完了 <span id="shibaTotalDone">0</span></span>
+  </div>
+  <div class="shiba-stats">
+    <div class="stat-row"><span class="stat-label">満腹</span><div class="stat-bar"><div class="stat-fill" id="hungerFill"></div></div><span class="stat-val" id="hungerVal">50</span></div>
+    <div class="stat-row"><span class="stat-label">幸福</span><div class="stat-bar"><div class="stat-fill" id="happyFill"></div></div><span class="stat-val" id="happyVal">50</span></div>
+    <div class="stat-row"><span class="stat-label">元気</span><div class="stat-bar"><div class="stat-fill" id="energyFill"></div></div><span class="stat-val" id="energyVal">50</span></div>
+  </div>
+  <div class="shiba-actions">
+    <button class="shiba-btn" data-action="feed">🍖 エサ (3)</button>
+    <button class="shiba-btn" data-action="treat">🦴 ごほうび (4)</button>
+    <button class="shiba-btn" data-action="play">🧸 おもちゃ (5)</button>
+    <button class="shiba-btn" data-action="walk">🚶 さんぽ (2)</button>
+    <button class="shiba-btn" data-action="nap">💤 ひるね</button>
+    <button class="shiba-btn" data-action="poopClean">💩 そうじ</button>
+  </div>
+  <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
+  <div class="sheet-actions">
+    <button class="btn primary" id="shibaClose">閉じる</button>
   </div>
 </div>
 
@@ -2749,6 +2855,8 @@ async function toggleDone(ev, btn) {
     const oldTitle = ev.summary;
     ev.summary = newTitle;
     persistCache();
+    // タスクを完了化した時のみ豆柴ちゃんへコイン
+    if (newDone) shibaEarnCoin();
     // 完了/未完了の切替後はカードを自動で折りたたんで並び替え
     const cardEl = btn.closest('.card');
     if (cardEl) cardEl.classList.remove('expanded');
@@ -3652,6 +3760,136 @@ document.getElementById('noteBackdrop').addEventListener('click', closeNoteSheet
 document.getElementById('noteClose').addEventListener('click', closeNoteSheetSaveLocal);
 document.getElementById('noteSave').addEventListener('click', saveNoteSheet);
 attachSwipeClose('noteSheet', 'note');
+
+// ============= 豆柴ちゃん (タマゴッチ風のやる気増進システム) =============
+const SHIBA_KEY = 'shiba_state_v1';
+const DEFAULT_SHIBA = {
+  coins: 0, totalDone: 0,
+  hunger: 60, happy: 60, energy: 60,
+  hasPoop: false, lastTick: Date.now()
+};
+function loadShiba() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SHIBA_KEY) || '{}');
+    return { ...DEFAULT_SHIBA, ...s };
+  } catch (e) { return { ...DEFAULT_SHIBA }; }
+}
+function saveShiba(s) {
+  try { localStorage.setItem(SHIBA_KEY, JSON.stringify(s)); } catch (e) {}
+}
+// 時間経過: hunger 減 / energy 微増 / 確率でうんち
+function tickShiba(s) {
+  const now = Date.now();
+  const elapsedMin = (now - (s.lastTick || now)) / 60000;
+  if (elapsedMin > 0) {
+    s.hunger = Math.max(0, s.hunger - Math.floor(elapsedMin / 20) * 3); // 20分で-3
+    s.energy = Math.min(100, s.energy + Math.floor(elapsedMin / 60) * 3); // 1時間で+3
+    s.happy = Math.max(0, s.happy - Math.floor(elapsedMin / 120) * 2); // 2時間で-2
+    if (elapsedMin > 30 && !s.hasPoop && Math.random() < 0.25) s.hasPoop = true;
+    s.lastTick = now;
+  }
+  return s;
+}
+function getShibaEmoji(s) {
+  if (s.hasPoop) return '🐕💩';
+  if (s.energy <= 15) return '😴';
+  if (s.hunger <= 15) return '🥺';
+  if (s.happy <= 15) return '😢';
+  if (s.happy >= 80 && s.hunger >= 60 && s.energy >= 60) return '🥰';
+  if (s.happy >= 60) return '😊';
+  return '🐶';
+}
+function getShibaMood(s) {
+  if (s.hasPoop) return 'うんちしちゃった…';
+  if (s.energy <= 15) return 'ねむい…';
+  if (s.hunger <= 15) return 'おなかすいた…';
+  if (s.happy <= 15) return 'さみしい…';
+  if (s.happy >= 80 && s.hunger >= 60 && s.energy >= 60) return 'しあわせ！';
+  if (s.happy >= 60) return 'ごきげん';
+  return 'ふつう';
+}
+function renderShiba() {
+  const s = tickShiba(loadShiba());
+  saveShiba(s);
+  document.getElementById('shibaEmoji').textContent = getShibaEmoji(s);
+  document.getElementById('shibaMood').textContent = getShibaMood(s);
+  document.getElementById('shibaCoins').textContent = s.coins;
+  document.getElementById('shibaTotalDone').textContent = s.totalDone;
+  document.getElementById('hungerFill').style.width = s.hunger + '%';
+  document.getElementById('hungerVal').textContent = s.hunger;
+  document.getElementById('happyFill').style.width = s.happy + '%';
+  document.getElementById('happyVal').textContent = s.happy;
+  document.getElementById('energyFill').style.width = s.energy + '%';
+  document.getElementById('energyVal').textContent = s.energy;
+  // フローティングアイコンも気分に応じて変える (任意)
+  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
+}
+function shibaAction(action) {
+  const s = tickShiba(loadShiba());
+  let log = '';
+  const clamp = v => Math.max(0, Math.min(100, v));
+  switch (action) {
+    case 'feed':
+      if (s.coins < 3) { log = '🪙 コインが足りない'; break; }
+      s.coins -= 3; s.hunger = clamp(s.hunger + 25); log = '🍖 もぐもぐ おいしい！';
+      break;
+    case 'treat':
+      if (s.coins < 4) { log = '🪙 コインが足りない'; break; }
+      s.coins -= 4; s.happy = clamp(s.happy + 12); s.hunger = clamp(s.hunger + 5); log = '🦴 やったー！ごほうび';
+      break;
+    case 'play':
+      if (s.coins < 5) { log = '🪙 コインが足りない'; break; }
+      s.coins -= 5; s.happy = clamp(s.happy + 25); s.energy = clamp(s.energy - 10); log = '🧸 たのしい！';
+      break;
+    case 'walk':
+      if (s.coins < 2) { log = '🪙 コインが足りない'; break; }
+      s.coins -= 2; s.happy = clamp(s.happy + 15); s.energy = clamp(s.energy - 15);
+      if (Math.random() < 0.5) s.hasPoop = true;
+      log = '🚶 おさんぽたのしい〜';
+      break;
+    case 'nap':
+      s.energy = clamp(s.energy + 30); log = '💤 ぐっすり…';
+      break;
+    case 'poopClean':
+      if (!s.hasPoop) { log = '✨ きれいだよ'; break; }
+      s.hasPoop = false; s.happy = clamp(s.happy + 8); log = '💩 すっきり！ありがと';
+      break;
+  }
+  saveShiba(s);
+  document.getElementById('shibaLog').textContent = log;
+  renderShiba();
+}
+// タスク完了時に呼ぶ: コイン+1 / 累計+1 / 幸福+2
+function shibaEarnCoin() {
+  const s = tickShiba(loadShiba());
+  s.coins += 1;
+  s.totalDone += 1;
+  s.happy = Math.min(100, s.happy + 2);
+  saveShiba(s);
+  // 開いてる時は即時反映
+  if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
+  // フローティングアイコンの状態も更新
+  const floating = document.getElementById('shibaCard');
+  if (floating) floating.textContent = s.hasPoop ? '💩' : '🐕';
+}
+document.getElementById('shibaCard').addEventListener('click', () => {
+  renderShiba();
+  document.getElementById('shibaLog').textContent = 'タスクを完了するとコインが増えるよ';
+  openSheet('shiba');
+});
+document.getElementById('shibaClose').addEventListener('click', () => closeSheet('shiba'));
+document.getElementById('shibaBackdrop').addEventListener('click', () => closeSheet('shiba'));
+document.querySelectorAll('.shiba-btn').forEach(btn => {
+  btn.addEventListener('click', () => shibaAction(btn.dataset.action));
+});
+attachSwipeClose('shibaSheet', 'shiba');
+// 起動時にもアイコン状態を反映
+(function initShibaFloating() {
+  const s = tickShiba(loadShiba());
+  saveShiba(s);
+  const floating = document.getElementById('shibaCard');
+  if (floating) floating.textContent = s.hasPoop ? '💩' : '🐕';
+})();
 
 // 日数選択タブ (1/3/5/7) のクリック処理
 document.querySelectorAll('.vm-tab').forEach(btn => {
