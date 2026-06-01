@@ -2871,6 +2871,8 @@ async function toggleDone(ev, btn) {
         persistCache();
         showToast(`${newStartKey} から再開に短縮`);
       }
+      // 多日予定の今日分完了でも豆柴ちゃんへコイン
+      shibaEarnCoin(ev);
       return;
     }
 
@@ -2878,8 +2880,8 @@ async function toggleDone(ev, btn) {
     const oldTitle = ev.summary;
     ev.summary = newTitle;
     persistCache();
-    // タスクを完了化した時のみ豆柴ちゃんへコイン
-    if (newDone) shibaEarnCoin();
+    // タスクを完了化した時のみ豆柴ちゃんへコイン (タイトル+メモ文字数に応じて 1〜30)
+    if (newDone) shibaEarnCoin(ev);
     // 完了/未完了の切替後はカードを自動で折りたたんで並び替え
     const cardEl = btn.closest('.card');
     if (cardEl) cardEl.classList.remove('expanded');
@@ -3906,12 +3908,25 @@ function shibaAction(action) {
   document.getElementById('shibaLog').textContent = log;
   renderShiba();
 }
-function shibaEarnCoin() {
+// タスクのボリューム (タイトル + メモ文字数) に応じたコイン算出
+// 1〜5文字=1pt / 6〜10=2pt / 11〜15=3pt / ... / 上限30pt
+function coinsForEvent(ev) {
+  if (!ev) return 1;
+  const titleLen = (plainTitle(ev) || '').length;
+  const descLen  = (ev.description || '').length;
+  const chars = titleLen + descLen;
+  if (chars <= 0) return 1;
+  return Math.min(30, Math.ceil(chars / 5));
+}
+function shibaEarnCoin(ev) {
+  const gain = coinsForEvent(ev);
   const s = tickShiba(loadShiba());
-  s.coins += 1;
+  s.coins += gain;
   s.totalDone += 1;
   s.happy = Math.min(100, s.happy + 2);
   saveShiba(s);
+  // 獲得数の通知
+  showToast(`🪙 +${gain} コイン`);
   if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
   setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
