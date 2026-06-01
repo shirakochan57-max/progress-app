@@ -1407,7 +1407,8 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
   <div class="shiba-log" id="shibaSyncStatus" style="font-size:11px;">同期: -</div>
   <div class="sheet-actions">
-    <button class="btn secondary" id="shibaSyncNow" style="flex: 0 0 100px;">🔄 同期</button>
+    <button class="btn secondary" id="shibaSyncNow" style="flex: 0 0 90px;">🔄 同期</button>
+    <button class="btn secondary" id="shibaSleepToggle" style="flex: 0 0 110px;">🌙 おやすみ</button>
     <button class="btn primary" id="shibaClose">閉じる</button>
   </div>
 </div>
@@ -3862,7 +3863,9 @@ const DEFAULT_SHIBA = {
   hunger: 60, happy: 60, energy: 60,
   hasPoop: false, lastTick: Date.now(),
   // 同期判定用: ユーザー操作時のみ更新 (時間経過の tick では更新しない)
-  modifiedAt: 0
+  modifiedAt: 0,
+  // おやすみモード: ON 中はメーター減衰なし
+  sleepMode: false
 };
 function loadShiba() {
   try {
@@ -3875,6 +3878,11 @@ function saveShiba(s) {
 }
 function tickShiba(s) {
   const now = Date.now();
+  // おやすみモード中は減衰しない (lastTick だけ進めて経過時間を消費)
+  if (s.sleepMode) {
+    s.lastTick = now;
+    return s;
+  }
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
     // 1 tick = 1.43 分間隔 (元の 1.0 分の 70% スピード)
@@ -3918,12 +3926,20 @@ function getShibaMood(s) {
   if (s.happy >= 60) return 'ごきげん';
   return 'ふつう';
 }
+function updateShibaSleepBtn(on) {
+  const btn = document.getElementById('shibaSleepToggle');
+  if (!btn) return;
+  btn.textContent = on ? '☀️ 起きる' : '🌙 おやすみ';
+  btn.style.background = on ? 'var(--ink)' : '';
+  btn.style.color = on ? 'var(--inverted)' : '';
+}
 function renderShiba() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
   setShibaEmoji('shibaEmoji', getShibaEmoji(s));
   setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
+  updateShibaSleepBtn(!!s.sleepMode);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
   document.getElementById('shibaCoins').textContent = s.coins;
   document.getElementById('shibaTotalDone').textContent = s.totalDone;
@@ -3999,6 +4015,16 @@ document.getElementById('shibaCard').addEventListener('click', () => {
   renderShiba();
   document.getElementById('shibaLog').textContent = 'タスクを完了するとコインが増えるよ';
   openSheet('shiba');
+});
+document.getElementById('shibaSleepToggle').addEventListener('click', () => {
+  const s = tickShiba(loadShiba());
+  s.sleepMode = !s.sleepMode;
+  s.lastTick = Date.now();
+  s.modifiedAt = Date.now();
+  saveShiba(s);
+  updateShibaSleepBtn(s.sleepMode);
+  showToast(s.sleepMode ? '🌙 おやすみモード ON (メーター減らない)' : '☀️ おやすみモード OFF');
+  renderShiba();
 });
 document.getElementById('shibaClose').addEventListener('click', () => closeSheet('shiba'));
 document.getElementById('shibaBackdrop').addEventListener('click', () => closeSheet('shiba'));
