@@ -1382,7 +1382,9 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     <button class="shiba-btn" data-action="poopClean">💩 そうじ</button>
   </div>
   <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
+  <div class="shiba-log" id="shibaSyncStatus" style="font-size:11px;">同期: -</div>
   <div class="sheet-actions">
+    <button class="btn secondary" id="shibaSyncNow" style="flex: 0 0 100px;">🔄 同期</button>
     <button class="btn primary" id="shibaClose">閉じる</button>
   </div>
 </div>
@@ -4073,6 +4075,41 @@ saveShiba = function (s) {
   _shibaOriginalSave(s);
   shibaPushDebounced();
 };
+
+// === 同期状態の表示 ===
+function updateShibaSyncStatus(text) {
+  const el = document.getElementById('shibaSyncStatus');
+  if (el) el.textContent = '同期: ' + text;
+}
+const _origPull = shibaPullRemote;
+shibaPullRemote = async function () {
+  if (!getGasUrl()) { updateShibaSyncStatus('GAS未設定'); return null; }
+  updateShibaSyncStatus('受信中…');
+  const r = await _origPull();
+  if (r) updateShibaSyncStatus('受信OK ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+  else updateShibaSyncStatus('リモートに無し');
+  return r;
+};
+const _origPush = shibaPushRemote;
+shibaPushRemote = async function (state) {
+  if (!getGasUrl()) { updateShibaSyncStatus('GAS未設定'); return; }
+  updateShibaSyncStatus('送信中…');
+  await _origPush(state);
+  updateShibaSyncStatus('送信OK ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+};
+// 手動同期ボタン: pull → 必要なら採用 → push (リモートが古ければ更新)
+document.getElementById('shibaSyncNow').addEventListener('click', async () => {
+  if (!getGasUrl()) { showToast('GAS URL を設定してください'); openSheet('settings'); return; }
+  const remote = await shibaPullRemote();
+  if (remote && (remote.lastTick || 0) > (loadShiba().lastTick || 0)) {
+    shibaApplyIfNewer(remote);
+    renderShiba();
+    showToast('リモートから取得しました');
+  } else {
+    await shibaPushRemote(loadShiba());
+    showToast('リモートへ送信しました');
+  }
+});
 
 // 日数選択タブ (1/3/5/7) のクリック処理
 document.querySelectorAll('.vm-tab').forEach(btn => {
