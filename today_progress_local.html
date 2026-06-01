@@ -809,111 +809,48 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   margin-bottom: 12px;
 }
 .shiba-emoji {
-  width: 120px; height: 120px;
-  margin: 0 auto;
-  position: relative;
-  display: block;
-}
-/* SVG 白柴ちゃん (エクル) */
-.shiba-scene { position: relative; }
-.shiba-svg {
-  width: 100%; height: 100%;
-  display: block;
-  overflow: visible;
-  animation: shiba-breathe 2.6s ease-in-out infinite;
-  transform-origin: 50% 92%;
-}
-@keyframes shiba-breathe {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.025) translateY(-0.5px); }
-}
-/* しっぽ ふりふり */
-.shiba-svg .s-tail {
-  transform-origin: 72px 64px;
-  animation: tail-wag 1.6s ease-in-out infinite;
-}
-@keyframes tail-wag {
-  0%, 100% { transform: rotate(-7deg); }
-  50% { transform: rotate(7deg); }
-}
-/* 耳ぴくぴく (たまに) */
-.shiba-svg .s-ear-l { transform-origin: 33px 26px; animation: ear-twitch 7s ease-in-out infinite; }
-.shiba-svg .s-ear-r { transform-origin: 67px 26px; animation: ear-twitch 7s ease-in-out infinite 2s; }
-@keyframes ear-twitch {
-  0%, 88%, 96%, 100% { transform: rotate(0deg); }
-  92%, 94% { transform: rotate(-7deg); }
-}
-/* まばたき */
-.shiba-svg .s-eyes-open { animation: blink 5.5s ease-in-out infinite; transform-origin: 50% 38px; }
-@keyframes blink {
-  0%, 47%, 52%, 100% { transform: scaleY(1); }
-  49%, 50% { transform: scaleY(0.1); }
-}
-/* デフォルトは閉じ目は非表示 (state-sleep で表示) */
-.shiba-svg .s-eyes-closed { opacity: 0; }
-
-/* === 状態別アニメ === */
-/* happy: 跳ねる + しっぽ高速 */
-.state-happy .shiba-svg { animation: shiba-bounce 0.55s ease-in-out infinite; }
-.state-happy .shiba-svg .s-tail { animation-duration: 0.32s; }
-@keyframes shiba-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
-/* sleep: 目を閉じてゆっくり呼吸 */
-.state-sleep .shiba-svg { animation: shiba-breathe 4.5s ease-in-out infinite; }
-.state-sleep .shiba-svg .s-eyes-open { opacity: 0; animation: none; }
-.state-sleep .shiba-svg .s-eyes-closed { opacity: 1; }
-.state-sleep .shiba-svg .s-tail { animation: none; transform: rotate(-4deg); }
-/* hungry: 頭がうつむく */
-.state-hungry .shiba-svg .s-head {
-  transform-origin: 50% 50%;
-  animation: head-droop 2.4s ease-in-out infinite;
-}
-@keyframes head-droop {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(2.5px) rotate(-2deg); }
-}
-/* sad: しっぽ垂れ + 頭下げ */
-.state-sad .shiba-svg .s-head { transform: translateY(2px) rotate(-3deg); }
-.state-sad .shiba-svg .s-tail { animation: none; transform: rotate(-22deg); opacity: 0.75; }
-
-/* === オーバーレイ (Z, ハート, うんち, 涙) === */
-.shiba-overlay {
-  position: absolute;
-  pointer-events: none;
+  font-size: 64px;
   line-height: 1;
-  font-family: inherit;
-  display: none;
+  text-align: center;
+  /* グレースケール + 明度up で「白柴」っぽく */
+  filter: grayscale(1) brightness(1.18) contrast(1.02);
+  display: inline-block;
+  transform-origin: center bottom;
+  animation: shiba-breathe 2.5s ease-in-out infinite;
 }
-.shiba-emoji .shiba-overlay { font-size: 26px; }
-.shiba-floating .shiba-overlay { font-size: 13px; }
-.shiba-z       { top: 4%; right: 4%; }
-.shiba-heart   { top: 4%; left: 4%; }
-.shiba-poop    { bottom: 0; right: -8%; font-size: 1.2em !important; }
-.shiba-tear    { top: 35%; left: 22%; font-size: 0.6em !important; }
-@keyframes z-float {
-  0% { transform: translateY(0) scale(0.5); opacity: 0; }
-  25% { opacity: 1; }
-  100% { transform: translateY(-22px) scale(1.1); opacity: 0; }
+/* フローティングアイコンも白柴フィルター + 呼吸アニメ */
+#shibaCard.shiba-floating {
+  filter: grayscale(1) brightness(1.18) contrast(1.02);
+  transform-origin: center bottom;
+  animation: shiba-breathe 2.5s ease-in-out infinite;
 }
-@keyframes heart-float {
-  0% { transform: translateY(0) scale(0.5) rotate(-10deg); opacity: 0; }
-  30% { opacity: 1; }
-  100% { transform: translateY(-22px) scale(1.15) rotate(10deg); opacity: 0; }
+/* 常時アニメ: 呼吸 */
+@keyframes shiba-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
 }
-@keyframes poop-bob {
-  0%, 100% { transform: rotate(-6deg); }
-  50% { transform: rotate(6deg); }
+/* state-happy: 跳ねる */
+@keyframes shiba-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.06); }
 }
-@keyframes tear-drop {
-  0% { transform: translateY(0); opacity: 0.9; }
-  100% { transform: translateY(14px); opacity: 0; }
+.state-happy { animation: shiba-bounce 0.5s ease-in-out infinite !important; }
+/* state-sleep: ゆっくり呼吸 */
+.state-sleep { animation: shiba-breathe 4s ease-in-out infinite !important; opacity: 0.9; }
+/* state-hungry: 頭が落ちる感じ */
+@keyframes shiba-droop {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(2px) scale(0.99); }
 }
-.state-sleep  .shiba-z       { display: block; animation: z-float 2.4s ease-out infinite; }
-.state-happy  .shiba-heart   { display: block; animation: heart-float 1.6s ease-out infinite; }
-.state-poop   .shiba-poop    { display: block; animation: poop-bob 1.2s ease-in-out infinite; }
-.state-sad    .shiba-tear    { display: block; animation: tear-drop 1.8s ease-out infinite; }
+.state-hungry { animation: shiba-droop 2.4s ease-in-out infinite !important; }
+/* state-sad: 沈む + 暗く */
+.state-sad { animation: shiba-droop 3s ease-in-out infinite !important; opacity: 0.6; }
+/* state-poop: 小刻みに揺れる */
+@keyframes shiba-poop-wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+.state-poop { animation: shiba-poop-wiggle 0.9s ease-in-out infinite !important; }
 .shiba-mood { font-size: 13px; color: var(--text-muted); margin-top: 6px; letter-spacing: 0.5px; }
 .shiba-coins {
   display: flex; align-items: center; gap: 6px;
@@ -1256,12 +1193,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   </div>
 
   <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
-  <div class="action-icon shiba-floating shiba-scene" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">
-    <span class="shiba-overlay shiba-z">💤</span>
-    <span class="shiba-overlay shiba-heart">💕</span>
-    <span class="shiba-overlay shiba-poop">💩</span>
-    <span class="shiba-overlay shiba-tear">💧</span>
-  </div>
+  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">🐕</div>
   <div class="photo-lightbox" id="photoLightbox">
     <div class="close-hint">タップで閉じる</div>
     <img id="photoLightboxImg" alt="">
@@ -1416,12 +1348,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <div class="sheet-handle"></div>
   <h3>豆柴ちゃん</h3>
   <div class="shiba-display">
-    <div class="shiba-emoji shiba-scene" id="shibaEmoji">
-      <span class="shiba-overlay shiba-z">💤</span>
-      <span class="shiba-overlay shiba-heart">💕</span>
-      <span class="shiba-overlay shiba-poop">💩</span>
-      <span class="shiba-overlay shiba-tear">💧</span>
-    </div>
+    <div class="shiba-emoji" id="shibaEmoji">🐶</div>
     <div class="shiba-mood" id="shibaMood">ごきげん</div>
   </div>
   <div class="shiba-coins">
@@ -3877,54 +3804,7 @@ document.getElementById('noteSave').addEventListener('click', saveNoteSheet);
 attachSwipeClose('noteSheet', 'note');
 
 // ============= 豆柴ちゃん (タマゴッチ風のやる気増進システム) =============
-// 白柴 (エクル) SVG: 両方の表示箇所 (#shibaCard と #shibaEmoji) に同じ SVG を注入
-const SHIBA_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="shiba-svg" aria-hidden="true">
-  <ellipse cx="50" cy="91" rx="24" ry="2.6" fill="#000" opacity="0.13"/>
-  <g class="s-body">
-    <path d="M 28 88 Q 25 60 50 58 Q 75 60 72 88 Q 72 92 66 92 L 34 92 Q 28 92 28 88 Z" fill="#fefcf6" stroke="#3a2c20" stroke-width="1.8" stroke-linejoin="round"/>
-    <ellipse cx="38" cy="88" rx="5" ry="5.5" fill="#fefcf6" stroke="#3a2c20" stroke-width="1.5"/>
-    <ellipse cx="62" cy="88" rx="5" ry="5.5" fill="#fefcf6" stroke="#3a2c20" stroke-width="1.5"/>
-    <path d="M 36.5 92 L 36.5 93.5 M 38 92 L 38 94 M 39.5 92 L 39.5 93.5" stroke="#3a2c20" stroke-width="0.7" stroke-linecap="round"/>
-    <path d="M 60.5 92 L 60.5 93.5 M 62 92 L 62 94 M 63.5 92 L 63.5 93.5" stroke="#3a2c20" stroke-width="0.7" stroke-linecap="round"/>
-  </g>
-  <g class="s-tail">
-    <path d="M 70 62 Q 84 58 82 46 Q 88 52 85 60 Q 80 68 70 68 Z" fill="#fefcf6" stroke="#3a2c20" stroke-width="1.8" stroke-linejoin="round"/>
-  </g>
-  <g class="s-head">
-    <g class="s-ear s-ear-l">
-      <path d="M 31 28 L 27 8 L 42 22 Z" fill="#d6a989" stroke="#3a2c20" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M 33 25 L 31 14 L 38 22 Z" fill="#f3d3b8"/>
-    </g>
-    <g class="s-ear s-ear-r">
-      <path d="M 69 28 L 73 8 L 58 22 Z" fill="#d6a989" stroke="#3a2c20" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M 67 25 L 69 14 L 62 22 Z" fill="#f3d3b8"/>
-    </g>
-    <ellipse cx="50" cy="38" rx="21" ry="19" fill="#fefcf6" stroke="#3a2c20" stroke-width="1.8"/>
-    <ellipse cx="37" cy="44" rx="6.5" ry="5.5" fill="#fefcf6"/>
-    <ellipse cx="63" cy="44" rx="6.5" ry="5.5" fill="#fefcf6"/>
-    <circle cx="35" cy="46" r="2.6" fill="#f5b5a8" opacity="0.45"/>
-    <circle cx="65" cy="46" r="2.6" fill="#f5b5a8" opacity="0.45"/>
-    <g class="s-eyes-open">
-      <ellipse cx="42" cy="37" rx="2.8" ry="3.5" fill="#1a1a1a"/>
-      <ellipse cx="58" cy="37" rx="2.8" ry="3.5" fill="#1a1a1a"/>
-      <circle cx="42.6" cy="35.6" r="0.9" fill="#fff"/>
-      <circle cx="58.6" cy="35.6" r="0.9" fill="#fff"/>
-    </g>
-    <g class="s-eyes-closed">
-      <path d="M 39 38 Q 42 40.5 45 38" stroke="#3a2c20" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-      <path d="M 55 38 Q 58 40.5 61 38" stroke="#3a2c20" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-    </g>
-    <ellipse cx="50" cy="44.5" rx="2.5" ry="2" fill="#2a1a14"/>
-    <ellipse cx="50" cy="44" rx="0.8" ry="0.4" fill="#fff" opacity="0.55"/>
-    <path d="M 50 46.5 L 50 48.5 M 47 49.6 Q 50 51.5 53 49.6" stroke="#3a2c20" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-  </g>
-</svg>`;
-function injectShibaSvg() {
-  ['shibaCard', 'shibaEmoji'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && !el.querySelector('.shiba-svg')) el.insertAdjacentHTML('afterbegin', SHIBA_SVG);
-  });
-}
+// 状態に応じて emoji を変え、CSS の state-X クラスでアニメを切り替える
 function applyShibaState(s) {
   let state = 'normal';
   if (s.hasPoop) state = 'poop';
@@ -3933,7 +3813,9 @@ function applyShibaState(s) {
   else if (s.happy <= 15) state = 'sad';
   else if (s.happy >= 65 && s.hunger >= 50 && s.energy >= 50) state = 'happy';
   const states = ['state-normal','state-happy','state-sleep','state-hungry','state-sad','state-poop'];
-  document.querySelectorAll('.shiba-scene').forEach(el => {
+  ['shibaCard','shibaEmoji'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
     states.forEach(st => el.classList.remove(st));
     el.classList.add('state-' + state);
   });
@@ -3987,7 +3869,8 @@ function getShibaMood(s) {
 function renderShiba() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
-  injectShibaSvg();
+  document.getElementById('shibaEmoji').textContent = getShibaEmoji(s);
+  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
   applyShibaState(s);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
   document.getElementById('shibaCoins').textContent = s.coins;
@@ -4043,7 +3926,8 @@ function shibaEarnCoin() {
   saveShiba(s);
   // 開いてる時は即時反映
   if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
-  // フローティングアイコンの状態クラスを更新
+  // フローティングアイコンの emoji と状態クラスを更新
+  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
   applyShibaState(s);
 }
 document.getElementById('shibaCard').addEventListener('click', () => {
@@ -4057,11 +3941,11 @@ document.querySelectorAll('.shiba-btn').forEach(btn => {
   btn.addEventListener('click', () => shibaAction(btn.dataset.action));
 });
 attachSwipeClose('shibaSheet', 'shiba');
-// 起動時にもSVG注入＆状態クラスを反映
+// 起動時に emoji と状態クラスを反映
 (function initShibaFloating() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
-  injectShibaSvg();
+  document.getElementById('shibaCard').textContent = s.hasPoop ? '💩' : '🐕';
   applyShibaState(s);
 })();
 
