@@ -809,11 +809,13 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   margin-bottom: 12px;
 }
 .shiba-emoji {
-  font-size: 64px;
+  font-size: 77px; /* 元 64px × 1.2 */
   line-height: 1;
   text-align: center;
   display: inline-block;
 }
+/* フローティングアイコンの emoji も 1.2 倍 */
+#shibaCard.shiba-floating { font-size: 25px; /* 元 21px × 1.2 */ }
 #shibaCard .shiba-inner,
 .shiba-emoji .shiba-inner {
   display: inline-block;
