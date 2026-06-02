@@ -1458,6 +1458,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   </div>
   <div class="sheet-actions">
     <button class="btn secondary" id="addCancel">キャンセル</button>
+    <button class="btn secondary" id="addSubmitDone">✔️ DONE</button>
     <button class="btn primary" id="addSubmit">登録する</button>
   </div>
 </div>
@@ -3348,9 +3349,11 @@ document.getElementById('addTimeToggle').addEventListener('click', (e) => {
     btn.textContent = '× 終日に戻す';
   }
 });
-document.getElementById('addSubmit').addEventListener('click', async () => {
-  const title = document.getElementById('addTitle').value.trim();
-  if (!title) { showToast('タイトルを入力'); return; }
+// 登録 / 登録+完了 (DONE) 共通フロー。markDone=true ならタイトル先頭に ✔️ を付け、完了ポイントも獲得。
+async function addSubmitFlow(markDone) {
+  const titleRaw = document.getElementById('addTitle').value.trim();
+  if (!titleRaw) { showToast('タイトルを入力'); return; }
+  const title = markDone ? '✔️ ' + titleRaw : titleRaw;
   // 時間行が開いていれば時間指定、閉じていれば終日 (dataset で判定)
   const timeRow = document.getElementById('addTimeRow');
   const allDay = timeRow.dataset.open !== '1';
@@ -3358,8 +3361,10 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
   // 日付フィールドの値を使用(空ならcurrentDate)
   const dateKey = document.getElementById('addDate').value || fmtDate(currentDate);
   const targetDate = parseDateKey(dateKey);
-  const btn = document.getElementById('addSubmit');
-  btn.disabled = true; btn.textContent = '登録中…';
+  const btnId = markDone ? 'addSubmitDone' : 'addSubmit';
+  const btn = document.getElementById(btnId);
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = markDone ? '完了登録中…' : '登録中…';
   try {
     let created, startISO, endISO;
     if (allDay) {
@@ -3383,8 +3388,10 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
         description: memo
       });
     }
-    showToast(dateKey === fmtDate(currentDate) ? '登録しました' : `${dateKey} に登録しました`);
+    const datePrefix = dateKey === fmtDate(currentDate) ? '' : `${dateKey} に`;
+    showToast(markDone ? `${datePrefix}登録+完了` : `${datePrefix}登録しました`);
     shibaEarnPoints(3, '新規登録'); // 豆柴ポイント
+    if (markDone) shibaEarnCoin(created || {});
     closeSheet('add');
     resetAddSheet();
     // 表示中の日付に登録した場合はローカル状態に直接追加(再取得不要)
@@ -3406,11 +3413,13 @@ document.getElementById('addSubmit').addEventListener('click', async () => {
       try { localStorage.removeItem(EVENTS_CACHE_PREFIX + dateKey); } catch (err) {}
     }
   } catch (e) {
-    showToast('登録失敗: ' + (e.message || e));
+    showToast((markDone ? '完了登録失敗: ' : '登録失敗: ') + (e.message || e));
   } finally {
-    btn.disabled = false; btn.textContent = '登録する';
+    btn.disabled = false; btn.textContent = origText;
   }
-});
+}
+document.getElementById('addSubmit').addEventListener('click', () => addSubmitFlow(false));
+document.getElementById('addSubmitDone').addEventListener('click', () => addSubmitFlow(true));
 
 // ========= 写真でタスク作成 =========
 document.getElementById('photoCard').addEventListener('click', () => {
