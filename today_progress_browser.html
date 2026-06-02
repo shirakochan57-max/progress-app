@@ -3983,8 +3983,8 @@ function tickShiba(s) {
   }
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
-    // 1 tick = 1.43 分間隔 (元の 1.0 分の 70% スピード)
-    const TICK_MIN = 1.43;
+    // 1 tick = 2.86 分間隔 (前回の 1.43 分から半分のペースに減速)
+    const TICK_MIN = 2.86;
     const ticks = Math.floor(elapsedMin / TICK_MIN);
     let hDrop = 0, jDrop = 0, eDrop = 0, sDrop = 0;
     for (let i = 0; i < ticks; i++) {
