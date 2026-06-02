@@ -818,7 +818,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 .shiba-mini-bar {
   position: relative;
   width: 5px;
-  height: 17px;
+  height: 34px;        /* 17px × 200% (縦のみ拡大) */
   background: rgba(0,0,0,0.08);
   border-radius: 1px;
   overflow: hidden;
@@ -832,8 +832,31 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   background: var(--ink);
   transition: height 0.3s ease, background 0.3s ease;
 }
-.shiba-mini-bar.warn > .fill { background: #d4a017; }
-.shiba-mini-bar.danger > .fill { background: #c0392b; }
+/* 段階色 (≤80緑 / ≤60黄 / ≤40橙 / ≤20赤) */
+.shiba-mini-bar.lv-green  > .fill { background: #2e8b57; }
+.shiba-mini-bar.lv-yellow > .fill { background: #d4a017; }
+.shiba-mini-bar.lv-orange > .fill { background: #d97a2c; }
+.shiba-mini-bar.lv-red    > .fill { background: #c0392b; }
+/* フローティングアイコン下の気分タグ */
+.shiba-mood-tag {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 3px;
+  padding: 2px 6px;
+  pointer-events: none;
+  opacity: 0.92;
+  z-index: 1;
+}
 /* 豆柴シート */
 .shiba-display {
   position: relative;
@@ -1018,7 +1041,12 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   border-radius: 6px;
   overflow: hidden;
 }
-.stat-fill { height: 100%; background: var(--ink); transition: width 0.3s; }
+.stat-fill { height: 100%; background: var(--ink); transition: width 0.3s, background 0.3s; }
+/* バーの値段階に応じた色 (≤80緑 / ≤60黄 / ≤40橙 / ≤20赤) */
+.stat-fill.lv-green  { background: #2e8b57; }
+.stat-fill.lv-yellow { background: #d4a017; }
+.stat-fill.lv-orange { background: #d97a2c; }
+.stat-fill.lv-red    { background: #c0392b; }
 .shiba-actions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1349,6 +1377,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
       <div class="shiba-mini-bar" data-bar="comfort" title="快適"><span class="fill"></span></div>
     </div>
     <span class="shiba-inner">🐕</span>
+    <div class="shiba-mood-tag" id="shibaMoodTag" aria-hidden="true">ふつう</div>
   </div>
   <div class="photo-lightbox" id="photoLightbox">
     <div class="close-hint">タップで閉じる</div>
@@ -3982,27 +4011,56 @@ function setShibaEmoji(containerId, _emojiChar) {
   const isPoop = _emojiChar && _emojiChar.indexOf('💩') >= 0;
   setShibaContent(containerId, isPoop);
 }
-// フローティングアイコン上のミニバロメーターを更新
-// >= 50: 黒 / 25〜49: 黄 / < 25: 赤
+// 値段階に応じた色クラス名 (>80: 既定 / ≤80:緑 / ≤60:黄 / ≤40:橙 / ≤20:赤)
+function barLevelClass(v) {
+  if (v <= 20) return 'lv-red';
+  if (v <= 40) return 'lv-orange';
+  if (v <= 60) return 'lv-yellow';
+  if (v <= 80) return 'lv-green';
+  return '';
+}
+const LV_CLASSES = ['lv-green','lv-yellow','lv-orange','lv-red'];
+// フローティングアイコン下の気分タグ用テキスト
+function getShibaMoodShort(s) {
+  const stamina = s.stamina != null ? s.stamina : 60;
+  const comfort = s.comfort != null ? s.comfort : 60;
+  if (s.hasPoop && s.hasPee) return 'うんち&おしっこ';
+  if (s.hasPoop) return 'うんち';
+  if (s.hasPee) return 'おしっこ';
+  if (stamina <= 15) return '疲れた〜';
+  if (s.energy <= 15) return '不健康';
+  if (s.hunger <= 15) return 'お腹すいた';
+  if (s.happy <= 15) return 'つまらない';
+  if (comfort <= 15) return '気持ち悪い';
+  if (s.happy >= 80 && s.hunger >= 60 && s.energy >= 60 && stamina >= 60 && comfort >= 60) return 'しあわせ〜';
+  if (s.happy >= 60) return 'ごきげん';
+  return 'ふつう';
+}
+// フローティングアイコン上のミニバロメーターを更新 (段階色付き)
 function updateShibaMiniBars(s) {
   const c = document.getElementById('shibaMiniBars');
-  if (!c) return;
-  const bars = {
-    hunger:  s.hunger,
-    happy:   s.happy,
-    stamina: s.stamina != null ? s.stamina : 60,
-    energy:  s.energy,
-    comfort: s.comfort != null ? s.comfort : 60
-  };
-  Object.keys(bars).forEach(key => {
-    const el = c.querySelector(`[data-bar="${key}"]`);
-    if (!el) return;
-    const v = Math.max(0, Math.min(100, bars[key]));
-    const fill = el.querySelector('.fill');
-    if (fill) fill.style.height = v + '%';
-    el.classList.toggle('warn',   v < 50 && v >= 25);
-    el.classList.toggle('danger', v < 25);
-  });
+  if (c) {
+    const bars = {
+      hunger:  s.hunger,
+      happy:   s.happy,
+      stamina: s.stamina != null ? s.stamina : 60,
+      energy:  s.energy,
+      comfort: s.comfort != null ? s.comfort : 60
+    };
+    Object.keys(bars).forEach(key => {
+      const el = c.querySelector(`[data-bar="${key}"]`);
+      if (!el) return;
+      const v = Math.max(0, Math.min(100, bars[key]));
+      const fill = el.querySelector('.fill');
+      if (fill) fill.style.height = v + '%';
+      LV_CLASSES.forEach(cls => el.classList.remove(cls));
+      const lv = barLevelClass(v);
+      if (lv) el.classList.add(lv);
+    });
+  }
+  // 気分タグ
+  const tag = document.getElementById('shibaMoodTag');
+  if (tag) tag.textContent = getShibaMoodShort(s);
 }
 function applyShibaState(s) {
   updateShibaMiniBars(s);
@@ -4164,17 +4222,27 @@ function renderShiba() {
   if (hidden > 0) puppyHtml += `<span class="shiba-puppy-more">+${hidden}</span>`;
   const puppiesEl = document.getElementById('shibaPuppies');
   if (puppiesEl) puppiesEl.innerHTML = puppyHtml;
-  document.getElementById('hungerFill').style.width = s.hunger + '%';
+  // 詳細シートの各バー (段階色付き)
+  const applyFill = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const v = Math.max(0, Math.min(100, val));
+    el.style.width = v + '%';
+    LV_CLASSES.forEach(cls => el.classList.remove(cls));
+    const lv = barLevelClass(v);
+    if (lv) el.classList.add(lv);
+  };
+  applyFill('hungerFill',  s.hunger);
   document.getElementById('hungerVal').textContent = s.hunger;
-  document.getElementById('happyFill').style.width = s.happy + '%';
+  applyFill('happyFill',   s.happy);
   document.getElementById('happyVal').textContent = s.happy;
-  document.getElementById('energyFill').style.width = s.energy + '%';
+  applyFill('energyFill',  s.energy);
   document.getElementById('energyVal').textContent = s.energy;
   const st = s.stamina != null ? s.stamina : 60;
-  document.getElementById('staminaFill').style.width = st + '%';
+  applyFill('staminaFill', st);
   document.getElementById('staminaVal').textContent = st;
   const c = s.comfort != null ? s.comfort : 60;
-  document.getElementById('comfortFill').style.width = c + '%';
+  applyFill('comfortFill', c);
   document.getElementById('comfortVal').textContent = c;
 }
 function shibaAction(action) {
