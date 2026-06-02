@@ -1007,6 +1007,15 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   vertical-align: middle;
   filter: none;
 }
+/* 犬小屋 (子犬 100 匹分): Lv 100 ごとに 1 軒 */
+.shiba-doghouse {
+  display: inline-block;
+  margin: 0 3px;
+  font-size: 22px;
+  vertical-align: middle;
+  animation: puppy-hop 2.2s ease-in-out infinite;
+  transform-origin: center bottom;
+}
 /* 犬の横に目立つフィードバック (アクション時に出る) */
 .shiba-feedback {
   position: absolute;
@@ -1383,7 +1392,6 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
       <div class="shiba-mini-bar" data-bar="hunger" title="満腹"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="happy" title="気持ち"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="stamina" title="体力"><span class="fill"></span></div>
-      <div class="shiba-mini-bar" data-bar="energy" title="健康"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="comfort" title="快適"><span class="fill"></span></div>
     </div>
     <span class="shiba-inner">🐕</span>
@@ -1563,15 +1571,14 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     <div class="stat-row"><span class="stat-label">満腹</span><div class="stat-bar"><div class="stat-fill" id="hungerFill"></div></div><span class="stat-val" id="hungerVal">50</span></div>
     <div class="stat-row"><span class="stat-label">気持ち</span><div class="stat-bar"><div class="stat-fill" id="happyFill"></div></div><span class="stat-val" id="happyVal">50</span></div>
     <div class="stat-row"><span class="stat-label">体力</span><div class="stat-bar"><div class="stat-fill" id="staminaFill"></div></div><span class="stat-val" id="staminaVal">50</span></div>
-    <div class="stat-row"><span class="stat-label">健康</span><div class="stat-bar"><div class="stat-fill" id="energyFill"></div></div><span class="stat-val" id="energyVal">50</span></div>
     <div class="stat-row"><span class="stat-label">快適</span><div class="stat-bar"><div class="stat-fill" id="comfortFill"></div></div><span class="stat-val" id="comfortVal">50</span></div>
   </div>
   <div class="shiba-actions">
     <button class="shiba-btn" data-action="feed">🍖 ごはん (6)</button>
-    <button class="shiba-btn" data-action="treat">🦴 ごほうび (4)</button>
-    <button class="shiba-btn" data-action="play">🧸 おもちゃ (4)</button>
-    <button class="shiba-btn" data-action="walk">🚶 さんぽ (6)</button>
-    <button class="shiba-btn" data-action="nap">💤 ひるね (3)</button>
+    <button class="shiba-btn" data-action="pet">🤗 なでなで (3)</button>
+    <button class="shiba-btn" data-action="play">🧸 おもちゃ (2)</button>
+    <button class="shiba-btn" data-action="walk">🚶 さんぽ (5)</button>
+    <button class="shiba-btn" data-action="nap">💤 ひるね (5)</button>
     <button class="shiba-btn" data-action="poopClean">💩 そうじ (4)</button>
   </div>
   <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
@@ -4100,11 +4107,10 @@ function getShibaMoodShort(s) {
   if (s.hasPoop) return 'うんち';
   if (s.hasPee) return 'おしっこ';
   if (stamina <= 15) return '疲れた〜';
-  if (s.energy <= 15) return '不健康';
   if (s.hunger <= 15) return 'お腹すいた';
   if (s.happy <= 15) return 'つまらない';
   if (comfort <= 15) return '気持ち悪い';
-  if (s.happy >= 80 && s.hunger >= 60 && s.energy >= 60 && stamina >= 60 && comfort >= 60) return 'しあわせ〜';
+  if (s.happy >= 80 && s.hunger >= 60 && stamina >= 60 && comfort >= 60) return 'しあわせ〜';
   if (s.happy >= 60) return 'ごきげん';
   return 'ふつう';
 }
@@ -4116,7 +4122,6 @@ function updateShibaMiniBars(s) {
       hunger:  s.hunger,
       happy:   s.happy,
       stamina: s.stamina != null ? s.stamina : 60,
-      energy:  s.energy,
       comfort: s.comfort != null ? s.comfort : 60
     };
     Object.keys(bars).forEach(key => {
@@ -4136,12 +4141,13 @@ function updateShibaMiniBars(s) {
 }
 function applyShibaState(s) {
   updateShibaMiniBars(s);
+  const stamina = s.stamina != null ? s.stamina : 60;
   let state = 'normal';
   if (s.hasPoop) state = 'poop';
-  else if (s.energy <= 15) state = 'sleep';
+  else if (stamina <= 15) state = 'sleep';
   else if (s.hunger <= 15) state = 'hungry';
   else if (s.happy <= 15) state = 'sad';
-  else if (s.happy >= 65 && s.hunger >= 50 && s.energy >= 50) state = 'happy';
+  else if (s.happy >= 65 && s.hunger >= 50 && stamina >= 50) state = 'happy';
   const states = ['state-normal','state-happy','state-sleep','state-hungry','state-sad','state-poop'];
   ['shibaCard','shibaEmoji'].forEach(id => {
     const el = document.getElementById(id);
@@ -4153,17 +4159,17 @@ function applyShibaState(s) {
 const SHIBA_KEY = 'shiba_state_v1';
 const DEFAULT_SHIBA = {
   coins: 0, totalDone: 0,
-  hunger: 60,      // 満腹
-  happy: 60,       // 気持ち
-  stamina: 60,     // 体力 (新)
-  energy: 60,      // 健康
-  comfort: 60,     // 快適
+  hunger: 60,           // 満腹
+  happy: 60,            // 気持ち
+  stamina: 60,          // 体力
+  comfort: 60,          // 快適
   hasPoop: false,
   hasPee: false,
+  comfortBeforeDirt: null,  // うんち/おしっこ前の快適度 (掃除で復元)
   lastTick: Date.now(),
   modifiedAt: 0,
   sleepMode: false,
-  autoMode: false,   // オートモード: コイン獲得時に自動で低いバーへ振り分け
+  autoMode: false,
   totalPoints: 0
 };
 // レベルシステム:
@@ -4186,9 +4192,15 @@ function loadShiba() {
 function saveShiba(s) {
   try { localStorage.setItem(SHIBA_KEY, JSON.stringify(s)); } catch (e) {}
 }
-// 時間経過: hunger 減 / energy 微増 / 確率でうんち
+// 時間経過: 4 バー (満腹/気持ち/体力/快適) を相関減衰 + 確率でうんち/おしっこ
+// 相関: hunger≤50→happy 1.5×、happy≤50→stamina 1.5×、stamina≤50→comfort 1.5×、
+//       comfort≤50→他 3 つ全部 1.5× (重複時は累積)
 function tickShiba(s) {
   const now = Date.now();
+  // 旧データ互換: stamina/comfort/comfortBeforeDirt の null 補完
+  if (s.stamina == null) s.stamina = 60;
+  if (s.comfort == null) s.comfort = 60;
+  if (s.comfortBeforeDirt === undefined) s.comfortBeforeDirt = null;
   // おやすみモード中は減衰しない (lastTick だけ進めて経過時間を消費)
   if (s.sleepMode) {
     s.lastTick = now;
@@ -4196,50 +4208,43 @@ function tickShiba(s) {
   }
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
   if (elapsedMin > 0) {
-    // 1 tick = 2.86 分間隔 (前回の 1.43 分から半分のペースに減速)
+    // 1 tick = 2.86 分間隔
     const TICK_MIN = 2.86;
     const ticks = Math.floor(elapsedMin / TICK_MIN);
-    let hDrop = 0, jDrop = 0, eDrop = 0, sDrop = 0;
+    const baseDrop = () => 1 + Math.floor(Math.random() * 5);
     for (let i = 0; i < ticks; i++) {
-      // tick ごとに各パラメーターが 1〜5 のランダムで減る
-      hDrop += 1 + Math.floor(Math.random() * 5);
-      jDrop += 1 + Math.floor(Math.random() * 5);
-      eDrop += 1 + Math.floor(Math.random() * 5);
-      sDrop += 1 + Math.floor(Math.random() * 5); // 体力
-      // 7% の確率で突発的な大幅減少 (4 つから 1 つ)
+      // 現時点の値で係数算出
+      let cHunger = 1, cHappy = 1, cStamina = 1, cComfort = 1;
+      if (s.hunger  <= 50) cHappy   *= 1.5;
+      if (s.happy   <= 50) cStamina *= 1.5;
+      if (s.stamina <= 50) cComfort *= 1.5;
+      if (s.comfort <= 50) { cHunger *= 1.5; cHappy *= 1.5; cStamina *= 1.5; }
+      s.hunger  = Math.max(0, s.hunger  - Math.round(baseDrop() * cHunger));
+      s.happy   = Math.max(0, s.happy   - Math.round(baseDrop() * cHappy));
+      s.stamina = Math.max(0, s.stamina - Math.round(baseDrop() * cStamina));
+      s.comfort = Math.max(0, s.comfort - Math.round(baseDrop() * cComfort));
+      // 7% で 1 つに大幅減 (-5〜15)
       if (Math.random() < 0.07) {
-        const big = 5 + Math.floor(Math.random() * 11);
-        const target = Math.floor(Math.random() * 4);
-        if (target === 0) hDrop += big;
-        else if (target === 1) jDrop += big;
-        else if (target === 2) eDrop += big;
-        else sDrop += big;
+        const keys = ['hunger','happy','stamina','comfort'];
+        const k = keys[Math.floor(Math.random() * 4)];
+        s[k] = Math.max(0, s[k] - (5 + Math.floor(Math.random() * 11)));
       }
     }
-    if (ticks > 0) {
-      // 快適度も同じパターンで減衰
-      let cDrop = 0;
-      for (let i = 0; i < ticks; i++) {
-        cDrop += 1 + Math.floor(Math.random() * 5);
-      }
-      s.hunger  = Math.max(0, s.hunger  - hDrop);
-      s.happy   = Math.max(0, s.happy   - jDrop);
-      s.energy  = Math.max(0, s.energy  - eDrop);
-      s.stamina = Math.max(0, (s.stamina != null ? s.stamina : 60) - sDrop);
-      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - cDrop);
-      s.lastTick = now - (elapsedMin - ticks * TICK_MIN) * 60000;
-    }
-    // うんち発生 → 快適度を大幅に下げる
+    if (ticks > 0) s.lastTick = now - (elapsedMin - ticks * TICK_MIN) * 60000;
+    // うんち/おしっこ 発生: 快適度を「一気に 50 を切る」(30 以下に強制)
+    // 発生前の快適度は comfortBeforeDirt に保存 → 掃除で復元
+    const DIRT_FLOOR = 30;
     const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
     if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) {
+      if (s.comfortBeforeDirt == null) s.comfortBeforeDirt = s.comfort;
       s.hasPoop = true;
-      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - 35);
+      s.comfort = Math.min(s.comfort, DIRT_FLOOR);
     }
-    // おしっこ発生 → 快適度を大きく下げる
     const peeChance = Math.min(0.6, elapsedMin / 15 * 0.3);
     if (elapsedMin > 5 && !s.hasPee && Math.random() < peeChance) {
+      if (s.comfortBeforeDirt == null) s.comfortBeforeDirt = s.comfort;
       s.hasPee = true;
-      s.comfort = Math.max(0, (s.comfort != null ? s.comfort : 60) - 25);
+      s.comfort = Math.min(s.comfort, DIRT_FLOOR);
     }
   }
   return s;
@@ -4256,11 +4261,10 @@ function getShibaMood(s) {
   const stamina = s.stamina != null ? s.stamina : 60;
   const comfort = s.comfort != null ? s.comfort : 60;
   if (stamina <= 15) return 'バテバテ…';
-  if (s.energy <= 15) return 'しんどい…';
   if (s.hunger <= 15) return 'おなかすいた…';
   if (s.happy <= 15) return 'さみしい…';
   if (comfort <= 15) return 'きもち悪い…';
-  if (s.happy >= 80 && s.hunger >= 60 && s.energy >= 60 && comfort >= 60 && stamina >= 60) return 'しあわせ！';
+  if (s.happy >= 80 && s.hunger >= 60 && comfort >= 60 && stamina >= 60) return 'しあわせ！';
   if (s.happy >= 60) return 'ごきげん';
   return 'ふつう';
 }
@@ -4294,13 +4298,13 @@ function renderShiba() {
   const lv = levelFromPoints(tp);
   document.getElementById('shibaLevel').textContent = lv;
   document.getElementById('shibaToNext').textContent = pointsToNextLevel(tp);
-  // 家族の子犬: Lv 10 ごとに +1 匹
-  const familyTotal = Math.floor(lv / 10);
-  const visible = Math.min(20, familyTotal);
-  const hidden = familyTotal - visible;
+  // 家族表示: 匹数 = Lv (1:1)、100 匹で犬小屋 1 軒に統合
+  // 例) Lv 99 → 子犬 99 匹 / Lv 100 → 犬小屋 1軒 / Lv 199 → 犬小屋 1 + 子犬 99 / Lv 200 → 犬小屋 2
+  const houses = Math.floor(lv / 100);
+  const puppies = lv % 100;
   let puppyHtml = '';
-  for (let i = 0; i < visible; i++) puppyHtml += '<span class="shiba-puppy">🐕</span>';
-  if (hidden > 0) puppyHtml += `<span class="shiba-puppy-more">+${hidden}</span>`;
+  for (let i = 0; i < houses; i++) puppyHtml += '<span class="shiba-doghouse">🏠</span>';
+  for (let i = 0; i < puppies; i++) puppyHtml += '<span class="shiba-puppy">🐕</span>';
   const puppiesEl = document.getElementById('shibaPuppies');
   if (puppiesEl) puppiesEl.innerHTML = puppyHtml;
   // 詳細シートの各バー (段階色付き)
@@ -4317,8 +4321,6 @@ function renderShiba() {
   document.getElementById('hungerVal').textContent = s.hunger;
   applyFill('happyFill',   s.happy);
   document.getElementById('happyVal').textContent = s.happy;
-  applyFill('energyFill',  s.energy);
-  document.getElementById('energyVal').textContent = s.energy;
   const st = s.stamina != null ? s.stamina : 60;
   applyFill('staminaFill', st);
   document.getElementById('staminaVal').textContent = st;
@@ -4338,35 +4340,31 @@ function shibaAction(action) {
     case 'feed':
       if (s.coins < 6) { log = '🪙 コインが足りない (ごはん 6)'; break; }
       s.coins -= 6; spentCost = 6;
-      s.hunger = clamp(s.hunger + 4);
-      s.stamina = clamp(getStamina() + 2);
+      s.hunger = clamp(s.hunger + 6);
       log = '🍖 もぐもぐ おいしい！'; userAction = true;
       break;
-    case 'play':
-      if (s.coins < 4) { log = '🪙 コインが足りない (おもちゃ 4)'; break; }
-      s.coins -= 4; spentCost = 4;
+    case 'pet':
+      if (s.coins < 3) { log = '🪙 コインが足りない (なでなで 3)'; break; }
+      s.coins -= 3; spentCost = 3;
       s.happy = clamp(s.happy + 3);
-      s.energy = clamp(s.energy + 1);
+      log = '🤗 きもちいい〜'; userAction = true;
+      break;
+    case 'play':
+      if (s.coins < 2) { log = '🪙 コインが足りない (おもちゃ 2)'; break; }
+      s.coins -= 2; spentCost = 2;
+      s.comfort = clamp(getComfort() + 2);
       log = '🧸 たのしい！'; userAction = true;
       break;
-    case 'treat':
-      if (s.coins < 4) { log = '🪙 コインが足りない (ごほうび 4)'; break; }
-      s.coins -= 4; spentCost = 4;
-      s.hunger = clamp(s.hunger + 1);
-      s.happy = clamp(s.happy + 3);
-      log = '🦴 やったー！ごほうび'; userAction = true;
-      break;
     case 'walk':
-      if (s.coins < 6) { log = '🪙 コインが足りない (さんぽ 6)'; break; }
-      s.coins -= 6; spentCost = 6;
-      s.happy = clamp(s.happy + 3);
-      s.energy = clamp(s.energy + 3);
+      if (s.coins < 5) { log = '🪙 コインが足りない (さんぽ 5)'; break; }
+      s.coins -= 5; spentCost = 5;
+      s.happy = clamp(s.happy + 5);
       log = '🚶 おさんぽたのしい〜'; userAction = true;
       break;
     case 'nap':
-      if (s.coins < 3) { log = '🪙 コインが足りない (ひるね 3)'; break; }
-      s.coins -= 3; spentCost = 3;
-      s.stamina = clamp(getStamina() + 3);
+      if (s.coins < 5) { log = '🪙 コインが足りない (ひるね 5)'; break; }
+      s.coins -= 5; spentCost = 5;
+      s.stamina = clamp(getStamina() + 5);
       log = '💤 ぐっすり…'; userAction = true;
       break;
     case 'poopClean':
@@ -4378,7 +4376,13 @@ function shibaAction(action) {
       s.coins -= 4; spentCost = 4;
       const wasDirty = s.hasPoop || s.hasPee;
       s.hasPoop = false; s.hasPee = false;
-      s.comfort = clamp(getComfort() + 4);
+      if (wasDirty && s.comfortBeforeDirt != null) {
+        // 汚れる前の値に戻す
+        s.comfort = clamp(s.comfortBeforeDirt);
+        s.comfortBeforeDirt = null;
+      } else {
+        s.comfort = clamp(getComfort() + 4);
+      }
       log = wasDirty ? '✨ すっきり！ありがと' : '✨ お掃除ピカピカ！';
       userAction = true;
       break;
@@ -4403,7 +4407,7 @@ function showShibaFeedback(text) {
   el.classList.add('show');
 }
 // オートモード: コイン獲得時に最も低いバーへ自動振り分け
-// 戻り値: 実行ログ文字列 (例 "🍖🦴 (-10)") / 何もしなければ null
+// 戻り値: 実行ログ文字列 (例 "🍖🤗 (-9)") / 何もしなければ null
 // s を破壊的に更新する (modifiedAt と totalPoints も更新)
 function shibaAutoSpend(s) {
   if (!s.autoMode || s.sleepMode) return null;
@@ -4414,12 +4418,17 @@ function shibaAutoSpend(s) {
   let spent = 0;
   const logs = [];
   for (let i = 0; i < 12; i++) {
-    if (s.coins < 3) break;
-    // 汚れ優先
+    if (s.coins < 2) break; // 最安アクション (おもちゃ 2) を下回ったら停止
+    // 汚れ優先 (汚れる前の comfort 値に復元)
     if ((s.hasPoop || s.hasPee) && s.coins >= 4) {
       s.coins -= 4; spent += 4;
       s.hasPoop = false; s.hasPee = false;
-      s.comfort = clamp(getComfort() + 4);
+      if (s.comfortBeforeDirt != null) {
+        s.comfort = clamp(s.comfortBeforeDirt);
+        s.comfortBeforeDirt = null;
+      } else {
+        s.comfort = clamp(getComfort() + 4);
+      }
       logs.push('✨');
       continue;
     }
@@ -4427,47 +4436,47 @@ function shibaAutoSpend(s) {
       { key: 'hunger',  val: s.hunger },
       { key: 'happy',   val: s.happy },
       { key: 'stamina', val: getStamina() },
-      { key: 'energy',  val: s.energy },
       { key: 'comfort', val: getComfort() }
     ].sort((a, b) => a.val - b.val);
     const lowest = bars[0];
     if (lowest.val >= STOP_AT) break;
     let act = null;
-    if (lowest.key === 'hunger') act = s.coins >= 6 ? 'feed' : (s.coins >= 4 ? 'treat' : null);
-    else if (lowest.key === 'happy') act = s.coins >= 4 ? 'play' : null;
-    else if (lowest.key === 'stamina') act = s.coins >= 3 ? 'nap' : null;
-    else if (lowest.key === 'energy') act = s.coins >= 6 ? 'walk' : (s.coins >= 4 ? 'play' : null);
-    else if (lowest.key === 'comfort') act = s.coins >= 4 ? 'poopClean' : null;
+    if (lowest.key === 'hunger') act = s.coins >= 6 ? 'feed' : null;
+    else if (lowest.key === 'happy') act = s.coins >= 3 ? 'pet' : null;
+    else if (lowest.key === 'stamina') act = s.coins >= 5 ? 'nap' : null;
+    else if (lowest.key === 'comfort') act = s.coins >= 2 ? 'play' : null;
     if (!act) break;
     switch (act) {
       case 'feed':
         s.coins -= 6; spent += 6;
-        s.hunger = clamp(s.hunger + 4);
-        s.stamina = clamp(getStamina() + 2);
+        s.hunger = clamp(s.hunger + 6);
         logs.push('🍖'); break;
-      case 'treat':
-        s.coins -= 4; spent += 4;
-        s.hunger = clamp(s.hunger + 1);
+      case 'pet':
+        s.coins -= 3; spent += 3;
         s.happy = clamp(s.happy + 3);
-        logs.push('🦴'); break;
+        logs.push('🤗'); break;
       case 'play':
-        s.coins -= 4; spent += 4;
-        s.happy = clamp(s.happy + 3);
-        s.energy = clamp(s.energy + 1);
+        s.coins -= 2; spent += 2;
+        s.comfort = clamp(getComfort() + 2);
         logs.push('🧸'); break;
       case 'walk':
-        s.coins -= 6; spent += 6;
-        s.happy = clamp(s.happy + 3);
-        s.energy = clamp(s.energy + 3);
+        s.coins -= 5; spent += 5;
+        s.happy = clamp(s.happy + 5);
         logs.push('🚶'); break;
       case 'nap':
-        s.coins -= 3; spent += 3;
-        s.stamina = clamp(getStamina() + 3);
+        s.coins -= 5; spent += 5;
+        s.stamina = clamp(getStamina() + 5);
         logs.push('💤'); break;
       case 'poopClean':
         s.coins -= 4; spent += 4;
+        const autoWasDirty = s.hasPoop || s.hasPee;
         s.hasPoop = false; s.hasPee = false;
-        s.comfort = clamp(getComfort() + 4);
+        if (autoWasDirty && s.comfortBeforeDirt != null) {
+          s.comfort = clamp(s.comfortBeforeDirt);
+          s.comfortBeforeDirt = null;
+        } else {
+          s.comfort = clamp(getComfort() + 4);
+        }
         logs.push('✨'); break;
     }
   }
