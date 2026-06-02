@@ -1498,8 +1498,9 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
   <div class="shiba-log" id="shibaSyncStatus" style="font-size:11px;">同期: -</div>
   <div class="sheet-actions">
-    <button class="btn secondary" id="shibaSyncNow" style="flex: 0 0 90px;">🔄 同期</button>
-    <button class="btn secondary" id="shibaSleepToggle" style="flex: 0 0 110px;">🌙 おやすみ</button>
+    <button class="btn secondary" id="shibaSyncNow" style="flex: 0 0 70px;">🔄 同期</button>
+    <button class="btn secondary" id="shibaAutoToggle" style="flex: 0 0 80px;">🤖 オート</button>
+    <button class="btn secondary" id="shibaSleepToggle" style="flex: 0 0 90px;">🌙 おやすみ</button>
     <button class="btn primary" id="shibaClose">閉じる</button>
   </div>
 </div>
@@ -4022,6 +4023,7 @@ const DEFAULT_SHIBA = {
   lastTick: Date.now(),
   modifiedAt: 0,
   sleepMode: false,
+  autoMode: false,   // オートモード: コイン獲得時に自動で低いバーへ振り分け
   totalPoints: 0
 };
 // レベルシステム:
@@ -4129,6 +4131,13 @@ function updateShibaSleepBtn(on) {
   btn.style.background = on ? 'var(--ink)' : '';
   btn.style.color = on ? 'var(--inverted)' : '';
 }
+function updateShibaAutoBtn(on) {
+  const btn = document.getElementById('shibaAutoToggle');
+  if (!btn) return;
+  btn.textContent = on ? '🤖 ON' : '🤖 オート';
+  btn.style.background = on ? 'var(--ink)' : '';
+  btn.style.color = on ? 'var(--inverted)' : '';
+}
 function renderShiba() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
@@ -4136,6 +4145,7 @@ function renderShiba() {
   setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
   updateShibaSleepBtn(!!s.sleepMode);
+  updateShibaAutoBtn(!!s.autoMode);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
   document.getElementById('shibaCoins').textContent = s.coins;
   document.getElementById('shibaTotalDone').textContent = s.totalDone;
@@ -4242,6 +4252,82 @@ function showShibaFeedback(text) {
   void el.offsetWidth;
   el.classList.add('show');
 }
+// オートモード: コイン獲得時に最も低いバーへ自動振り分け
+// 戻り値: 実行ログ文字列 (例 "🍖🦴 (-10)") / 何もしなければ null
+// s を破壊的に更新する (modifiedAt と totalPoints も更新)
+function shibaAutoSpend(s) {
+  if (!s.autoMode || s.sleepMode) return null;
+  const clamp = v => Math.max(0, Math.min(100, v));
+  const getStamina = () => s.stamina != null ? s.stamina : 60;
+  const getComfort = () => s.comfort != null ? s.comfort : 60;
+  const STOP_AT = 80; // 全バー >= 80 ならコインを残す
+  let spent = 0;
+  const logs = [];
+  for (let i = 0; i < 12; i++) {
+    if (s.coins < 3) break;
+    // 汚れ優先
+    if ((s.hasPoop || s.hasPee) && s.coins >= 4) {
+      s.coins -= 4; spent += 4;
+      s.hasPoop = false; s.hasPee = false;
+      s.comfort = clamp(getComfort() + 4);
+      logs.push('✨');
+      continue;
+    }
+    const bars = [
+      { key: 'hunger',  val: s.hunger },
+      { key: 'happy',   val: s.happy },
+      { key: 'stamina', val: getStamina() },
+      { key: 'energy',  val: s.energy },
+      { key: 'comfort', val: getComfort() }
+    ].sort((a, b) => a.val - b.val);
+    const lowest = bars[0];
+    if (lowest.val >= STOP_AT) break;
+    let act = null;
+    if (lowest.key === 'hunger') act = s.coins >= 6 ? 'feed' : (s.coins >= 4 ? 'treat' : null);
+    else if (lowest.key === 'happy') act = s.coins >= 4 ? 'play' : null;
+    else if (lowest.key === 'stamina') act = s.coins >= 3 ? 'nap' : null;
+    else if (lowest.key === 'energy') act = s.coins >= 6 ? 'walk' : (s.coins >= 4 ? 'play' : null);
+    else if (lowest.key === 'comfort') act = s.coins >= 4 ? 'poopClean' : null;
+    if (!act) break;
+    switch (act) {
+      case 'feed':
+        s.coins -= 6; spent += 6;
+        s.hunger = clamp(s.hunger + 4);
+        s.stamina = clamp(getStamina() + 2);
+        logs.push('🍖'); break;
+      case 'treat':
+        s.coins -= 4; spent += 4;
+        s.hunger = clamp(s.hunger + 1);
+        s.happy = clamp(s.happy + 3);
+        logs.push('🦴'); break;
+      case 'play':
+        s.coins -= 4; spent += 4;
+        s.happy = clamp(s.happy + 3);
+        s.energy = clamp(s.energy + 1);
+        logs.push('🧸'); break;
+      case 'walk':
+        s.coins -= 6; spent += 6;
+        s.happy = clamp(s.happy + 3);
+        s.energy = clamp(s.energy + 3);
+        logs.push('🚶'); break;
+      case 'nap':
+        s.coins -= 3; spent += 3;
+        s.stamina = clamp(getStamina() + 3);
+        logs.push('💤'); break;
+      case 'poopClean':
+        s.coins -= 4; spent += 4;
+        s.hasPoop = false; s.hasPee = false;
+        s.comfort = clamp(getComfort() + 4);
+        logs.push('✨'); break;
+    }
+  }
+  if (spent > 0) {
+    s.totalPoints = (s.totalPoints || 0) + spent;
+    s.modifiedAt = Date.now();
+    return `${logs.join('')} (-${spent})`;
+  }
+  return null;
+}
 // タスク完了時に呼ぶ: コイン+1 / 累計+1 / 幸福+2
 // 完了時のポイント: 15〜30 のランダム
 function pointsForCompletion() { return 15 + Math.floor(Math.random() * 16); }
@@ -4251,8 +4337,10 @@ function shibaEarnPoints(amount, label) {
   const s = tickShiba(loadShiba());
   s.coins += amount;
   s.modifiedAt = Date.now();
+  const autoSummary = shibaAutoSpend(s);
   saveShiba(s);
-  showToast(`🪙 +${amount} ${label || ''}`.trim());
+  const baseMsg = `🪙 +${amount} ${label || ''}`.trim();
+  showToast(autoSummary ? `${baseMsg} → 🤖 ${autoSummary}` : baseMsg);
   if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
   setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
@@ -4265,9 +4353,10 @@ function shibaEarnCoin(ev) {
   s.totalDone += 1;
   s.modifiedAt = Date.now();
   s.happy = Math.min(100, s.happy + 2);
+  const autoSummary = shibaAutoSpend(s);
   saveShiba(s);
-  // 獲得数の通知
-  showToast(`🪙 +${gain} 完了`);
+  // 獲得数の通知 (オートモード時は消費結果も合わせて表示)
+  showToast(autoSummary ? `🪙 +${gain} 完了 → 🤖 ${autoSummary}` : `🪙 +${gain} 完了`);
   // 開いてる時は即時反映
   if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
   // フローティングアイコンの emoji と状態クラスを更新
@@ -4287,6 +4376,22 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
   saveShiba(s);
   updateShibaSleepBtn(s.sleepMode);
   showToast(s.sleepMode ? '🌙 おやすみモード ON (メーター減らない)' : '☀️ おやすみモード OFF');
+  renderShiba();
+});
+document.getElementById('shibaAutoToggle').addEventListener('click', () => {
+  const s = tickShiba(loadShiba());
+  s.autoMode = !s.autoMode;
+  s.modifiedAt = Date.now();
+  // ON 時はその場で 1 回振り分けを試みる (溜まっていたコインを消化)
+  let summary = null;
+  if (s.autoMode) summary = shibaAutoSpend(s);
+  saveShiba(s);
+  updateShibaAutoBtn(s.autoMode);
+  if (s.autoMode) {
+    showToast(summary ? `🤖 オートモード ON → ${summary}` : '🤖 オートモード ON (コイン獲得時に自動振り分け)');
+  } else {
+    showToast('🤖 オートモード OFF');
+  }
   renderShiba();
 });
 document.getElementById('shibaClose').addEventListener('click', () => closeSheet('shiba'));
