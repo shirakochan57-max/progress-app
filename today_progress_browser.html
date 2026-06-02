@@ -900,7 +900,32 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   max-width: 90%;
   margin-left: auto; margin-right: auto;
 }
-.shiba-puppy { display: inline-block; margin: 0 1px; }
+.shiba-puppy {
+  display: inline-block;
+  margin: 0 1px;
+  transform-origin: center bottom;
+  animation: puppy-wiggle 1.8s ease-in-out infinite;
+}
+.shiba-puppy:nth-child(2n)   { animation-duration: 1.5s; animation-delay: 0.2s; }
+.shiba-puppy:nth-child(3n)   { animation-duration: 2.1s; animation-delay: 0.5s; }
+.shiba-puppy:nth-child(4n)   { animation-duration: 1.7s; animation-delay: 0.8s; }
+.shiba-puppy:nth-child(5n)   { animation-duration: 2.0s; animation-delay: 0.3s; }
+.shiba-puppy:nth-child(6n+1) { animation-name: puppy-hop; }
+.shiba-puppy:nth-child(7n+2) { animation-name: puppy-sway; animation-duration: 2.4s; }
+@keyframes puppy-wiggle {
+  0%, 100% { transform: rotate(-6deg) translateX(-1px); }
+  25%      { transform: rotate(0deg)  translateX(0); }
+  50%      { transform: rotate(6deg)  translateX(1px); }
+  75%      { transform: rotate(0deg)  translateX(0); }
+}
+@keyframes puppy-hop {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50%      { transform: translateY(-2px) rotate(3deg); }
+}
+@keyframes puppy-sway {
+  0%, 100% { transform: rotate(-10deg); }
+  50%      { transform: rotate(10deg); }
+}
 .shiba-puppy-more {
   display: inline-block;
   margin-left: 6px;
@@ -4107,12 +4132,16 @@ function shibaAction(action) {
       log = '💤 ぐっすり…'; userAction = true;
       break;
     case 'poopClean':
-      if (!s.hasPoop && !s.hasPee) { log = '✨ きれいだよ'; break; }
       if (s.coins < 4) { log = '🪙 コインが足りない (そうじ 4)'; break; }
+      if (getComfort() >= 100 && !s.hasPoop && !s.hasPee) {
+        log = '✨ もう快適マックス！'; break;
+      }
       s.coins -= 4; spentCost = 4;
+      const wasDirty = s.hasPoop || s.hasPee;
       s.hasPoop = false; s.hasPee = false;
       s.comfort = clamp(getComfort() + 4);
-      log = '✨ すっきり！ありがと'; userAction = true;
+      log = wasDirty ? '✨ すっきり！ありがと' : '✨ お掃除ピカピカ！';
+      userAction = true;
       break;
   }
   if (userAction) {
