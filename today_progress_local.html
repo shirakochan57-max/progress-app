@@ -799,6 +799,42 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .shiba-floating:active { background: var(--surface-2); }
+/* フローティングアイコン上のミニバロメーター */
+.shiba-mini-bars {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding: 2px 3px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 3px;
+  pointer-events: none;
+  opacity: 0.9;
+  z-index: 1;
+}
+.shiba-mini-bar {
+  position: relative;
+  width: 4px;
+  height: 14px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.shiba-mini-bar > .fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 60%;
+  background: var(--ink);
+  transition: height 0.3s ease, background 0.3s ease;
+}
+.shiba-mini-bar.warn > .fill { background: #d4a017; }
+.shiba-mini-bar.danger > .fill { background: #c0392b; }
 /* 豆柴シート */
 .shiba-display {
   position: relative;
@@ -1310,7 +1346,16 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   </div>
 
   <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
-  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0"><span class="shiba-inner">🐕</span></div>
+  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">
+    <div class="shiba-mini-bars" id="shibaMiniBars" aria-hidden="true">
+      <div class="shiba-mini-bar" data-bar="hunger" title="満腹"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="happy" title="気持ち"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="stamina" title="体力"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="energy" title="健康"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="comfort" title="快適"><span class="fill"></span></div>
+    </div>
+    <span class="shiba-inner">🐕</span>
+  </div>
   <div class="photo-lightbox" id="photoLightbox">
     <div class="close-hint">タップで閉じる</div>
     <img id="photoLightboxImg" alt="">
@@ -3995,7 +4040,30 @@ function setShibaEmoji(containerId, _emojiChar) {
   const isPoop = _emojiChar && _emojiChar.indexOf('💩') >= 0;
   setShibaContent(containerId, isPoop);
 }
+// フローティングアイコン上のミニバロメーターを更新
+// >= 50: 黒 / 25〜49: 黄 / < 25: 赤
+function updateShibaMiniBars(s) {
+  const c = document.getElementById('shibaMiniBars');
+  if (!c) return;
+  const bars = {
+    hunger:  s.hunger,
+    happy:   s.happy,
+    stamina: s.stamina != null ? s.stamina : 60,
+    energy:  s.energy,
+    comfort: s.comfort != null ? s.comfort : 60
+  };
+  Object.keys(bars).forEach(key => {
+    const el = c.querySelector(`[data-bar="${key}"]`);
+    if (!el) return;
+    const v = Math.max(0, Math.min(100, bars[key]));
+    const fill = el.querySelector('.fill');
+    if (fill) fill.style.height = v + '%';
+    el.classList.toggle('warn',   v < 50 && v >= 25);
+    el.classList.toggle('danger', v < 25);
+  });
+}
 function applyShibaState(s) {
+  updateShibaMiniBars(s);
   let state = 'normal';
   if (s.hasPoop) state = 'poop';
   else if (s.energy <= 15) state = 'sleep';
