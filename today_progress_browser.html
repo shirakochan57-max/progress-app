@@ -1570,6 +1570,12 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
     <button class="shiba-btn" data-action="nap">💤 ひるね (5)</button>
     <button class="shiba-btn" data-action="poopClean">💩 そうじ (4)</button>
   </div>
+  <div class="shiba-quick" style="display: flex; gap: 6px; margin-bottom: 8px; align-items: stretch;">
+    <input type="text" id="shibaQuickTitle" placeholder="やったタスクをサクッと登録"
+      lang="ja" autocomplete="off" autocorrect="off"
+      style="flex: 1; min-height: 36px; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13px;">
+    <button class="btn primary" id="shibaQuickDone" style="flex: 0 0 96px; min-height: 36px; font-size: 13px;">✔️ DONE</button>
+  </div>
   <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
   <div class="shiba-log" id="shibaSyncStatus" style="font-size:11px;">同期: -</div>
   <div class="sheet-actions">
@@ -4328,7 +4334,7 @@ function shibaAutoSpend(s) {
   const clamp = v => Math.max(0, Math.min(100, v));
   const getStamina = () => s.stamina != null ? s.stamina : 60;
   const getComfort = () => s.comfort != null ? s.comfort : 60;
-  const STOP_AT = 80;
+  const STOP_AT = 100; // バーが満タンならコイン温存 (それ未満は常に回復)
   let spent = 0;
   const logs = [];
   for (let i = 0; i < 12; i++) {
@@ -4464,6 +4470,48 @@ document.getElementById('shibaClose').addEventListener('click', () => closeSheet
 document.getElementById('shibaBackdrop').addEventListener('click', () => closeSheet('shiba'));
 document.querySelectorAll('.shiba-btn').forEach(btn => {
   btn.addEventListener('click', () => shibaAction(btn.dataset.action));
+});
+// 簡易タスク登録+完了 (シートを閉じずに連続登録可能)
+async function quickDoneFromShiba() {
+  if (!getGasUrl()) { showToast('GAS URL 未設定'); return; }
+  const input = document.getElementById('shibaQuickTitle');
+  const titleRaw = input.value.trim();
+  if (!titleRaw) { showToast('タイトルを入力'); return; }
+  const title = '✔️ ' + titleRaw;
+  const btn = document.getElementById('shibaQuickDone');
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = '登録中…';
+  try {
+    const dateKey = fmtDate(currentDate);
+    const startISO = dateKey + 'T00:00:00';
+    const endISO = addDays(dateKey, 1) + 'T00:00:00';
+    const created = await gasCall('create', {
+      summary: title, startTime: startISO, endTime: endISO,
+      allDay: true, description: ''
+    });
+    if (created && created.id && dateKey === fmtDate(currentDate)) {
+      const newEv = {
+        id: created.id, summary: title, description: '', allDay: true,
+        start: { date: dateKey }, end: { date: addDays(dateKey, 1) }
+      };
+      eventsCache.unshift(newEv);
+      renderEvents();
+      saveCardOrder();
+      setCachedEvents(dateKey, eventsCache);
+    }
+    shibaEarnPoints(3, '新規登録');
+    shibaEarnCoin(created || {});
+    input.value = '';
+    input.focus();
+  } catch (e) {
+    showToast('登録失敗: ' + (e.message || e));
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
+}
+document.getElementById('shibaQuickDone').addEventListener('click', quickDoneFromShiba);
+document.getElementById('shibaQuickTitle').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); quickDoneFromShiba(); }
 });
 attachSwipeClose('shibaSheet', 'shiba');
 (function initShibaFloating() {
