@@ -799,7 +799,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .shiba-floating:active { background: var(--surface-2); }
-/* フローティングアイコン上のミニバロメーター */
+/* フローティングアイコン上のミニバロメーター (アイコンと合わせて 1.2 倍) */
 .shiba-mini-bars {
   position: absolute;
   bottom: 100%;
@@ -807,8 +807,8 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   transform: translateX(-50%);
   display: flex;
   gap: 2px;
-  margin-bottom: 4px;
-  padding: 2px 3px;
+  margin-bottom: 5px;
+  padding: 3px 4px;
   background: var(--bg);
   border: 1px solid var(--border-soft, var(--border));
   border-radius: 3px;
@@ -818,8 +818,8 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 }
 .shiba-mini-bar {
   position: relative;
-  width: 4px;
-  height: 14px;
+  width: 5px;
+  height: 17px;
   background: rgba(0,0,0,0.08);
   border-radius: 1px;
   overflow: hidden;
@@ -852,7 +852,11 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   display: inline-block;
 }
 /* フローティングアイコンの emoji も 1.2 倍 */
-#shibaCard.shiba-floating { font-size: 25px; /* 元 21px × 1.2 */ }
+#shibaCard.shiba-floating {
+  width: 54px;       /* 45px × 1.2 */
+  height: 54px;
+  font-size: 30px;   /* 元 25px × 1.2 */
+}
 #shibaCard .shiba-inner,
 .shiba-emoji .shiba-inner {
   display: inline-block;
