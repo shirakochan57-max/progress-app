@@ -997,6 +997,67 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   animation: puppy-hop 2.2s ease-in-out infinite;
   transform-origin: center bottom;
 }
+/* おやすみモード ON 時: 犬・子犬・犬小屋すべて眠っている見た目に
+   (傾き + ゆっくり呼吸 + 💤 + opacity 0.85、元イラストを保持) */
+body.shiba-sleeping #shibaCard .shiba-inner,
+body.shiba-sleeping .shiba-emoji .shiba-inner {
+  animation: shiba-snooze 4s ease-in-out infinite !important;
+  transform-origin: center bottom;
+  opacity: 0.85 !important;
+}
+@keyframes shiba-snooze {
+  0%, 100% { transform: rotate(12deg) scale(1); }
+  50%      { transform: rotate(12deg) scale(1.05); }
+}
+body.shiba-sleeping .shiba-puppy {
+  animation: puppy-snooze 4s ease-in-out infinite !important;
+  animation-delay: 0s !important;
+  opacity: 0.8;
+}
+body.shiba-sleeping .shiba-puppy:nth-child(2n)   { animation-delay: 0.5s !important; }
+body.shiba-sleeping .shiba-puppy:nth-child(3n)   { animation-delay: 1.0s !important; }
+body.shiba-sleeping .shiba-puppy:nth-child(5n+1) { animation-delay: 1.5s !important; }
+body.shiba-sleeping .shiba-puppy:nth-child(7n+2) { animation-delay: 2.0s !important; }
+@keyframes puppy-snooze {
+  0%, 100% { transform: rotate(6deg) scale(1); }
+  50%      { transform: rotate(6deg) scale(1.06); }
+}
+body.shiba-sleeping .shiba-doghouse {
+  animation: puppy-snooze 4s ease-in-out infinite !important;
+  opacity: 0.85;
+}
+/* 💤 (Z) フワフワ漂う - フローティングアイコン側 */
+body.shiba-sleeping #shibaCard::after {
+  content: '💤';
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  font-size: 18px;
+  pointer-events: none;
+  animation: shiba-z-float 2.6s ease-in-out infinite;
+  filter: none;
+  z-index: 25;
+}
+/* 💤 - シート内の大きい犬側 */
+body.shiba-sleeping .shiba-emoji {
+  position: relative;
+}
+body.shiba-sleeping .shiba-emoji::after {
+  content: '💤';
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  font-size: 32px;
+  pointer-events: none;
+  animation: shiba-z-float 2.6s ease-in-out infinite;
+  filter: none;
+  z-index: 5;
+}
+@keyframes shiba-z-float {
+  0%   { transform: translateY(0)    translateX(0)   scale(1);    opacity: 0.85; }
+  50%  { transform: translateY(-5px) translateX(3px) scale(1.1);  opacity: 1; }
+  100% { transform: translateY(0)    translateX(0)   scale(1);    opacity: 0.85; }
+}
 .shiba-puppy-more {
   display: inline-block;
   margin-left: 6px;
@@ -4196,10 +4257,13 @@ function getShibaMood(s) {
 }
 function updateShibaSleepBtn(on) {
   const btn = document.getElementById('shibaSleepToggle');
-  if (!btn) return;
-  btn.textContent = on ? '☀️ 起きる' : '🌙 おやすみ';
-  btn.style.background = on ? 'var(--ink)' : '';
-  btn.style.color = on ? 'var(--inverted)' : '';
+  if (btn) {
+    btn.textContent = on ? '☀️ 起きる' : '🌙 おやすみ';
+    btn.style.background = on ? 'var(--ink)' : '';
+    btn.style.color = on ? 'var(--inverted)' : '';
+  }
+  // body にクラスを付けて 犬・子犬・犬小屋すべてを「寝てる」見た目に
+  document.body.classList.toggle('shiba-sleeping', !!on);
 }
 function updateShibaAutoBtn(on) {
   const btn = document.getElementById('shibaAutoToggle');
