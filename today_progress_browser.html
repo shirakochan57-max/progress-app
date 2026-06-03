@@ -5179,7 +5179,36 @@ async function quickAddFromShiba(markDone) {
 async function quickDoneFromShiba() { return quickAddFromShiba(true); }
 document.getElementById('shibaQuickDone').addEventListener('click', () => quickAddFromShiba(true));
 document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAddFromShiba(false));
-// Enter キーでの自動登録は廃止: IME変換確定 (Enter) で勝手に完了されないように。
+// === Enter キーで提出 (IME変換確定は除外) ===
+//   Enter           → 完了として登録 (✔)
+//   Shift + Enter   → 予定登録のみ (＋)
+// IME変換確定の Enter で誤発火しないよう、以下の多重ガードで判定:
+//   1) compositionstart/compositionend で isComposing フラグ管理
+//   2) e.isComposing (W3C 標準)
+//   3) e.keyCode === 229 (旧ブラウザ・IME経由のキーシグナル)
+//   4) compositionend から 200ms 以内の Enter は IME 確定とみなして無視
+(function setupShibaQuickEnter() {
+  const input = document.getElementById('shibaQuickTitle');
+  if (!input) return;
+  let isComposing = false;
+  let lastCompositionEndAt = 0;
+  input.addEventListener('compositionstart', () => { isComposing = true; });
+  input.addEventListener('compositionend', () => {
+    isComposing = false;
+    lastCompositionEndAt = Date.now();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    if (isComposing || e.isComposing || e.keyCode === 229) return;
+    if (Date.now() - lastCompositionEndAt < 200) return;
+    e.preventDefault();
+    if (e.shiftKey) {
+      quickAddFromShiba(false);
+    } else {
+      quickAddFromShiba(true);
+    }
+  });
+})();
 // === ソフトウェアキーボード対応 (iPhone のみ collapse、iPad ハードKBは何もしない) ===
 // - visualViewport.height が縮んだ場合 = ソフトウェアキーボードが上がった → keyboard-open class 付与
 // - 縮んでない = ハードウェアキーボード (iPad 外付け等) → 何もしない
