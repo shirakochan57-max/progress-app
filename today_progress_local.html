@@ -713,6 +713,31 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
 #shibaSheet.shiba-panel.dragging,
 #shibaSheet.shiba-panel.dragging .sheet-handle,
 #shibaSheet.shiba-panel.dragging h3 { cursor: grabbing; }
+/* 右下のリサイズハンドル */
+.shiba-resize-handle {
+  display: none;
+}
+#shibaSheet.shiba-panel .shiba-resize-handle {
+  display: block;
+  position: sticky;
+  bottom: 0;
+  margin-left: auto;
+  margin-right: -8px;
+  margin-top: -12px;
+  width: 22px; height: 22px;
+  cursor: nwse-resize;
+  touch-action: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 22px;
+  text-align: right;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 2;
+  pointer-events: auto;
+}
+#shibaSheet.shiba-panel.resizing,
+#shibaSheet.shiba-panel.resizing * { cursor: nwse-resize !important; user-select: none !important; }
 @media (max-width: 480px) {
   #shibaSheet.shiba-panel { width: 92vw; }
 }
@@ -1698,6 +1723,7 @@ body.shiba-sleeping .shiba-emoji::after {
     <button class="btn secondary" id="shibaSleepToggle" style="flex: 0 0 90px;">🌙 おやすみ</button>
     <button class="btn primary" id="shibaClose">閉じる</button>
   </div>
+  <div class="shiba-resize-handle" id="shibaResizeHandle" title="ドラッグでサイズ変更">↘</div>
 </div>
 
 <!-- ノートシート (Googleカレンダーに「日記」という終日予定として保存) -->
@@ -4635,8 +4661,35 @@ function shibaEarnCoin(ev) {
   setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
 }
-// ============= 豆柴シート = 浮きパネル (下の画面を操作可能、自由配置) =============
+// ============= 豆柴シート = 浮きパネル (下の画面を操作可能、自由配置、サイズ変更可) =============
 const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
+const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
+const SHIBA_PANEL_MIN_W = 240;
+const SHIBA_PANEL_MIN_H = 200;
+function saveShibaPanelSize() {
+  const panel = document.getElementById('shibaSheet');
+  const r = panel.getBoundingClientRect();
+  try {
+    localStorage.setItem(SHIBA_PANEL_SIZE_KEY, JSON.stringify({ w: r.width, h: r.height }));
+  } catch (e) {}
+}
+function restoreShibaPanelSize() {
+  const panel = document.getElementById('shibaSheet');
+  let sz = null;
+  try { sz = JSON.parse(localStorage.getItem(SHIBA_PANEL_SIZE_KEY) || 'null'); } catch (e) {}
+  if (sz && typeof sz.w === 'number' && typeof sz.h === 'number') {
+    const maxW = window.innerWidth - 16;
+    const maxH = window.innerHeight - 16;
+    panel.style.width = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, sz.w)) + 'px';
+    panel.style.height = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, sz.h)) + 'px';
+    panel.style.maxHeight = 'none';
+  } else {
+    // 未保存ならCSS既定値 (width 320px / max-height 70vh)
+    panel.style.width = '';
+    panel.style.height = '';
+    panel.style.maxHeight = '';
+  }
+}
 function clampShibaPanelToViewport() {
   const panel = document.getElementById('shibaSheet');
   if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
@@ -4691,6 +4744,7 @@ function openShibaPanel() {
   // backdrop は決して open にしない (下画面の操作を阻害しないため)
   const bd = document.getElementById('shibaBackdrop');
   if (bd) bd.classList.remove('open');
+  restoreShibaPanelSize();
   restoreShibaPanelPos();
   renderShiba();
 }
@@ -4765,6 +4819,73 @@ function closeShibaPanel() {
   }
   // ウィンドウサイズ変更時に画面内に収め直す
   window.addEventListener('resize', () => requestAnimationFrame(clampShibaPanelToViewport));
+})();
+// パネル右下のリサイズハンドル (大きさ変更)
+(function setupShibaPanelResize() {
+  const panel = document.getElementById('shibaSheet');
+  const handle = document.getElementById('shibaResizeHandle');
+  if (!handle) return;
+  let resizing = false;
+  let startX = 0, startY = 0, baseW = 0, baseH = 0, baseLeft = 0, baseTop = 0;
+  function onDown(e) {
+    if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
+    resizing = true;
+    panel.classList.add('resizing');
+    const r = panel.getBoundingClientRect();
+    baseW = r.width;
+    baseH = r.height;
+    baseLeft = r.left;
+    baseTop = r.top;
+    // 位置を left/top 基準に固定 (右下リサイズは位置を動かさない)
+    panel.style.left = baseLeft + 'px';
+    panel.style.top = baseTop + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.maxHeight = 'none';
+    const pt = e.touches ? e.touches[0] : e;
+    startX = pt.clientX;
+    startY = pt.clientY;
+    if (e.pointerId != null && handle.setPointerCapture) {
+      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function onMove(e) {
+    if (!resizing) return;
+    const pt = e.touches ? e.touches[0] : e;
+    const dx = pt.clientX - startX;
+    const dy = pt.clientY - startY;
+    const maxW = window.innerWidth - baseLeft - 8;
+    const maxH = window.innerHeight - baseTop - 8;
+    const newW = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, baseW + dx));
+    const newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
+    panel.style.width = newW + 'px';
+    panel.style.height = newH + 'px';
+    e.preventDefault();
+  }
+  function onUp(e) {
+    if (!resizing) return;
+    resizing = false;
+    panel.classList.remove('resizing');
+    saveShibaPanelSize();
+    if (e && e.pointerId != null && handle.releasePointerCapture) {
+      try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+  }
+  if (window.PointerEvent) {
+    handle.addEventListener('pointerdown', onDown);
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  } else {
+    handle.addEventListener('mousedown', onDown);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    handle.addEventListener('touchstart', onDown, { passive: false });
+    handle.addEventListener('touchmove', onMove, { passive: false });
+    handle.addEventListener('touchend', onUp);
+  }
 })();
 document.getElementById('shibaCard').addEventListener('click', () => {
   document.getElementById('shibaLog').textContent = 'タスクを完了するとコインが増えるよ';
