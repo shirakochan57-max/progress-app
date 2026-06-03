@@ -684,8 +684,10 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   top: auto;
   bottom: 96px;
   width: 320px;
+  height: 440px;             /* 既定の高さ (中身が absolute なので明示しないと潰れる) */
   max-width: calc(100vw - 24px);
-  max-height: 70vh;
+  max-height: calc(100vh - 120px);
+  min-height: 220px;
   margin: 0;
   padding: 0;
   border: 1.5px solid var(--border);
