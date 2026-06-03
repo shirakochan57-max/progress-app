@@ -1389,16 +1389,32 @@ body.shiba-sleeping .shiba-emoji::after {
   font-size: 16px;
 }
 /* === キーボード開いた時の自動折りたたみ === */
-/* 入力欄を最上段に固定し、犬は最下段で縮小、必ず全部見える状態にする */
+/* 入力 → 登録/完了ボタン → バー → 犬 の順で並べる */
 #shibaSheet.shiba-panel.keyboard-open .shiba-header-row,
 #shibaSheet.shiba-panel.keyboard-open .shiba-actions,
-#shibaSheet.shiba-panel.keyboard-open .shiba-bottom-actions,
 #shibaSheet.shiba-panel.keyboard-open .shiba-mood,
-#shibaSheet.shiba-panel.keyboard-open .shiba-puppies,
 #shibaSheet.shiba-panel.keyboard-open .shiba-feedback {
   display: none !important;
 }
-/* body をflex縦 にし、入力 → バー → 犬 の順で並べる */
+/* キーボード時の子犬: 表示するがコンパクトに */
+#shibaSheet.shiba-panel.keyboard-open .shiba-puppies {
+  display: block !important;
+  font-size: 13px;
+  line-height: 1.15;
+  max-height: 56px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-doghouse {
+  font-size: 14px;
+}
+/* キーボード時は同期/オート/おやすみ/閉じる は非表示。登録/完了のみ表示 */
+#shibaSheet.shiba-panel.keyboard-open #shibaSyncNow,
+#shibaSheet.shiba-panel.keyboard-open #shibaAutoToggle,
+#shibaSheet.shiba-panel.keyboard-open #shibaSleepToggle,
+#shibaSheet.shiba-panel.keyboard-open #shibaClose {
+  display: none !important;
+}
 #shibaSheet.shiba-panel.keyboard-open .shiba-panel-body {
   display: flex;
   flex-direction: column;
@@ -1408,10 +1424,35 @@ body.shiba-sleeping .shiba-emoji::after {
 #shibaSheet.shiba-panel.keyboard-open .shiba-quick {
   order: 1;
   flex: 0 0 auto;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-bottom-actions {
+  order: 2;
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-bottom-actions .btn {
+  min-height: 36px;
+  padding: 4px 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+/* ＋ / ✔ の右にラベル付加 (キーボード時に意味がわかりやすく) */
+#shibaSheet.shiba-panel.keyboard-open #shibaQuickAdd::after {
+  content: ' 登録';
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+#shibaSheet.shiba-panel.keyboard-open #shibaQuickDone::after {
+  content: ' 完了';
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 #shibaSheet.shiba-panel.keyboard-open .shiba-stats {
-  order: 2;
+  order: 3;
   flex: 0 0 auto;
   margin-bottom: 6px;
   gap: 4px;
@@ -1423,18 +1464,20 @@ body.shiba-sleeping .shiba-emoji::after {
   height: 8px;
 }
 #shibaSheet.shiba-panel.keyboard-open .shiba-display {
-  order: 3;
+  order: 4;
   flex: 1 1 auto;
-  min-height: 50px;
-  max-height: 160px;
+  min-height: 60px;
+  max-height: 180px;
   margin-bottom: 0;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 2px;
 }
 #shibaSheet.shiba-panel.keyboard-open .shiba-emoji {
-  font-size: 56px;
+  font-size: 46px;
 }
 .shiba-btn {
   border: 1.5px solid var(--border);
@@ -5232,7 +5275,14 @@ async function quickAddFromShiba(markDone) {
     shibaEarnPoints(3, '新規登録');
     if (markDone) shibaEarnCoin(created || {});
     input.value = '';
-    input.focus();
+    // キーボードモード中: 入力欄からフォーカスを外して元レイアウトに戻す
+    // 通常モード: 連続入力しやすいようフォーカスを保つ
+    const panelEl = document.getElementById('shibaSheet');
+    if (panelEl && panelEl.classList.contains('keyboard-open')) {
+      input.blur();
+    } else {
+      input.focus();
+    }
   } catch (e) {
     showToast('登録失敗: ' + (e.message || e));
   } finally {
@@ -5243,9 +5293,8 @@ async function quickAddFromShiba(markDone) {
 async function quickDoneFromShiba() { return quickAddFromShiba(true); }
 document.getElementById('shibaQuickDone').addEventListener('click', () => quickAddFromShiba(true));
 document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAddFromShiba(false));
-document.getElementById('shibaQuickTitle').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); quickAddFromShiba(true); }
-});
+// Enter キーでの自動登録は廃止: IME変換確定 (Enter) で勝手に完了されないように。
+// 登録/完了はユーザがボタンを押すまで実行しない。
 // === iOS ソフトウェアキーボード対応 ===
 // 入力フォーカス時: 犬+バー+入力欄のみ表示 + パネルを画面上端に移動・縮小して
 // キーボードに押し上げられても全部見える状態にする
