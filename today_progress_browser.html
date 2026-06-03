@@ -5180,76 +5180,47 @@ async function quickDoneFromShiba() { return quickAddFromShiba(true); }
 document.getElementById('shibaQuickDone').addEventListener('click', () => quickAddFromShiba(true));
 document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAddFromShiba(false));
 // Enter キーでの自動登録は廃止: IME変換確定 (Enter) で勝手に完了されないように。
-// === iOS ソフトウェアキーボード対応 ===
-// 入力フォーカス時: 犬+バー+入力欄のみ表示 + パネルを画面上端に移動・縮小して
-// キーボードに押し上げられても全部見える状態にする
+// === ソフトウェアキーボード対応 (iPhone のみ collapse、iPad ハードKBは何もしない) ===
+// - visualViewport.height が縮んだ場合 = ソフトウェアキーボードが上がった → keyboard-open class 付与
+// - 縮んでない = ハードウェアキーボード (iPad 外付け等) → 何もしない
+// - パネル自体の位置・サイズは絶対に動かさない (上下スクロールの往復を防止)
 (function setupShibaKeyboardCollapse() {
   const panel = document.getElementById('shibaSheet');
   if (!panel) return;
   let blurTimer = null;
-  let savedRect = null;
-  function applyKeyboardMode() {
-    if (!savedRect) {
-      const r = panel.getBoundingClientRect();
-      savedRect = { left: r.left, top: r.top, width: r.width, height: r.height };
-    }
-    const vv = window.visualViewport;
-    const availH = vv ? vv.height : window.innerHeight;
-    const availW = vv ? vv.width : window.innerWidth;
-    const offsetTop = vv ? vv.offsetTop : 0;
-    const offsetLeft = vv ? vv.offsetLeft : 0;
-    const margin = 8;
-    const newH = Math.max(220, Math.min(availH - margin*2, 360));
-    const newTop = offsetTop + margin;
-    let newW = Math.min(savedRect.width || 320, availW - margin*2);
-    let newLeft = parseFloat(panel.style.left);
-    if (isNaN(newLeft)) newLeft = offsetLeft + availW - newW - 16;
-    if (newLeft + newW > offsetLeft + availW - margin) newLeft = offsetLeft + availW - newW - margin;
-    if (newLeft < offsetLeft + margin) newLeft = offsetLeft + margin;
-    panel.style.top = newTop + 'px';
-    panel.style.left = newLeft + 'px';
-    panel.style.width = newW + 'px';
-    panel.style.height = newH + 'px';
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    panel.style.maxHeight = 'none';
-  }
-  function restoreFromKeyboardMode() {
-    if (!savedRect) return;
-    panel.style.left = savedRect.left + 'px';
-    panel.style.top = savedRect.top + 'px';
-    panel.style.width = savedRect.width + 'px';
-    panel.style.height = savedRect.height + 'px';
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    panel.style.maxHeight = '';
-    savedRect = null;
-    requestAnimationFrame(clampShibaPanelToViewport);
+  let focusInTimer = null;
+  function isSoftwareKeyboard() {
+    if (!window.visualViewport) return true;
+    const diff = window.innerHeight - window.visualViewport.height;
+    return diff > 100;
   }
   panel.addEventListener('focusin', (e) => {
     if (!e.target.matches('input, textarea')) return;
     if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
-    panel.classList.add('keyboard-open');
-    applyKeyboardMode();
-    setTimeout(applyKeyboardMode, 250);
-    setTimeout(applyKeyboardMode, 600);
+    if (focusInTimer) clearTimeout(focusInTimer);
+    focusInTimer = setTimeout(() => {
+      const active = document.activeElement;
+      if (!active || !panel.contains(active) || !active.matches('input, textarea')) return;
+      if (isSoftwareKeyboard()) {
+        panel.classList.add('keyboard-open');
+      }
+    }, 300);
   });
   panel.addEventListener('focusout', (e) => {
     if (!e.target.matches('input, textarea')) return;
+    if (focusInTimer) { clearTimeout(focusInTimer); focusInTimer = null; }
     blurTimer = setTimeout(() => {
       const active = document.activeElement;
       if (!active || !panel.contains(active) || !active.matches('input, textarea')) {
         panel.classList.remove('keyboard-open');
-        restoreFromKeyboardMode();
       }
     }, 200);
   });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
-      if (panel.classList.contains('keyboard-open')) applyKeyboardMode();
-    });
-    window.visualViewport.addEventListener('scroll', () => {
-      if (panel.classList.contains('keyboard-open')) applyKeyboardMode();
+      if (panel.classList.contains('keyboard-open') && !isSoftwareKeyboard()) {
+        panel.classList.remove('keyboard-open');
+      }
     });
   }
 })();
