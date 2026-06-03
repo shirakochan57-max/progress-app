@@ -5167,13 +5167,9 @@ async function quickAddFromShiba(markDone) {
     shibaEarnPoints(3, '新規登録');
     if (markDone) shibaEarnCoin(created || {});
     input.value = '';
-    // キーボードモード中: 入力欄からフォーカスを外して元レイアウトに戻す
-    const panelEl = document.getElementById('shibaSheet');
-    if (panelEl && panelEl.classList.contains('keyboard-open')) {
-      input.blur();
-    } else {
-      input.focus();
-    }
+    // 提出後は常に blur (キーボード閉じる)。
+    // (focus() してしまうと iOS でキーボードが再オープンし keyboard-open が再付与される)
+    input.blur();
   } catch (e) {
     showToast('登録失敗: ' + (e.message || e));
   } finally {
