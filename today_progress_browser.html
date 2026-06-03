@@ -673,6 +673,48 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   max-width: 640px; margin: 0 auto;
 }
 .sheet.open { transform: translateY(0); }
+/* 豆柴シートを「自由配置できる浮きパネル」モードに切り替える
+   - backdrop なし (下の画面を操作可能)
+   - 位置を保存 / ドラッグ移動
+   - スライド開閉アニメ無し (即時 show/hide) */
+#shibaSheet.shiba-panel {
+  position: fixed;
+  left: auto;
+  right: 16px;
+  top: auto;
+  bottom: 96px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: 70vh;
+  margin: 0;
+  padding: 10px 14px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  transform: none !important;
+  transition: none;
+  box-shadow: 0 6px 28px rgba(0,0,0,0.22);
+  z-index: 28;
+  overflow-y: auto;
+}
+#shibaSheet.shiba-panel:not(.open) { display: none; }
+#shibaSheet.shiba-panel .sheet-handle {
+  cursor: grab;
+  width: 60px; height: 6px;
+  margin: 4px auto 8px;
+  touch-action: none;
+}
+#shibaSheet.shiba-panel h3 {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+#shibaSheet.shiba-panel.dragging,
+#shibaSheet.shiba-panel.dragging .sheet-handle,
+#shibaSheet.shiba-panel.dragging h3 { cursor: grabbing; }
+@media (max-width: 480px) {
+  #shibaSheet.shiba-panel { width: 92vw; }
+}
 .sheet-handle {
   width: 40px; height: 4px;
   background: var(--text);
@@ -3311,8 +3353,8 @@ async function deleteCardEvent(ev) {
 }
 
 function openSheet(name) {
-  // 先に他のシートを全部閉じる
-  document.querySelectorAll('.sheet.open, .sheet-backdrop.open').forEach(el => el.classList.remove('open'));
+  // 先に他のシートを全部閉じる (ただし豆柴の浮きパネルは閉じない = .shiba-panel を除外)
+  document.querySelectorAll('.sheet.open:not(.shiba-panel), .sheet-backdrop.open').forEach(el => el.classList.remove('open'));
   document.getElementById(name + 'Backdrop').classList.add('open');
   document.getElementById(name + 'Sheet').classList.add('open');
 }
@@ -4500,10 +4542,134 @@ function shibaEarnCoin(ev) {
   setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
   applyShibaState(s);
 }
-document.getElementById('shibaCard').addEventListener('click', () => {
+// ============= 豆柴シート = 浮きパネル (下の画面を操作可能、自由配置) =============
+const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
+function clampShibaPanelToViewport() {
+  const panel = document.getElementById('shibaSheet');
+  if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
+  const r = panel.getBoundingClientRect();
+  const margin = 8;
+  const minLeft = -(r.width - 60);
+  const maxLeft = window.innerWidth - 60;
+  const minTop = 0;
+  const maxTop = window.innerHeight - 36;
+  let left = r.left;
+  let top = r.top;
+  if (left < minLeft + margin) left = minLeft + margin;
+  if (left > maxLeft - margin) left = maxLeft - margin;
+  if (top < minTop + margin) top = minTop + margin;
+  if (top > maxTop - margin) top = maxTop - margin;
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+}
+function saveShibaPanelPos() {
+  const panel = document.getElementById('shibaSheet');
+  const r = panel.getBoundingClientRect();
+  try {
+    localStorage.setItem(SHIBA_PANEL_POS_KEY, JSON.stringify({ left: r.left, top: r.top }));
+  } catch (e) {}
+}
+function restoreShibaPanelPos() {
+  const panel = document.getElementById('shibaSheet');
+  let pos = null;
+  try { pos = JSON.parse(localStorage.getItem(SHIBA_PANEL_POS_KEY) || 'null'); } catch (e) {}
+  if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+    panel.style.left = pos.left + 'px';
+    panel.style.top = pos.top + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    requestAnimationFrame(clampShibaPanelToViewport);
+  } else {
+    panel.style.left = '';
+    panel.style.top = '';
+    panel.style.right = '';
+    panel.style.bottom = '';
+  }
+}
+function openShibaPanel() {
+  const panel = document.getElementById('shibaSheet');
+  panel.classList.add('shiba-panel');
+  panel.classList.add('open');
+  const bd = document.getElementById('shibaBackdrop');
+  if (bd) bd.classList.remove('open');
+  restoreShibaPanelPos();
   renderShiba();
+}
+function closeShibaPanel() {
+  document.getElementById('shibaSheet').classList.remove('open');
+}
+(function setupShibaPanelDrag() {
+  const panel = document.getElementById('shibaSheet');
+  let dragging = false;
+  let startX = 0, startY = 0, baseLeft = 0, baseTop = 0;
+  function isDragHandle(target) {
+    if (!target) return false;
+    if (target.closest('input, button, select, textarea, a')) return false;
+    return !!target.closest('#shibaSheet .sheet-handle, #shibaSheet > h3');
+  }
+  function onDown(e) {
+    if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
+    if (!isDragHandle(e.target)) return;
+    dragging = true;
+    panel.classList.add('dragging');
+    const r = panel.getBoundingClientRect();
+    baseLeft = r.left;
+    baseTop = r.top;
+    panel.style.left = baseLeft + 'px';
+    panel.style.top = baseTop + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    const pt = e.touches ? e.touches[0] : e;
+    startX = pt.clientX;
+    startY = pt.clientY;
+    if (e.pointerId != null && panel.setPointerCapture) {
+      try { panel.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    e.preventDefault();
+  }
+  function onMove(e) {
+    if (!dragging) return;
+    const pt = e.touches ? e.touches[0] : e;
+    const dx = pt.clientX - startX;
+    const dy = pt.clientY - startY;
+    panel.style.left = (baseLeft + dx) + 'px';
+    panel.style.top = (baseTop + dy) + 'px';
+    e.preventDefault();
+  }
+  function onUp(e) {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove('dragging');
+    clampShibaPanelToViewport();
+    saveShibaPanelPos();
+    if (e && e.pointerId != null && panel.releasePointerCapture) {
+      try { panel.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+  }
+  if (window.PointerEvent) {
+    panel.addEventListener('pointerdown', onDown);
+    panel.addEventListener('pointermove', onMove);
+    panel.addEventListener('pointerup', onUp);
+    panel.addEventListener('pointercancel', onUp);
+  } else {
+    panel.addEventListener('mousedown', onDown);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    panel.addEventListener('touchstart', onDown, { passive: false });
+    panel.addEventListener('touchmove', onMove, { passive: false });
+    panel.addEventListener('touchend', onUp);
+  }
+  window.addEventListener('resize', () => requestAnimationFrame(clampShibaPanelToViewport));
+})();
+document.getElementById('shibaCard').addEventListener('click', () => {
   document.getElementById('shibaLog').textContent = 'タスクを完了するとコインが増えるよ';
-  openSheet('shiba');
+  if (document.getElementById('shibaSheet').classList.contains('open')) {
+    closeShibaPanel();
+  } else {
+    openShibaPanel();
+  }
 });
 document.getElementById('shibaSleepToggle').addEventListener('click', () => {
   const s = tickShiba(loadShiba());
@@ -4530,8 +4696,10 @@ document.getElementById('shibaAutoToggle').addEventListener('click', () => {
   }
   renderShiba();
 });
-document.getElementById('shibaClose').addEventListener('click', () => closeSheet('shiba'));
-document.getElementById('shibaBackdrop').addEventListener('click', () => closeSheet('shiba'));
+document.getElementById('shibaClose').addEventListener('click', () => closeShibaPanel());
+// backdrop は浮きパネルでは使わない (.open にしないので非表示・非ブロッキング)。
+// 念のためクリック時はパネルを閉じる挙動を維持
+document.getElementById('shibaBackdrop').addEventListener('click', () => closeShibaPanel());
 document.querySelectorAll('.shiba-btn').forEach(btn => {
   btn.addEventListener('click', () => shibaAction(btn.dataset.action));
 });
@@ -4577,7 +4745,8 @@ document.getElementById('shibaQuickDone').addEventListener('click', quickDoneFro
 document.getElementById('shibaQuickTitle').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); quickDoneFromShiba(); }
 });
-attachSwipeClose('shibaSheet', 'shiba');
+// shibaSheet は浮きパネル化したのでスワイプクローズは付けない (ドラッグ移動が衝突するため)
+// attachSwipeClose('shibaSheet', 'shiba');
 (function initShibaFloating() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
