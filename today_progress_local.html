@@ -1389,18 +1389,52 @@ body.shiba-sleeping .shiba-emoji::after {
   font-size: 16px;
 }
 /* === キーボード開いた時の自動折りたたみ === */
-/* ヘッダ・アクション・底部ボタンを隠して、犬+バー+入力欄だけ表示 */
+/* 入力欄を最上段に固定し、犬は最下段で縮小、必ず全部見える状態にする */
 #shibaSheet.shiba-panel.keyboard-open .shiba-header-row,
 #shibaSheet.shiba-panel.keyboard-open .shiba-actions,
 #shibaSheet.shiba-panel.keyboard-open .shiba-bottom-actions,
-#shibaSheet.shiba-panel.keyboard-open .shiba-mood {
+#shibaSheet.shiba-panel.keyboard-open .shiba-mood,
+#shibaSheet.shiba-panel.keyboard-open .shiba-puppies,
+#shibaSheet.shiba-panel.keyboard-open .shiba-feedback {
   display: none !important;
 }
-#shibaSheet.shiba-panel.keyboard-open .shiba-display {
+/* body をflex縦 にし、入力 → バー → 犬 の順で並べる */
+#shibaSheet.shiba-panel.keyboard-open .shiba-panel-body {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px;
+  overflow: hidden;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-quick {
+  order: 1;
+  flex: 0 0 auto;
   margin-bottom: 6px;
 }
 #shibaSheet.shiba-panel.keyboard-open .shiba-stats {
+  order: 2;
+  flex: 0 0 auto;
   margin-bottom: 6px;
+  gap: 4px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-stats .stat-row {
+  font-size: 11px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-stats .stat-bar {
+  height: 8px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-display {
+  order: 3;
+  flex: 1 1 auto;
+  min-height: 50px;
+  max-height: 160px;
+  margin-bottom: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-emoji {
+  font-size: 56px;
 }
 .shiba-btn {
   border: 1.5px solid var(--border);
