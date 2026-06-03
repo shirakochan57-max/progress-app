@@ -1288,6 +1288,19 @@ body.shiba-sleeping .shiba-emoji::after {
   justify-content: center;
 }
 .shiba-coins .muted { color: var(--text-muted); font-weight: 500; font-size: 12px; }
+/* === 浮きパネル: 統合ヘッダ (Lv / 次まで / コイン を1行) === */
+.shiba-header-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.shiba-header-row .shiba-header-lv { font-size: 14px; }
+.shiba-header-row .shiba-header-next { font-size: 11px; font-weight: 500; }
+.shiba-header-row .shiba-header-coin { margin-left: auto; font-size: 14px; }
 .shiba-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .stat-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .stat-row > .stat-label { width: 36px; font-weight: 700; letter-spacing: 0.5px; }
@@ -1311,6 +1324,82 @@ body.shiba-sleeping .shiba-emoji::after {
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
   margin-bottom: 10px;
+}
+/* === 絵文字のみ・横1列のアクションボタン === */
+.shiba-actions.shiba-actions-emoji {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.shiba-actions.shiba-actions-emoji .shiba-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 2px;
+  font-size: 20px;
+  line-height: 1;
+  min-height: 36px;
+}
+/* === 簡易入力欄 === */
+.shiba-quick {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  align-items: stretch;
+}
+.shiba-quick input[type="text"] {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+}
+.shiba-quick .shiba-quick-btn {
+  flex: 0 0 56px;
+  min-height: 34px;
+  padding: 4px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-radius: 8px;
+}
+/* === 底部ボタン (同期/オート/おやすみ/閉じる) コンパクト === */
+.sheet-actions.shiba-bottom-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.sheet-actions.shiba-bottom-actions .btn {
+  min-height: 30px;
+  padding: 4px 6px;
+  font-size: 13px;
+  border-radius: 7px;
+  font-weight: 600;
+}
+.sheet-actions.shiba-bottom-actions .btn.secondary {
+  flex: 0 0 36px;
+}
+.sheet-actions.shiba-bottom-actions .btn.primary {
+  flex: 1 1 0;
+  font-size: 12px;
+}
+/* === キーボード開いた時の自動折りたたみ === */
+#shibaSheet.shiba-panel.keyboard-open .shiba-header-row,
+#shibaSheet.shiba-panel.keyboard-open .shiba-actions,
+#shibaSheet.shiba-panel.keyboard-open .shiba-bottom-actions,
+#shibaSheet.shiba-panel.keyboard-open .shiba-mood {
+  display: none !important;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-display {
+  margin-bottom: 6px;
+}
+#shibaSheet.shiba-panel.keyboard-open .shiba-stats {
+  margin-bottom: 6px;
 }
 .shiba-btn {
   border: 1.5px solid var(--border);
@@ -1791,12 +1880,11 @@ body.shiba-sleeping .shiba-emoji::after {
 <div class="sheet" id="shibaSheet">
   <div class="sheet-handle"></div>
   <div class="shiba-panel-body">
-  <h3 style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-    <span>豆柴ちゃん</span>
-    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0;">
-      ⭐ 幸福度 Lv.<span id="shibaLevel">0</span>
-      <span class="muted" style="font-size: 11px; font-weight: 500; margin-left: 4px;">次まで <span id="shibaToNext">100</span> pt</span>
-    </span>
+  <h3 class="shiba-header-row">
+    <span class="shiba-header-lv">⭐ Lv.<span id="shibaLevel">0</span></span>
+    <span class="shiba-header-next muted">次まで <span id="shibaToNext">100</span> pt</span>
+    <span class="shiba-header-coin">🪙 <span id="shibaCoins">0</span></span>
+    <span id="shibaTotalDone" style="display:none;">0</span>
   </h3>
   <div class="shiba-display">
     <div class="shiba-emoji" id="shibaEmoji"><span class="shiba-inner">🐶</span></div>
@@ -1804,38 +1892,34 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-puppies" id="shibaPuppies"></div>
     <div class="shiba-mood" id="shibaMood">ごきげん</div>
   </div>
-  <div class="shiba-coins">
-    🪙 <span id="shibaCoins">0</span> <span class="muted">コイン</span>
-    <span class="muted" style="margin-left: 10px;">完了 <span id="shibaTotalDone">0</span></span>
-  </div>
   <div class="shiba-stats">
     <div class="stat-row"><span class="stat-label">満腹</span><div class="stat-bar"><div class="stat-fill" id="hungerFill"></div></div><span class="stat-val" id="hungerVal">50</span></div>
     <div class="stat-row"><span class="stat-label">気持ち</span><div class="stat-bar"><div class="stat-fill" id="happyFill"></div></div><span class="stat-val" id="happyVal">50</span></div>
     <div class="stat-row"><span class="stat-label">体力</span><div class="stat-bar"><div class="stat-fill" id="staminaFill"></div></div><span class="stat-val" id="staminaVal">50</span></div>
     <div class="stat-row"><span class="stat-label">快適</span><div class="stat-bar"><div class="stat-fill" id="comfortFill"></div></div><span class="stat-val" id="comfortVal">50</span></div>
   </div>
-  <div class="shiba-actions">
-    <button class="shiba-btn" data-action="feed">🍖 ごはん (6)</button>
-    <button class="shiba-btn" data-action="pet">🤗 なでなで (3)</button>
-    <button class="shiba-btn" data-action="play">🧸 おもちゃ (2)</button>
-    <button class="shiba-btn" data-action="walk">🚶 さんぽ (5)</button>
-    <button class="shiba-btn" data-action="nap">💤 ひるね (5)</button>
-    <button class="shiba-btn" data-action="poopClean">💩 そうじ (4)</button>
+  <div class="shiba-actions shiba-actions-emoji">
+    <button class="shiba-btn" data-action="feed" title="ごはん (6)">🍖</button>
+    <button class="shiba-btn" data-action="pet" title="なでなで (3)">🤗</button>
+    <button class="shiba-btn" data-action="play" title="おもちゃ (2)">🧸</button>
+    <button class="shiba-btn" data-action="walk" title="さんぽ (5)">🚶</button>
+    <button class="shiba-btn" data-action="nap" title="ひるね (5)">💤</button>
+    <button class="shiba-btn" data-action="poopClean" title="そうじ (4)">💩</button>
   </div>
-  <div class="shiba-quick" style="display: flex; gap: 6px; margin-bottom: 8px; align-items: stretch;">
-    <input type="text" id="shibaQuickTitle" placeholder="やったタスクをサクッと登録"
-      lang="ja" autocomplete="off" autocorrect="off"
-      style="flex: 1; min-height: 36px; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13px;">
-    <button class="btn primary" id="shibaQuickDone" style="flex: 0 0 96px; min-height: 36px; font-size: 13px;">✔️ DONE</button>
+  <div class="shiba-quick">
+    <input type="text" id="shibaQuickTitle" placeholder="タスクを入力"
+      lang="ja" autocomplete="off" autocorrect="off">
+    <button class="btn secondary shiba-quick-btn" id="shibaQuickAdd" title="登録のみ">＋登録</button>
+    <button class="btn primary shiba-quick-btn" id="shibaQuickDone" title="登録 + 完了">✔完了</button>
   </div>
-  <div class="shiba-log" id="shibaLog">タスクを完了するとコインが増えるよ</div>
-  <div class="shiba-log" id="shibaSyncStatus" style="font-size:11px;">同期: -</div>
-  <div class="sheet-actions">
-    <button class="btn secondary" id="shibaSyncNow" style="flex: 0 0 70px;">🔄 同期</button>
-    <button class="btn secondary" id="shibaAutoToggle" style="flex: 0 0 80px;">🤖 オート</button>
-    <button class="btn secondary" id="shibaSleepToggle" style="flex: 0 0 90px;">🌙 おやすみ</button>
+  <div class="sheet-actions shiba-bottom-actions">
+    <button class="btn secondary" id="shibaSyncNow">🔄</button>
+    <button class="btn secondary" id="shibaAutoToggle">🤖</button>
+    <button class="btn secondary" id="shibaSleepToggle">🌙</button>
     <button class="btn primary" id="shibaClose">閉じる</button>
   </div>
+  <span id="shibaSyncStatus" style="display:none;">-</span>
+  <span id="shibaLog" style="display:none;"></span>
   </div><!-- /shiba-panel-body -->
   <div class="shiba-corner shiba-corner-tl" id="shibaCornerTL" data-resize-mode="tl" title="サイズ変更">↖</div>
   <div class="shiba-corner shiba-corner-tr" id="shibaCornerTR" data-resize-mode="tr" title="サイズ変更">↗</div>
@@ -4947,7 +5031,6 @@ function closeShibaPanel() {
   }
 })();
 document.getElementById('shibaCard').addEventListener('click', () => {
-  document.getElementById('shibaLog').textContent = 'タスクを完了するとコインが増えるよ';
   if (document.getElementById('shibaSheet').classList.contains('open')) {
     closeShibaPanel();
   } else {
@@ -4987,15 +5070,16 @@ document.querySelectorAll('.shiba-btn').forEach(btn => {
   btn.addEventListener('click', () => shibaAction(btn.dataset.action));
 });
 // 簡易タスク登録+完了 (シートを閉じずに連続登録可能)
-async function quickDoneFromShiba() {
+async function quickAddFromShiba(markDone) {
   if (!getGasUrl()) { showToast('GAS URL 未設定'); return; }
   const input = document.getElementById('shibaQuickTitle');
   const titleRaw = input.value.trim();
   if (!titleRaw) { showToast('タイトルを入力'); return; }
-  const title = '✔️ ' + titleRaw;
-  const btn = document.getElementById('shibaQuickDone');
+  const title = markDone ? ('✔️ ' + titleRaw) : titleRaw;
+  const btnId = markDone ? 'shibaQuickDone' : 'shibaQuickAdd';
+  const btn = document.getElementById(btnId);
   const origText = btn.textContent;
-  btn.disabled = true; btn.textContent = '登録中…';
+  btn.disabled = true; btn.textContent = '…';
   try {
     const dateKey = fmtDate(currentDate);
     const startISO = dateKey + 'T00:00:00';
@@ -5015,7 +5099,7 @@ async function quickDoneFromShiba() {
       setCachedEvents(dateKey, eventsCache);
     }
     shibaEarnPoints(3, '新規登録');
-    shibaEarnCoin(created || {});
+    if (markDone) shibaEarnCoin(created || {});
     input.value = '';
     input.focus();
   } catch (e) {
@@ -5024,10 +5108,36 @@ async function quickDoneFromShiba() {
     btn.disabled = false; btn.textContent = origText;
   }
 }
-document.getElementById('shibaQuickDone').addEventListener('click', quickDoneFromShiba);
+async function quickDoneFromShiba() { return quickAddFromShiba(true); }
+document.getElementById('shibaQuickDone').addEventListener('click', () => quickAddFromShiba(true));
+document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAddFromShiba(false));
 document.getElementById('shibaQuickTitle').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); quickDoneFromShiba(); }
+  if (e.key === 'Enter') { e.preventDefault(); quickAddFromShiba(true); }
 });
+// === iOS ソフトウェアキーボード対応: 入力フォーカス時に犬+バー+入力欄のみ表示 ===
+(function setupShibaKeyboardCollapse() {
+  const panel = document.getElementById('shibaSheet');
+  if (!panel) return;
+  let blurTimer = null;
+  panel.addEventListener('focusin', (e) => {
+    if (!e.target.matches('input, textarea')) return;
+    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+    panel.classList.add('keyboard-open');
+    setTimeout(() => {
+      const body = panel.querySelector('.shiba-panel-body');
+      if (body) body.scrollTop = body.scrollHeight;
+    }, 100);
+  });
+  panel.addEventListener('focusout', (e) => {
+    if (!e.target.matches('input, textarea')) return;
+    blurTimer = setTimeout(() => {
+      const active = document.activeElement;
+      if (!active || !panel.contains(active) || !active.matches('input, textarea')) {
+        panel.classList.remove('keyboard-open');
+      }
+    }, 150);
+  });
+})();
 // shibaSheet は浮きパネル化したのでスワイプクローズは付けない (ドラッグ移動が衝突するため)
 // attachSwipeClose('shibaSheet', 'shiba');
 (function initShibaFloating() {
