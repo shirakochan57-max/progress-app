@@ -5214,6 +5214,7 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
 // - 縮んでない = ハードウェアキーボード (iPad 外付け等) → 何もしない
 // - パネル自体の位置・サイズは絶対に動かさない
 // - .shiba-panel-body の scrollTop はタップ直前の値を保存し、提出後に復元
+//   (提出後にコンテンツ高さが変わるので、入力欄が見えなければ scrollIntoView でフォロー)
 (function setupShibaKeyboardCollapse() {
   const panel = document.getElementById('shibaSheet');
   if (!panel) return;
@@ -5226,6 +5227,10 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     return diff > 100;
   }
   function getBody() { return panel.querySelector('.shiba-panel-body'); }
+  function isPanelInputFocused() {
+    const a = document.activeElement;
+    return !!(a && panel.contains(a) && a.matches('input, textarea'));
+  }
   panel.addEventListener('pointerdown', (e) => {
     if (!e.target.matches('input, textarea')) return;
     const body = getBody();
@@ -5236,9 +5241,7 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
     if (focusInTimer) clearTimeout(focusInTimer);
     focusInTimer = setTimeout(() => {
-      const active = document.activeElement;
-      if (!active || !panel.contains(active) || !active.matches('input, textarea')) return;
-      if (isSoftwareKeyboard()) {
+      if (isPanelInputFocused() && isSoftwareKeyboard()) {
         panel.classList.add('keyboard-open');
       }
     }, 300);
@@ -5247,13 +5250,24 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     if (!e.target.matches('input, textarea')) return;
     if (focusInTimer) { clearTimeout(focusInTimer); focusInTimer = null; }
     blurTimer = setTimeout(() => {
-      const active = document.activeElement;
-      if (!active || !panel.contains(active) || !active.matches('input, textarea')) {
+      if (!isPanelInputFocused()) {
         panel.classList.remove('keyboard-open');
         if (savedScrollTop !== null) {
           const target = savedScrollTop;
           savedScrollTop = null;
-          const restore = () => { const b = getBody(); if (b) b.scrollTop = target; };
+          const restore = () => {
+            const b = getBody();
+            if (!b) return;
+            b.scrollTop = target;
+            const inputEl = document.getElementById('shibaQuickTitle');
+            if (inputEl) {
+              const br = b.getBoundingClientRect();
+              const ir = inputEl.getBoundingClientRect();
+              if (ir.top < br.top || ir.bottom > br.bottom) {
+                inputEl.scrollIntoView({ block: 'nearest' });
+              }
+            }
+          };
           requestAnimationFrame(() => {
             restore();
             requestAnimationFrame(restore);
@@ -5267,6 +5281,10 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     window.visualViewport.addEventListener('resize', () => {
       if (panel.classList.contains('keyboard-open') && !isSoftwareKeyboard()) {
         panel.classList.remove('keyboard-open');
+        return;
+      }
+      if (!panel.classList.contains('keyboard-open') && isSoftwareKeyboard() && isPanelInputFocused()) {
+        panel.classList.add('keyboard-open');
       }
     });
   }
@@ -5297,6 +5315,10 @@ let _shibaSyncEventId = null;
 let _shibaPushTimer = null;
 let _shibaPushing = false;
 let _shibaLastPushedModifiedAt = 0; // 同じ状態の重複 push を抑止
+// 起動時の GAS pull が完了するまで auto-push を抑制するフラグ
+// 新版/新デバイスで localStorage がリセットされた直後にユーザ操作が走り、
+// デフォルト状態を GAS へ push してしまうレースを防ぐ
+let _shibaGasInitDone = false;
 async function shibaPullRemote() {
   if (!getGasUrl()) return null;
   try {
@@ -5338,6 +5360,8 @@ async function shibaPushRemote(state) {
   finally { _shibaPushing = false; }
 }
 function shibaPushDebounced() {
+  // 起動時の GAS pull が完了するまでは push しない (デフォルト状態の誤上書きを防止)
+  if (!_shibaGasInitDone) return;
   if (_shibaPushTimer) clearTimeout(_shibaPushTimer);
   _shibaPushTimer = setTimeout(() => {
     const s = loadShiba();
@@ -5363,11 +5387,22 @@ function shibaApplyIfNewer(remote) {
   }
   return false;
 }
+// 起動時: GAS pull を最優先で実行。完了するまで auto-push を抑制する。
+// 新版で localStorage がリセットされても、GAS から正しい状態が復元される。
 (async function initShibaSync() {
-  await new Promise(r => setTimeout(r, 1500));
-  if (!getGasUrl()) return;
-  const remote = await shibaPullRemote();
-  if (!shibaApplyIfNewer(remote)) shibaPushDebounced();
+  if (!getGasUrl()) {
+    _shibaGasInitDone = true;
+    return;
+  }
+  try {
+    const remote = await Promise.race([
+      shibaPullRemote(),
+      new Promise(r => setTimeout(() => r(null), 5000))
+    ]);
+    if (remote) shibaApplyIfNewer(remote);
+  } catch (e) { /* silent */ }
+  _shibaGasInitDone = true;
+  shibaPushDebounced();
 })();
 setInterval(async () => {
   if (!getGasUrl()) return;

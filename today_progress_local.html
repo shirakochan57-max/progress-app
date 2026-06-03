@@ -5326,7 +5326,7 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
 // - 縮んでない = ハードウェアキーボード (iPad 外付け等) → 何もしない
 // - パネル自体の位置・サイズは絶対に動かさない
 // - .shiba-panel-body の scrollTop はタップ直前の値を保存し、提出後に復元
-//   (ブラウザの自動スクロールで位置が変わる問題への対処)
+//   (提出後にコンテンツ高さが変わるので、入力欄が見えなければ scrollIntoView でフォロー)
 (function setupShibaKeyboardCollapse() {
   const panel = document.getElementById('shibaSheet');
   if (!panel) return;
@@ -5339,7 +5339,11 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     return diff > 100;
   }
   function getBody() { return panel.querySelector('.shiba-panel-body'); }
-  // 入力欄を「タップした瞬間」に元のスクロール位置を保存 (focusinより先に発火する)
+  function isPanelInputFocused() {
+    const a = document.activeElement;
+    return !!(a && panel.contains(a) && a.matches('input, textarea'));
+  }
+  // 入力欄をタップした瞬間に元のスクロール位置を保存 (focusinより先に発火する)
   panel.addEventListener('pointerdown', (e) => {
     if (!e.target.matches('input, textarea')) return;
     const body = getBody();
@@ -5349,10 +5353,9 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     if (!e.target.matches('input, textarea')) return;
     if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
     if (focusInTimer) clearTimeout(focusInTimer);
+    // 1回目: 300ms 後 (キーボードが立ち上がる目安)
     focusInTimer = setTimeout(() => {
-      const active = document.activeElement;
-      if (!active || !panel.contains(active) || !active.matches('input, textarea')) return;
-      if (isSoftwareKeyboard()) {
+      if (isPanelInputFocused() && isSoftwareKeyboard()) {
         panel.classList.add('keyboard-open');
       }
     }, 300);
@@ -5361,18 +5364,31 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     if (!e.target.matches('input, textarea')) return;
     if (focusInTimer) { clearTimeout(focusInTimer); focusInTimer = null; }
     blurTimer = setTimeout(() => {
-      const active = document.activeElement;
-      if (!active || !panel.contains(active) || !active.matches('input, textarea')) {
+      if (!isPanelInputFocused()) {
         panel.classList.remove('keyboard-open');
-        // タップ直前のスクロール位置を復元 (レイアウト切替後の reflow を待ってから)
+        // タップ直前のスクロール位置を復元
         if (savedScrollTop !== null) {
           const target = savedScrollTop;
           savedScrollTop = null;
-          const restore = () => { const b = getBody(); if (b) b.scrollTop = target; };
+          const restore = () => {
+            const b = getBody();
+            if (!b) return;
+            b.scrollTop = target;
+            // 入力欄が body の表示範囲外なら scrollIntoView で見える位置へ
+            // (提出後に子犬が増える等でコンテンツ高さが変わったケースに対応)
+            const inputEl = document.getElementById('shibaQuickTitle');
+            if (inputEl) {
+              const br = b.getBoundingClientRect();
+              const ir = inputEl.getBoundingClientRect();
+              if (ir.top < br.top || ir.bottom > br.bottom) {
+                inputEl.scrollIntoView({ block: 'nearest' });
+              }
+            }
+          };
           requestAnimationFrame(() => {
             restore();
-            requestAnimationFrame(restore); // 念のため2フレーム後にもう1回
-            setTimeout(restore, 50);         // iOS reflow 遅延ガード
+            requestAnimationFrame(restore);
+            setTimeout(restore, 50);
           });
         }
       }
@@ -5380,8 +5396,14 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
   });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
+      // キーボード閉じた → class 解除
       if (panel.classList.contains('keyboard-open') && !isSoftwareKeyboard()) {
         panel.classList.remove('keyboard-open');
+        return;
+      }
+      // キーボード開いた (focusInTimer 過ぎた後の遅延付与) → 入力中なら class 付与
+      if (!panel.classList.contains('keyboard-open') && isSoftwareKeyboard() && isPanelInputFocused()) {
+        panel.classList.add('keyboard-open');
       }
     });
   }
@@ -5413,6 +5435,10 @@ let _shibaSyncEventId = null;
 let _shibaPushTimer = null;
 let _shibaPushing = false;
 let _shibaLastPushedModifiedAt = 0; // 同じ状態の重複 push を抑止
+// 起動時の GAS pull が完了するまで auto-push を抑制するフラグ
+// 新版/新デバイスで localStorage がリセットされた直後にユーザ操作が走り、
+// デフォルト状態を GAS へ push してしまうレースを防ぐ
+let _shibaGasInitDone = false;
 async function shibaPullRemote() {
   if (!getGasUrl()) return null;
   try {
@@ -5456,6 +5482,8 @@ async function shibaPushRemote(state) {
 }
 // 変更を遅延 push (5秒以内の連続変更をまとめる)
 function shibaPushDebounced() {
+  // 起動時の GAS pull が完了するまでは push しない (デフォルト状態の誤上書きを防止)
+  if (!_shibaGasInitDone) return;
   if (_shibaPushTimer) clearTimeout(_shibaPushTimer);
   _shibaPushTimer = setTimeout(() => {
     const s = loadShiba();
@@ -5481,13 +5509,26 @@ function shibaApplyIfNewer(remote) {
   }
   return false;
 }
-// 起動時: pull して新しければ採用、そうでなければ local を push
+// 起動時: GAS pull を最優先で実行。完了するまで auto-push を抑制する。
+// 新版で localStorage がリセットされても、GAS から正しい状態が復元される。
 (async function initShibaSync() {
-  // GAS URL がまだ設定されてない可能性があるので少し待つ
-  await new Promise(r => setTimeout(r, 1500));
-  if (!getGasUrl()) return;
-  const remote = await shibaPullRemote();
-  if (!shibaApplyIfNewer(remote)) shibaPushDebounced();
+  if (!getGasUrl()) {
+    // GAS URL 未設定なら抑制解除して通常運用 (ローカルのみ)
+    _shibaGasInitDone = true;
+    return;
+  }
+  try {
+    // 5 秒以内に pull できなければタイムアウトして抑制解除
+    const remote = await Promise.race([
+      shibaPullRemote(),
+      new Promise(r => setTimeout(() => r(null), 5000))
+    ]);
+    if (remote) shibaApplyIfNewer(remote);
+  } catch (e) { /* silent: 失敗時はローカルで運用 */ }
+  // pull 完了 (or タイムアウト) → auto-push 解禁
+  _shibaGasInitDone = true;
+  // 起動中にユーザ操作で modifiedAt が進んでいれば push する
+  shibaPushDebounced();
 })();
 // 2 分ごとにリモートを pull (他デバイスの変更を取り込む)
 setInterval(async () => {
