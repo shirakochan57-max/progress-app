@@ -5183,17 +5183,25 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
 // === ソフトウェアキーボード対応 (iPhone のみ collapse、iPad ハードKBは何もしない) ===
 // - visualViewport.height が縮んだ場合 = ソフトウェアキーボードが上がった → keyboard-open class 付与
 // - 縮んでない = ハードウェアキーボード (iPad 外付け等) → 何もしない
-// - パネル自体の位置・サイズは絶対に動かさない (上下スクロールの往復を防止)
+// - パネル自体の位置・サイズは絶対に動かさない
+// - .shiba-panel-body の scrollTop はタップ直前の値を保存し、提出後に復元
 (function setupShibaKeyboardCollapse() {
   const panel = document.getElementById('shibaSheet');
   if (!panel) return;
   let blurTimer = null;
   let focusInTimer = null;
+  let savedScrollTop = null;
   function isSoftwareKeyboard() {
     if (!window.visualViewport) return true;
     const diff = window.innerHeight - window.visualViewport.height;
     return diff > 100;
   }
+  function getBody() { return panel.querySelector('.shiba-panel-body'); }
+  panel.addEventListener('pointerdown', (e) => {
+    if (!e.target.matches('input, textarea')) return;
+    const body = getBody();
+    if (body) savedScrollTop = body.scrollTop;
+  }, true);
   panel.addEventListener('focusin', (e) => {
     if (!e.target.matches('input, textarea')) return;
     if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
@@ -5213,6 +5221,16 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
       const active = document.activeElement;
       if (!active || !panel.contains(active) || !active.matches('input, textarea')) {
         panel.classList.remove('keyboard-open');
+        if (savedScrollTop !== null) {
+          const target = savedScrollTop;
+          savedScrollTop = null;
+          const restore = () => { const b = getBody(); if (b) b.scrollTop = target; };
+          requestAnimationFrame(() => {
+            restore();
+            requestAnimationFrame(restore);
+            setTimeout(restore, 50);
+          });
+        }
       }
     }, 200);
   });
