@@ -5321,23 +5321,15 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     }
   });
 })();
-// === ソフトウェアキーボード対応 (iPhone のみ collapse、iPad ハードKBは何もしない) ===
-// - visualViewport.height が縮んだ場合 = ソフトウェアキーボードが上がった → keyboard-open class 付与
-// - 縮んでない = ハードウェアキーボード (iPad 外付け等) → 何もしない
-// - パネル自体の位置・サイズは絶対に動かさない
-// - .shiba-panel-body の scrollTop はタップ直前の値を保存し、提出後に復元
-//   (提出後にコンテンツ高さが変わるので、入力欄が見えなければ scrollIntoView でフォロー)
+// === 入力欄のスクロール保存・復元のみ ===
+// keyboard-open のレイアウト切替は廃止: iPhone でも通常レイアウトのまま入力する。
+// (ユーザ要望: 「テキスト入力の際に別画面になるのではなく、そのままの画面で入力できるように」)
+// 提出後にタップ直前のスクロール位置に戻すだけ。
 (function setupShibaKeyboardCollapse() {
   const panel = document.getElementById('shibaSheet');
   if (!panel) return;
   let blurTimer = null;
-  let focusInTimer = null;
   let savedScrollTop = null;
-  function isSoftwareKeyboard() {
-    if (!window.visualViewport) return true;
-    const diff = window.innerHeight - window.visualViewport.height;
-    return diff > 100;
-  }
   function getBody() { return panel.querySelector('.shiba-panel-body'); }
   function isPanelInputFocused() {
     const a = document.activeElement;
@@ -5349,24 +5341,12 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
     const body = getBody();
     if (body) savedScrollTop = body.scrollTop;
   }, true);
-  panel.addEventListener('focusin', (e) => {
-    if (!e.target.matches('input, textarea')) return;
-    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
-    if (focusInTimer) clearTimeout(focusInTimer);
-    // 1回目: 300ms 後 (キーボードが立ち上がる目安)
-    focusInTimer = setTimeout(() => {
-      if (isPanelInputFocused() && isSoftwareKeyboard()) {
-        panel.classList.add('keyboard-open');
-      }
-    }, 300);
-  });
   panel.addEventListener('focusout', (e) => {
     if (!e.target.matches('input, textarea')) return;
-    if (focusInTimer) { clearTimeout(focusInTimer); focusInTimer = null; }
     blurTimer = setTimeout(() => {
       if (!isPanelInputFocused()) {
+        // 残り物の keyboard-open を念のため除去 (将来再開時の安全策)
         panel.classList.remove('keyboard-open');
-        // タップ直前のスクロール位置を復元
         if (savedScrollTop !== null) {
           const target = savedScrollTop;
           savedScrollTop = null;
@@ -5374,8 +5354,6 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
             const b = getBody();
             if (!b) return;
             b.scrollTop = target;
-            // 入力欄が body の表示範囲外なら scrollIntoView で見える位置へ
-            // (提出後に子犬が増える等でコンテンツ高さが変わったケースに対応)
             const inputEl = document.getElementById('shibaQuickTitle');
             if (inputEl) {
               const br = b.getBoundingClientRect();
@@ -5394,19 +5372,6 @@ document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAd
       }
     }, 200);
   });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      // キーボード閉じた → class 解除
-      if (panel.classList.contains('keyboard-open') && !isSoftwareKeyboard()) {
-        panel.classList.remove('keyboard-open');
-        return;
-      }
-      // キーボード開いた (focusInTimer 過ぎた後の遅延付与) → 入力中なら class 付与
-      if (!panel.classList.contains('keyboard-open') && isSoftwareKeyboard() && isPanelInputFocused()) {
-        panel.classList.add('keyboard-open');
-      }
-    });
-  }
 })();
 // shibaSheet は浮きパネル化したのでスワイプクローズは付けない (ドラッグ移動が衝突するため)
 // attachSwipeClose('shibaSheet', 'shiba');
