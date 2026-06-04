@@ -3119,6 +3119,26 @@ function renderCard(ev) {
       ti.style.height = ti.scrollHeight + 'px';
     });
   }
+  // 折りたたみ中: 時刻ピル or タイトル文字の描画範囲だけで展開する
+  // (タイトル要素の右側余白では反応しない)
+  function isClickOnTitleText(card, e) {
+    const titleEl = card.querySelector('.title-display');
+    if (!titleEl) return false;
+    // タイトルが空 (新規作成直後等) でも、title-display 要素を直接タップしたなら OK
+    if (!titleEl.textContent.trim() && e.target.closest('.title-display')) return true;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(titleEl);
+      const rects = range.getClientRects();
+      for (const r of rects) {
+        if (e.clientX >= r.left - 4 && e.clientX <= r.right + 4 &&
+            e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2) {
+          return true;
+        }
+      }
+    } catch (err) { /* fallback below */ }
+    return false;
+  }
   card.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
     if (card.classList.contains('expanded')) {
@@ -3129,6 +3149,9 @@ function renderCard(ev) {
       }
       return;
     }
+    // 折りたたみ中: 時刻ピル or タイトル文字「上」のみで展開
+    const inTimePill = !!e.target.closest('.time-pill');
+    if (!inTimePill && !isClickOnTitleText(card, e)) return;
     document.querySelectorAll('.card.expanded').forEach(c => {
       if (c !== card) { c.classList.remove('expanded'); resizeTextareaOf(c); }
     });
