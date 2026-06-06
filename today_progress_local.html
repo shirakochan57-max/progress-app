@@ -700,6 +700,13 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   overflow: hidden;          /* パネル本体はスクロールしない (ハンドルが消えなくなる) */
 }
 #shibaSheet.shiba-panel:not(.open) { display: none; }
+/* フォーカス切替: 予定詳細カードを展開/タップすると豆柴パネル(z-index:28)より前面に出す。
+   豆柴パネルをタップすると body.card-on-top が外れて豆柴が前面に戻る。
+   z-index:29 は modal backdrop(30)/sheet(31) より下なので設定シート等は従来通り最前面。 */
+body.card-on-top .card.expanded {
+  position: relative;
+  z-index: 29;
+}
 /* スクロールするのは中身だけ。ハンドルはパネル直下に残り常に表示 */
 #shibaSheet.shiba-panel .shiba-panel-body {
   position: absolute;
@@ -3142,6 +3149,8 @@ function renderCard(ev) {
   card.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
     if (card.classList.contains('expanded')) {
+      // 展開中カードをタップ → 豆柴パネルより前面に持ってくる
+      document.body.classList.add('card-on-top');
       if (e.target.closest('.time-pill')) {
         e.stopPropagation();
         card.classList.remove('expanded');
@@ -3156,6 +3165,8 @@ function renderCard(ev) {
       if (c !== card) { c.classList.remove('expanded'); resizeTextareaOf(c); }
     });
     card.classList.add('expanded');
+    // 展開時は予定詳細を豆柴パネルより前面に
+    document.body.classList.add('card-on-top');
     resizeTextareaOf(card);
   });
 
@@ -5050,6 +5061,8 @@ function openShibaPanel() {
   if (bd) bd.classList.remove('open');
   restoreShibaPanelSize();
   restoreShibaPanelPos();
+  // 開いた直後は豆柴パネルを前面に
+  document.body.classList.remove('card-on-top');
   renderShiba();
 }
 function closeShibaPanel() {
@@ -5106,6 +5119,12 @@ function closeShibaPanel() {
       try { panel.releasePointerCapture(e.pointerId); } catch (err) {}
     }
   }
+  // 豆柴パネルをタップしたら前面に戻す (body.card-on-top を外す)。
+  // capture フェーズで実行し、ドラッグ/リサイズ/入力など全操作で確実に発火させる。
+  const bringShibaToFront = () => { document.body.classList.remove('card-on-top'); };
+  panel.addEventListener('pointerdown', bringShibaToFront, true);
+  panel.addEventListener('mousedown', bringShibaToFront, true);
+  panel.addEventListener('touchstart', bringShibaToFront, true);
   // Pointer Events (iOS Safari 13+ / 全モダンブラウザ対応)
   if (window.PointerEvent) {
     panel.addEventListener('pointerdown', onDown);
