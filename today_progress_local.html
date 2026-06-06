@@ -5275,18 +5275,18 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
   updateShibaSleepBtn(s.sleepMode);
   showToast(s.sleepMode ? '🌙 おやすみモード ON (メーター減らない)' : '☀️ おやすみモード OFF');
   renderShiba();
-  // 手動切替後、自動おやすみタイマーを再始動 (起きた→30分計測再開 / 寝た→停止)
+  // 手動切替後、自動おやすみタイマーを再始動 (起きた→15分計測再開 / 寝た→停止)
   if (window._shibaAutoSleepReset) window._shibaAutoSleepReset();
 });
 
-// === 無操作30分で自動おやすみ ===
-// 仕様: 最後のユーザー操作から30分経過したら自動でおやすみモードへ移行。
+// === 無操作15分で自動おやすみ ===
+// 仕様: 最後のユーザー操作から15分経過したら自動でおやすみモードへ移行。
 //       「操作」= タップ/クリック(pointerdown)・キー入力(keydown)・スクロール意思(wheel/touchstart) のみ。
 //       アプリを開いているだけ・マウスを動かしただけ・画面の自動更新だけでは操作とみなさない。
 //       一度寝たら手動でおやすみOFFにするまで継続 (操作では起きない)。
-//       手動で起こした後も、最後の操作から30分でまた自動おやすみに戻る。
+//       手動で起こした後も、最後の操作から15分でまた自動おやすみに戻る。
 (function setupShibaAutoSleep() {
-  const IDLE_MS = 30 * 60 * 1000; // 30分
+  const IDLE_MS = 15 * 60 * 1000; // 15分
   let lastActivity = Date.now();
   function isAsleep() { return document.body.classList.contains('shiba-sleeping'); }
   function markActivity() { lastActivity = Date.now(); }
@@ -5300,7 +5300,7 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
   // setTimeout はタブが裏に回ると throttling されるため、実時刻ポーリングで判定する。
   setInterval(() => {
     if (isAsleep()) return;                          // 寝ている間は判定しない (操作で起こさない)
-    if (Date.now() - lastActivity < IDLE_MS) return; // まだ30分経っていない
+    if (Date.now() - lastActivity < IDLE_MS) return; // まだ15分経っていない
     const s = tickShiba(loadShiba());
     if (s.sleepMode) return;
     s.sleepMode = true;
@@ -5309,7 +5309,7 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
     saveShiba(s);
     updateShibaSleepBtn(true);
     renderShiba();
-    showToast('🌙 30分無操作のため自動おやすみ');
+    showToast('🌙 15分無操作のため自動おやすみ');
   }, 30000); // 30秒ごとに判定
 })();
 
