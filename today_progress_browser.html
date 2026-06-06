@@ -2743,9 +2743,8 @@ function renderCard(ev) {
   const titleDisplay = document.createElement('div');
   titleDisplay.className = 'title-display';
   titleDisplay.textContent = plainTitle(ev);
-  titleInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); }
-  });
+  // Enterで改行させず blur。IME変換確定のEnterは無視。
+  bindImeSafeEnter(titleInput, (e) => { e.preventDefault(); titleInput.blur(); });
   function autosizeTitle() {
     titleInput.style.height = 'auto';
     titleInput.style.height = titleInput.scrollHeight + 'px';
@@ -4095,9 +4094,7 @@ document.getElementById('searchBtn').addEventListener('click', () => {
 });
 document.getElementById('searchBackdrop').addEventListener('click', () => closeSheet('search'));
 document.getElementById('searchCloseBtn').addEventListener('click', () => closeSheet('search'));
-document.getElementById('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
-});
+bindImeSafeEnter(document.getElementById('searchInput'), (e) => { e.preventDefault(); runSearch(); });
 document.getElementById('searchRunBtn').addEventListener('click', runSearch);
 
 async function runSearch() {
@@ -4539,6 +4536,7 @@ const DEFAULT_SHIBA = {
   comfort: 60,          // 快適
   hasPoop: false,
   hasPee: false,
+  urge: 0,                  // もよおし(排泄したい度) 0-100。散歩で0、限界(100)で家で粗相
   comfortBeforeDirt: null,  // うんち/おしっこ前の快適度
   lastTick: Date.now(),
   modifiedAt: 0,
@@ -4599,19 +4597,19 @@ function tickShiba(s) {
       }
     }
     if (ticks > 0) s.lastTick = now - (elapsedMin - ticks * TICK_MIN) * 60000;
-    // うんち/おしっこ 発生: 快適度を 30 まで強制ダウン、発生前値を comfortBeforeDirt に保存
+    // 綺麗好き設定: 排泄は散歩(外)で済ませる。家では我慢する。
+    // 時間経過で「もよおし(urge)」が溜まり、散歩で 0 にリセットされる。
+    // 我慢の限界(100)を超えても散歩されないと、こらえきれず家で粗相 → 快適度ダウン(要掃除)。
+    // 発生前の快適度は comfortBeforeDirt に保存 → 掃除で復元。
+    const URGE_PER_MIN = 0.5;     // 約200分(3時間強)で限界に達する
     const DIRT_FLOOR = 30;
-    const poopChance = Math.min(0.5, elapsedMin / 30 * 0.3 + (s.hunger < 40 ? 0.1 : 0));
-    if (elapsedMin > 10 && !s.hasPoop && Math.random() < poopChance) {
+    s.urge = Math.min(100, (s.urge || 0) + elapsedMin * URGE_PER_MIN);
+    if (s.urge >= 100 && !s.hasPoop && !s.hasPee) {
+      // こらえきれず家で粗相 (綺麗好きなので最後の手段)
       if (s.comfortBeforeDirt == null) s.comfortBeforeDirt = s.comfort;
-      s.hasPoop = true;
+      if (Math.random() < 0.5) s.hasPee = true; else s.hasPoop = true;
       s.comfort = Math.min(s.comfort, DIRT_FLOOR);
-    }
-    const peeChance = Math.min(0.6, elapsedMin / 15 * 0.3);
-    if (elapsedMin > 5 && !s.hasPee && Math.random() < peeChance) {
-      if (s.comfortBeforeDirt == null) s.comfortBeforeDirt = s.comfort;
-      s.hasPee = true;
-      s.comfort = Math.min(s.comfort, DIRT_FLOOR);
+      s.urge = 0;  // 出してしまったのでリセット
     }
   }
   return s;
@@ -4625,6 +4623,7 @@ function getShibaMood(s) {
   if (s.hasPoop && s.hasPee) return 'うんち&おしっこ…';
   if (s.hasPoop) return 'うんちしちゃった…';
   if (s.hasPee)  return 'おしっこ漏らした…';
+  if ((s.urge || 0) >= 80) return 'そわそわ…(おさんぽ？)';
   const stamina = s.stamina != null ? s.stamina : 60;
   const comfort = s.comfort != null ? s.comfort : 60;
   if (stamina <= 15) return 'バテバテ…';
@@ -4723,12 +4722,26 @@ function shibaAction(action) {
       s.comfort = clamp(getComfort() + 2);
       log = '🧸 たのしい！'; userAction = true;
       break;
-    case 'walk':
+    case 'walk': {
       if (s.coins < 5) { log = '🪙 コインが足りない (さんぽ 5)'; break; }
       s.coins -= 5; spentCost = 5;
       s.happy = clamp(s.happy + 5);
-      log = '🚶 おさんぽたのしい〜'; userAction = true;
+      // 家に汚れがあれば散歩ついでに外で解消 (快適度を汚れ前へ復元)
+      if (s.hasPoop || s.hasPee) {
+        s.hasPoop = false; s.hasPee = false;
+        if (s.comfortBeforeDirt != null) { s.comfort = clamp(s.comfortBeforeDirt); s.comfortBeforeDirt = null; }
+      }
+      // 散歩中に高確率(85%)で外で排泄 → もよおしリセット (外なので快適度は下がらない)
+      let didWalk = '';
+      if (Math.random() < 0.85) {
+        const r = Math.random();
+        didWalk = r < 0.4 ? '💩' : (r < 0.8 ? '💧' : '💩💧');
+      }
+      s.urge = 0;
+      log = didWalk ? ('🚶' + didWalk + ' そとでスッキリ！えらい〜') : '🚶 おさんぽたのしい〜';
+      userAction = true;
       break;
+    }
     case 'nap':
       if (s.coins < 5) { log = '🪙 コインが足りない (ひるね 5)'; break; }
       s.coins -= 5; spentCost = 5;
@@ -4825,6 +4838,7 @@ function shibaAutoSpend(s) {
       case 'walk':
         s.coins -= 5; spent += 5;
         s.happy = clamp(s.happy + 5);
+        s.urge = 0;  // 散歩でもよおしリセット (外で排泄)
         logs.push('🚶'); break;
       case 'nap':
         s.coins -= 5; spent += 5;
@@ -5157,16 +5171,27 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
 });
 
 // === 無操作30分で自動おやすみ ===
-// 仕様: 30分の無操作が連続したら自動でおやすみモードへ移行。
-//       操作があるたびにタイマーはリセットされる (連続30分未満では移行しない)。
+// 仕様: 最後のユーザー操作から30分経過したら自動でおやすみモードへ移行。
+//       「操作」= タップ/クリック(pointerdown)・キー入力(keydown)・スクロール意思(wheel/touchstart) のみ。
+//       アプリを開いているだけ・マウスを動かしただけ・画面の自動更新だけでは操作とみなさない。
 //       一度寝たら手動でおやすみOFFにするまで継続 (操作では起きない)。
-//       手動で起こした後も、また30分無操作で自動おやすみに戻る。
+//       手動で起こした後も、最後の操作から30分でまた自動おやすみに戻る。
 (function setupShibaAutoSleep() {
   const IDLE_MS = 30 * 60 * 1000; // 30分
-  let timer = null;
+  let lastActivity = Date.now();
   function isAsleep() { return document.body.classList.contains('shiba-sleeping'); }
-  function goSleep() {
-    if (isAsleep()) return;
+  function markActivity() { lastActivity = Date.now(); }
+  // 実際のユーザー操作のみ検知。
+  // scroll イベントは 30秒ごとの自動更新によるレイアウト変化でも発火しうるため監視対象から外し、
+  // ユーザー由来でしか起きない wheel / touchstart で「スクロール意思」を代替する。
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => {
+    window.addEventListener(ev, markActivity, { passive: true, capture: true });
+  });
+  window._shibaAutoSleepReset = markActivity;  // 手動でおやすみOFFした後の再計測用
+  // setTimeout はタブが裏に回ると throttling されるため、実時刻ポーリングで判定する。
+  setInterval(() => {
+    if (isAsleep()) return;                          // 寝ている間は判定しない (操作で起こさない)
+    if (Date.now() - lastActivity < IDLE_MS) return; // まだ30分経っていない
     const s = tickShiba(loadShiba());
     if (s.sleepMode) return;
     s.sleepMode = true;
@@ -5176,17 +5201,7 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
     updateShibaSleepBtn(true);
     renderShiba();
     showToast('🌙 30分無操作のため自動おやすみ');
-  }
-  function reset() {
-    if (timer) { clearTimeout(timer); timer = null; }
-    if (isAsleep()) return;            // 寝ている間は計測しない (操作で起こさない)
-    timer = setTimeout(goSleep, IDLE_MS);
-  }
-  ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach(ev => {
-    window.addEventListener(ev, reset, { passive: true, capture: true });
-  });
-  window._shibaAutoSleepReset = reset;  // 手動切替後の再始動用
-  reset();                              // 起動時に計測開始
+  }, 30000); // 30秒ごとに判定
 })();
 
 document.getElementById('shibaAutoToggle').addEventListener('click', () => {
@@ -5255,28 +5270,33 @@ async function quickAddFromShiba(markDone) {
 async function quickDoneFromShiba() { return quickAddFromShiba(true); }
 document.getElementById('shibaQuickDone').addEventListener('click', () => quickAddFromShiba(true));
 document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAddFromShiba(false));
-// === Enter キーで提出 (IME変換確定は除外) ===
-//   Enter           → 完了として登録 (✔)
-//   Shift + Enter   → 予定登録のみ (＋)
-// IME変換確定の Enter で誤発火しないよう、以下の多重ガードで判定:
-//   1) compositionstart/compositionend で isComposing フラグ管理
+// === IME変換確定のEnterを誤検知しない共通ヘルパー ===
+// すべてのテキスト入力で「Enter確定」処理を登録する際はこれを使う。
+// IME編集中・変換確定のEnterは無視する (以下の4重ガード):
+//   1) compositionstart/compositionend で composing フラグ管理
 //   2) e.isComposing (W3C 標準)
 //   3) e.keyCode === 229 (旧ブラウザ・IME経由のキーシグナル)
-//   4) compositionend から 200ms 以内の Enter は IME 確定とみなして無視
-(function setupShibaQuickEnter() {
-  const input = document.getElementById('shibaQuickTitle');
-  if (!input) return;
-  let isComposing = false;
+//   4) compositionend から 200ms 以内の Enter は IME 確定の遅延発火とみなして無視
+function bindImeSafeEnter(el, onEnter) {
+  if (!el) return;
+  let composing = false;
   let lastCompositionEndAt = 0;
-  input.addEventListener('compositionstart', () => { isComposing = true; });
-  input.addEventListener('compositionend', () => {
-    isComposing = false;
+  el.addEventListener('compositionstart', () => { composing = true; });
+  el.addEventListener('compositionend', () => {
+    composing = false;
     lastCompositionEndAt = Date.now();
   });
-  input.addEventListener('keydown', (e) => {
+  el.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
-    if (isComposing || e.isComposing || e.keyCode === 229) return;
+    if (composing || e.isComposing || e.keyCode === 229) return;
     if (Date.now() - lastCompositionEndAt < 200) return;
+    onEnter(e);
+  });
+}
+// === 豆柴クイック入力の Enter 提出 (IME変換確定は除外) ===
+//   Enter → 完了登録 (✔) / Shift+Enter → 予定登録のみ (＋)
+(function setupShibaQuickEnter() {
+  bindImeSafeEnter(document.getElementById('shibaQuickTitle'), (e) => {
     e.preventDefault();
     if (e.shiftKey) {
       quickAddFromShiba(false);
