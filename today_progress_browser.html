@@ -4787,7 +4787,9 @@ function showShibaFeedback(text) {
 // 戻り値: 実行ログ文字列 (例 "🍖🤗 (-9)") / 何もしなければ null
 // s を破壊的に更新する (modifiedAt と totalPoints も更新)
 function shibaAutoSpend(s) {
-  if (!s.autoMode || s.sleepMode) return null;
+  // おやすみモード中でも、オートモードがONならコインを振り分ける (ユーザー要望)。
+  // おやすみ中はメーターが減らないので、各バーを上限まで補充して停止する。
+  if (!s.autoMode) return null;
   const clamp = v => Math.max(0, Math.min(100, v));
   const getStamina = () => s.stamina != null ? s.stamina : 60;
   const getComfort = () => s.comfort != null ? s.comfort : 60;
