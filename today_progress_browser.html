@@ -5162,6 +5162,8 @@ function closeShibaPanel() {
   let resizing = null;
   let mode = 'br';
   let startX = 0, startY = 0, baseW = 0, baseH = 0, baseLeft = 0, baseTop = 0;
+  let baseScrollTop = 0;
+  function getPanelBody() { return panel.querySelector('.shiba-panel-body'); }
   function onDown(e) {
     if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
     const handle = e.currentTarget;
@@ -5173,6 +5175,8 @@ function closeShibaPanel() {
     baseH = r.height;
     baseLeft = r.left;
     baseTop = r.top;
+    const body = getPanelBody();
+    baseScrollTop = body ? body.scrollTop : 0;
     panel.style.left = baseLeft + 'px';
     panel.style.top = baseTop + 'px';
     panel.style.right = 'auto';
@@ -5233,6 +5237,12 @@ function closeShibaPanel() {
       const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
       newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
       newH = baseH + (baseTop - newTop);
+      // 中身の画面位置を固定するため、body.scrollTop を上辺の移動量だけ調整
+      const body = getPanelBody();
+      if (body) {
+        const actualDy = newTop - baseTop;
+        body.scrollTop = Math.max(0, baseScrollTop + actualDy);
+      }
     }
     panel.style.width = newW + 'px';
     panel.style.height = newH + 'px';
