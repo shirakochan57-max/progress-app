@@ -685,7 +685,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   top: auto;
   bottom: 96px;
   width: 320px;
-  height: 440px;             /* 既定の高さ (中身が absolute なので明示しないと潰れる) */
+  height: 480px;             /* 既定の高さ (scale 1 で中身がちょうど収まるサイズ) */
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 120px);
   min-height: 220px;
@@ -707,16 +707,40 @@ body.card-on-top .card.expanded {
   position: relative;
   z-index: 29;
 }
-/* スクロールするのは中身だけ。ハンドルはパネル直下に残り常に表示 */
+/* viewport = パネル内の覗き窓 (ハンドルを除いた領域) */
 #shibaSheet.shiba-panel .shiba-panel-body {
   position: absolute;
   top: 32px;     /* 上のドラッグバー分 */
   bottom: 32px;  /* 下のリサイズバー分 */
   left: 0;
   right: 12px;   /* 右辺のリサイズバー分 */
+  overflow: hidden;  /* 中身を viewport 外でクリップ */
+  background: var(--bg);
+}
+/* 中身 = 固定サイズの「設計図」。4隅ドラッグで scale を変える */
+#shibaSheet.shiba-panel .shiba-panel-content {
+  position: relative;
+  width: 308px;            /* 固定の内在幅 (デフォルト viewport 幅と一致) */
   padding: 8px 14px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  transform-origin: top left;
+  transform: scale(var(--shiba-scale, 1));
+  /* 中身のレイアウトは scale が変わっても並びは一切変えない */
+}
+/* 子犬・犬小屋エリアの高さ固定 + あふれた分は隠す (中身の総高さが puppies 数に依存しない) */
+#shibaSheet.shiba-panel .shiba-puppies {
+  max-height: 90px;
+  overflow: hidden;
+  position: relative;
+}
+/* 下端に淡いフェードを入れて「まだあるよ」を示唆 */
+#shibaSheet.shiba-panel .shiba-puppies::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 12px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
 }
 /* 上部ドラッグバー (元 sheet-handle、4隅コーナーを除いた中央部分) */
 #shibaSheet.shiba-panel .sheet-handle {
@@ -1965,6 +1989,7 @@ body.shiba-sleeping .shiba-emoji::after {
 <div class="sheet" id="shibaSheet">
   <div class="sheet-handle"></div>
   <div class="shiba-panel-body">
+  <div class="shiba-panel-content">
   <h3 class="shiba-header-row">
     <span class="shiba-header-lv">⭐ Lv.<span id="shibaLevel">0</span></span>
     <span class="shiba-header-next muted">次まで <span id="shibaToNext">100</span> pt</span>
@@ -2005,6 +2030,7 @@ body.shiba-sleeping .shiba-emoji::after {
   </div>
   <span id="shibaSyncStatus" style="display:none;">-</span>
   <span id="shibaLog" style="display:none;"></span>
+  </div><!-- /shiba-panel-content -->
   </div><!-- /shiba-panel-body -->
   <div class="shiba-corner shiba-corner-tl" id="shibaCornerTL" data-resize-mode="tl" title="サイズ変更">↖</div>
   <div class="shiba-corner shiba-corner-tr" id="shibaCornerTR" data-resize-mode="tr" title="サイズ変更">↗</div>
@@ -4994,8 +5020,23 @@ function shibaEarnCoin(ev) {
 // ============= 豆柴シート = 浮きパネル (下の画面を操作可能、自由配置、サイズ変更可) =============
 const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
 const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
+const SHIBA_PANEL_SCALE_KEY = 'shiba_panel_scale_v1';
 const SHIBA_PANEL_MIN_W = 240;
 const SHIBA_PANEL_MIN_H = 200;
+function saveShibaPanelScale() {
+  const panel = document.getElementById('shibaSheet');
+  const v = panel.style.getPropertyValue('--shiba-scale') || '1';
+  try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(parseFloat(v) || 1)); } catch (e) {}
+}
+function restoreShibaPanelScale() {
+  const panel = document.getElementById('shibaSheet');
+  let s = 1;
+  try {
+    const v = parseFloat(localStorage.getItem(SHIBA_PANEL_SCALE_KEY));
+    if (!isNaN(v) && v > 0.2 && v < 5) s = v;
+  } catch (e) {}
+  panel.style.setProperty('--shiba-scale', s);
+}
 function saveShibaPanelSize() {
   const panel = document.getElementById('shibaSheet');
   const r = panel.getBoundingClientRect();
@@ -5075,6 +5116,7 @@ function openShibaPanel() {
   const bd = document.getElementById('shibaBackdrop');
   if (bd) bd.classList.remove('open');
   restoreShibaPanelSize();
+  restoreShibaPanelScale();
   restoreShibaPanelPos();
   // 開いた直後は豆柴パネルを前面に
   document.body.classList.remove('card-on-top');
@@ -5205,25 +5247,43 @@ function closeShibaPanel() {
     const dx = pt.clientX - startX;
     const dy = pt.clientY - startY;
     let newW = baseW, newH = baseH, newLeft = baseLeft, newTop = baseTop;
-    // 水平方向
-    if (mode === 'x' || mode === 'br' || mode === 'tr') {
+    const isCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
+    if (isCorner) {
+      // 4隅: アスペクト比固定で等倍リサイズ (パネル+中身の scale を一緒に変更)
+      const ratio = baseW / baseH;
+      // コーナーごとに「外側方向への dx/dy」を正規化
+      let dxAdj = dx, dyAdj = dy;
+      if (mode === 'bl' || mode === 'tl') dxAdj = -dx;
+      if (mode === 'tr' || mode === 'tl') dyAdj = -dy;
+      // 大きく変化した方向を優先 (どちらの軸でも引っ張った量で拡縮)
+      const propX = dxAdj / baseW;
+      const propY = dyAdj / baseH;
+      const p = Math.abs(propX) > Math.abs(propY) ? propX : propY;
+      let scale = 1 + p;
+      newW = baseW * scale;
+      newH = baseH * scale;
+      // 画面内 + min/max クランプ (比率維持)
+      const maxW = window.innerWidth - 16;
+      const maxH = window.innerHeight - 16;
+      if (newW < SHIBA_PANEL_MIN_W) { newW = SHIBA_PANEL_MIN_W; newH = newW / ratio; }
+      if (newH < SHIBA_PANEL_MIN_H) { newH = SHIBA_PANEL_MIN_H; newW = newH * ratio; }
+      if (newW > maxW) { newW = maxW; newH = newW / ratio; }
+      if (newH > maxH) { newH = maxH; newW = newH * ratio; }
+      // 位置 (BL/TR/TL は片方の端を固定して反対側を動かす)
+      if (mode === 'bl' || mode === 'tl') newLeft = baseLeft + (baseW - newW);
+      if (mode === 'tr' || mode === 'tl') newTop = baseTop + (baseH - newH);
+      // 中身の scale も同時に更新 (viewport 幅 / コンテンツ内在幅 308)
+      const viewportW = newW - 12;
+      const newScale = viewportW / 308;
+      panel.style.setProperty('--shiba-scale', newScale);
+    } else if (mode === 'x') {
+      // 右辺: 幅のみ変更、scale は変えない (viewport だけ広がる/縮む)
       const maxW = window.innerWidth - baseLeft - 8;
       newW = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, baseW + dx));
-    } else if (mode === 'bl' || mode === 'tl') {
-      const minLeft = 8;
-      const maxLeft = baseLeft + baseW - SHIBA_PANEL_MIN_W;
-      newLeft = Math.max(minLeft, Math.min(maxLeft, baseLeft + dx));
-      newW = baseW + (baseLeft - newLeft);
-    }
-    // 垂直方向
-    if (mode === 'y' || mode === 'br' || mode === 'bl') {
+    } else if (mode === 'y') {
+      // 下辺: 高さのみ変更、scale は変えない
       const maxH = window.innerHeight - baseTop - 8;
       newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
-    } else if (mode === 'tr' || mode === 'tl') {
-      const minTop = 8;
-      const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
-      newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
-      newH = baseH + (baseTop - newTop);
     }
     panel.style.width = newW + 'px';
     panel.style.height = newH + 'px';
@@ -5234,10 +5294,12 @@ function closeShibaPanel() {
   function onUp(e) {
     if (!resizing) return;
     const handle = resizing;
+    const wasCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
     resizing = null;
     panel.classList.remove('resizing');
     saveShibaPanelSize();
-    saveShibaPanelPos();  // BL/TR/TL では位置も変わるので保存
+    saveShibaPanelPos();
+    if (wasCorner) saveShibaPanelScale();
     if (e && e.pointerId != null && handle.releasePointerCapture) {
       try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
     }
