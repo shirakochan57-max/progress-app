@@ -4577,8 +4577,9 @@ function tickShiba(s) {
   if (elapsedMin > 0) {
     // 1 tick = 1.0 分間隔。前回からさらに半分に減速。
     const TICK_MIN = 1.0;
+    const DECAY_MULT = 1.1;   // メーター減少スピード倍率 (確率に掛けて全体の減りを速くする)
     const ticks = Math.floor(elapsedMin / TICK_MIN);
-    const baseDrop = () => Math.random() < 0.5 ? 1 : 0; // 0 or 1 平均 0.5
+    const baseDrop = () => Math.random() < 0.5 * DECAY_MULT ? 1 : 0; // 0 or 1 平均 0.5 × DECAY_MULT
     for (let i = 0; i < ticks; i++) {
       let cHunger = 1, cHappy = 1, cStamina = 1, cComfort = 1;
       if (s.hunger  <= 50) cHappy   *= 1.5;
@@ -4589,8 +4590,8 @@ function tickShiba(s) {
       s.happy   = Math.max(0, s.happy   - Math.round(baseDrop() * cHappy));
       s.stamina = Math.max(0, s.stamina - Math.round(baseDrop() * cStamina));
       s.comfort = Math.max(0, s.comfort - Math.round(baseDrop() * cComfort));
-      // 1.25% で 1 つに大幅減 (前回 2.5% から半分)
-      if (Math.random() < 0.0125) {
+      // 1.25% × DECAY_MULT で 1 つに大幅減
+      if (Math.random() < 0.0125 * DECAY_MULT) {
         const keys = ['hunger','happy','stamina','comfort'];
         const k = keys[Math.floor(Math.random() * 4)];
         s[k] = Math.max(0, s[k] - (5 + Math.floor(Math.random() * 11)));
