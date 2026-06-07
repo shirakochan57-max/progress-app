@@ -1369,6 +1369,7 @@ body.shiba-sleeping .shiba-emoji::after {
   font-weight: 700;
   letter-spacing: 0.3px;
 }
+.shiba-header-row .shiba-header-name { font-size: 14px; font-weight: 800; letter-spacing: 1px; }
 .shiba-header-row .shiba-header-lv { font-size: 14px; }
 .shiba-header-row .shiba-header-next { font-size: 11px; font-weight: 500; }
 .shiba-header-row .shiba-header-coin { margin-left: auto; font-size: 14px; }
@@ -1855,10 +1856,10 @@ body.shiba-sleeping .shiba-emoji::after {
   <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
   <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">
     <div class="shiba-mini-bars" id="shibaMiniBars" aria-hidden="true">
-      <div class="shiba-mini-bar" data-bar="hunger" title="満腹"><span class="fill"></span></div>
-      <div class="shiba-mini-bar" data-bar="happy" title="気持ち"><span class="fill"></span></div>
-      <div class="shiba-mini-bar" data-bar="stamina" title="体力"><span class="fill"></span></div>
-      <div class="shiba-mini-bar" data-bar="comfort" title="快適"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="food" title="ご飯"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="walk" title="散歩"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="sleep" title="睡眠"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="papa" title="パパ"><span class="fill"></span></div>
     </div>
     <span class="shiba-inner">🐕</span>
     <div class="shiba-mood-tag" id="shibaMoodTag" aria-hidden="true">ふつう</div>
@@ -2019,9 +2020,10 @@ body.shiba-sleeping .shiba-emoji::after {
   <div class="shiba-panel-body">
   <div class="shiba-panel-content">
   <h3 class="shiba-header-row">
+    <span class="shiba-header-name">エクル</span>
     <span class="shiba-header-lv">⭐ Lv.<span id="shibaLevel">0</span></span>
     <span class="shiba-header-next muted">次まで <span id="shibaToNext">100</span> pt</span>
-    <span class="shiba-header-coin">🪙 <span id="shibaCoins">0</span></span>
+    <span id="shibaCoins" style="display:none;">0</span>
     <span id="shibaTotalDone" style="display:none;">0</span>
   </h3>
   <div class="shiba-display">
@@ -2031,18 +2033,10 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-mood" id="shibaMood">ごきげん</div>
   </div>
   <div class="shiba-stats">
-    <div class="stat-row"><span class="stat-label">満腹</span><div class="stat-bar"><div class="stat-fill" id="hungerFill"></div></div><span class="stat-val" id="hungerVal">50</span></div>
-    <div class="stat-row"><span class="stat-label">気持ち</span><div class="stat-bar"><div class="stat-fill" id="happyFill"></div></div><span class="stat-val" id="happyVal">50</span></div>
-    <div class="stat-row"><span class="stat-label">体力</span><div class="stat-bar"><div class="stat-fill" id="staminaFill"></div></div><span class="stat-val" id="staminaVal">50</span></div>
-    <div class="stat-row"><span class="stat-label">快適</span><div class="stat-bar"><div class="stat-fill" id="comfortFill"></div></div><span class="stat-val" id="comfortVal">50</span></div>
-  </div>
-  <div class="shiba-actions shiba-actions-emoji">
-    <button class="shiba-btn" data-action="feed" title="ごはん (6)">🍖</button>
-    <button class="shiba-btn" data-action="pet" title="なでなで (3)">🤗</button>
-    <button class="shiba-btn" data-action="play" title="おもちゃ (2)">🧸</button>
-    <button class="shiba-btn" data-action="walk" title="さんぽ (5)">🚶</button>
-    <button class="shiba-btn" data-action="nap" title="ひるね (5)">💤</button>
-    <button class="shiba-btn" data-action="poopClean" title="そうじ (4)">💩</button>
+    <div class="stat-row"><span class="stat-label">ご飯</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div></div><span class="stat-val" id="foodVal">100</span></div>
+    <div class="stat-row"><span class="stat-label">散歩</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div></div><span class="stat-val" id="walkVal">0</span></div>
+    <div class="stat-row"><span class="stat-label">睡眠</span><div class="stat-bar"><div class="stat-fill" id="sleepFill"></div></div><span class="stat-val" id="sleepVal">50</span></div>
+    <div class="stat-row"><span class="stat-label">パパ</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
   </div>
   <div class="shiba-quick">
     <input type="text" id="shibaQuickTitle" placeholder="タスクを入力"
@@ -2052,9 +2046,9 @@ body.shiba-sleeping .shiba-emoji::after {
     <button class="btn secondary" id="shibaQuickAdd" title="登録のみ">＋</button>
     <button class="btn primary" id="shibaQuickDone" title="登録 + 完了">✔</button>
     <button class="btn secondary" id="shibaSyncNow" title="同期">🔄</button>
-    <button class="btn secondary" id="shibaAutoToggle" title="オート">🤖</button>
     <button class="btn secondary" id="shibaSleepToggle" title="おやすみ">🌙</button>
     <button class="btn secondary" id="shibaClose" title="閉じる">✕</button>
+    <button id="shibaAutoToggle" style="display:none;">🤖</button>
   </div>
   <span id="shibaSyncStatus" style="display:none;">-</span>
   <span id="shibaLog" style="display:none;"></span>
@@ -3891,8 +3885,8 @@ async function addSubmitFlow(markDone) {
     }
     const datePrefix = dateKey === fmtDate(currentDate) ? '' : `${dateKey} に`;
     showToast(markDone ? `${datePrefix}登録+完了` : `${datePrefix}登録しました`);
-    shibaEarnPoints(3, '新規登録');
-    if (markDone) shibaEarnCoin(created || {});
+    // エクル: タスク入力 → papa+5、タイトル解析でご飯/散歩トリガー
+    ecurleOnTaskCreated(title);
     closeSheet('add');
     resetAddSheet();
     if (dateKey === fmtDate(currentDate) && created && created.id) {
@@ -4540,28 +4534,26 @@ function barLevelClass(v) {
 const LV_CLASSES = ['lv-green','lv-yellow','lv-orange','lv-red'];
 // フローティングアイコン下の気分タグ用テキスト
 function getShibaMoodShort(s) {
-  const stamina = s.stamina != null ? s.stamina : 60;
-  const comfort = s.comfort != null ? s.comfort : 60;
-  if (s.hasPoop && s.hasPee) return 'うんち&おしっこ';
-  if (s.hasPoop) return 'うんち';
-  if (s.hasPee) return 'おしっこ';
-  if (stamina <= 15) return '疲れた〜';
-  if (s.hunger <= 15) return 'お腹すいた';
-  if (s.happy <= 15) return 'つまらない';
-  if (comfort <= 15) return '気持ち悪い';
-  if (s.happy >= 80 && s.hunger >= 60 && stamina >= 60 && comfort >= 60) return 'しあわせ〜';
-  if (s.happy >= 60) return 'ごきげん';
+  const food = s.food != null ? s.food : 100;
+  const walk = s.walk || 0;
+  const sleep = s.sleep != null ? s.sleep : 50;
+  if (food <= 15) return 'お腹すいた';
+  if (sleep <= 15) return 'ねむい';
+  if (walk <= 15) return 'うずうず';
+  if (food >= 70 && sleep >= 60 && walk >= 50) return 'しあわせ〜';
+  if (food >= 60) return 'ごきげん';
   return 'ふつう';
 }
-// フローティングアイコン上のミニバロメーターを更新 (段階色付き)
 function updateShibaMiniBars(s) {
   const c = document.getElementById('shibaMiniBars');
   if (c) {
+    const papa = s.papa || 0;
+    const papaInLevel = papa % 100;
     const bars = {
-      hunger:  s.hunger,
-      happy:   s.happy,
-      stamina: s.stamina != null ? s.stamina : 60,
-      comfort: s.comfort != null ? s.comfort : 60
+      food:  s.food != null ? s.food : 100,
+      walk:  s.walk || 0,
+      sleep: s.sleep != null ? s.sleep : 50,
+      papa:  papaInLevel
     };
     Object.keys(bars).forEach(key => {
       const el = c.querySelector(`[data-bar="${key}"]`);
@@ -4574,19 +4566,17 @@ function updateShibaMiniBars(s) {
       if (lv) el.classList.add(lv);
     });
   }
-  // 気分タグ
   const tag = document.getElementById('shibaMoodTag');
   if (tag) tag.textContent = getShibaMoodShort(s);
 }
 function applyShibaState(s) {
   updateShibaMiniBars(s);
-  const stamina = s.stamina != null ? s.stamina : 60;
+  const food = s.food != null ? s.food : 100;
+  const sleep = s.sleep != null ? s.sleep : 50;
   let state = 'normal';
-  if (s.hasPoop) state = 'poop';
-  else if (stamina <= 15) state = 'sleep';
-  else if (s.hunger <= 15) state = 'hungry';
-  else if (s.happy <= 15) state = 'sad';
-  else if (s.happy >= 65 && s.hunger >= 50 && stamina >= 50) state = 'happy';
+  if (food <= 15) state = 'hungry';
+  else if (sleep <= 15) state = 'sleep';
+  else if (food >= 65 && sleep >= 50) state = 'happy';
   const states = ['state-normal','state-happy','state-sleep','state-hungry','state-sad','state-poop'];
   ['shibaCard','shibaEmoji'].forEach(id => {
     const el = document.getElementById(id);
@@ -4597,30 +4587,92 @@ function applyShibaState(s) {
 }
 const SHIBA_KEY = 'shiba_state_v1';
 const DEFAULT_SHIBA = {
+  food: 100, walk: 0, sleep: 50, papa: 0, lastFedAt: 0,
   coins: 0, totalDone: 0,
-  hunger: 60,           // 満腹
-  happy: 60,            // 気持ち
-  stamina: 60,          // 体力
-  comfort: 60,          // 快適
-  hasPoop: false,
-  hasPee: false,
-  urge: 0,                  // もよおし(排泄したい度) 0-100。散歩で0、限界(100)で家で粗相
-  comfortBeforeDirt: null,  // うんち/おしっこ前の快適度
+  hunger: 60, happy: 60, stamina: 60, comfort: 60,
+  hasPoop: false, hasPee: false, urge: 0, comfortBeforeDirt: null,
   lastTick: Date.now(),
   modifiedAt: 0,
   sleepMode: false,
   autoMode: false,
   totalPoints: 0
 };
-// レベル 1000 max、各レベル一定 100 pt、Lv 1000 到達に 100,000 pt
-function levelFromPoints(p) {
+const ECURLE_MEAL_HOURS = [7, 12, 21];
+function getMealtimesAround(now) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  const list = [];
+  for (let dayOffset = -1; dayOffset <= 1; dayOffset++) {
+    for (const h of ECURLE_MEAL_HOURS) {
+      const t = new Date(d);
+      t.setDate(t.getDate() + dayOffset);
+      t.setHours(h, 0, 0, 0);
+      list.push(t.getTime());
+    }
+  }
+  list.sort((a, b) => a - b);
+  let prev = 0, next = Number.MAX_SAFE_INTEGER;
+  for (const t of list) {
+    if (t <= now && t > prev) prev = t;
+    if (t > now && t < next) next = t;
+  }
+  return { prev, next };
+}
+function computeFoodLevel(now, lastFedAt) {
+  const { prev, next } = getMealtimesAround(now);
+  if (next <= now) return 0;
+  const baseTime = Math.max(lastFedAt || 0, prev);
+  if (baseTime >= next || now < baseTime) return 100;
+  const remaining = next - now;
+  const total = next - baseTime;
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(100, 100 * remaining / total));
+}
+function levelFromPapa(p) {
   if (!p || p <= 0) return 0;
   return Math.max(0, Math.min(1000, Math.floor(p / 100)));
 }
-function pointsToNextLevel(p) {
-  const N = levelFromPoints(p);
+function papaToNextLevel(p) {
+  const N = levelFromPapa(p);
   if (N >= 1000) return 0;
   return (N + 1) * 100 - (p || 0);
+}
+function levelFromPoints(p) { return levelFromPapa(p); }
+function pointsToNextLevel(p) { return papaToNextLevel(p); }
+function parseTaskForEcurle(title) {
+  const t = title || '';
+  const r = { food: false, walk: 0 };
+  if (/ご飯|ごはん|御飯|朝食|昼食|夕食/.test(t)) r.food = true;
+  const walkMatch = t.match(/(?:散歩|さんぽ)\s*(\d+)\s*分?/);
+  if (walkMatch) {
+    r.walk = parseInt(walkMatch[1], 10);
+  } else if (/散歩|さんぽ/.test(t)) {
+    r.walk = 30;
+  }
+  return r;
+}
+function applyTaskToEcurle(s, title) {
+  s.papa = (s.papa || 0) + 5;
+  s.totalPoints = s.papa;
+  const r = parseTaskForEcurle(title);
+  if (r.food) {
+    s.food = 100;
+    s.lastFedAt = Date.now();
+  }
+  if (r.walk > 0) {
+    s.walk = Math.min(100, (s.walk || 0) + r.walk);
+  }
+  s.totalDone = (s.totalDone || 0) + 1;
+}
+function ecurleOnTaskCreated(title) {
+  const s = tickShiba(loadShiba());
+  applyTaskToEcurle(s, title);
+  s.modifiedAt = Date.now();
+  saveShiba(s);
+  setShibaEmoji('shibaCard', '🐕');
+  applyShibaState(s);
+  const sheet = document.getElementById('shibaSheet');
+  if (sheet && sheet.classList.contains('open')) renderShiba();
 }
 function loadShiba() {
   try {
@@ -4634,73 +4686,38 @@ function saveShiba(s) {
 // 時間経過: 4 バー (満腹/気持ち/体力/快適) を相関減衰
 function tickShiba(s) {
   const now = Date.now();
+  if (s.food == null) s.food = 100;
+  if (s.walk == null) s.walk = 0;
+  if (s.sleep == null) s.sleep = 50;
+  if (s.papa == null) s.papa = s.totalPoints || 0;
+  if (s.lastFedAt == null) s.lastFedAt = 0;
   if (s.stamina == null) s.stamina = 60;
   if (s.comfort == null) s.comfort = 60;
   if (s.comfortBeforeDirt === undefined) s.comfortBeforeDirt = null;
-  if (s.sleepMode) {
-    s.lastTick = now;
-    return s;
-  }
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
+  s.food = computeFoodLevel(now, s.lastFedAt);
   if (elapsedMin > 0) {
-    // 1 tick = 1.0 分間隔。前回からさらに半分に減速。
-    const TICK_MIN = 1.0;
-    const DECAY_MULT = 1.1;   // メーター減少スピード倍率 (確率に掛けて全体の減りを速くする)
-    const ticks = Math.floor(elapsedMin / TICK_MIN);
-    const baseDrop = () => Math.random() < 0.5 * DECAY_MULT ? 1 : 0; // 0 or 1 平均 0.5 × DECAY_MULT
-    for (let i = 0; i < ticks; i++) {
-      let cHunger = 1, cHappy = 1, cStamina = 1, cComfort = 1;
-      if (s.hunger  <= 50) cHappy   *= 1.5;
-      if (s.happy   <= 50) cStamina *= 1.5;
-      if (s.stamina <= 50) cComfort *= 1.5;
-      if (s.comfort <= 50) { cHunger *= 1.5; cHappy *= 1.5; cStamina *= 1.5; }
-      s.hunger  = Math.max(0, s.hunger  - Math.round(baseDrop() * cHunger));
-      s.happy   = Math.max(0, s.happy   - Math.round(baseDrop() * cHappy));
-      s.stamina = Math.max(0, s.stamina - Math.round(baseDrop() * cStamina));
-      s.comfort = Math.max(0, s.comfort - Math.round(baseDrop() * cComfort));
-      // 1.25% × DECAY_MULT で 1 つに大幅減
-      if (Math.random() < 0.0125 * DECAY_MULT) {
-        const keys = ['hunger','happy','stamina','comfort'];
-        const k = keys[Math.floor(Math.random() * 4)];
-        s[k] = Math.max(0, s[k] - (5 + Math.floor(Math.random() * 11)));
-      }
-    }
-    if (ticks > 0) s.lastTick = now - (elapsedMin - ticks * TICK_MIN) * 60000;
-    // 綺麗好き設定: 排泄は散歩(外)で済ませる。家では我慢する。
-    // 時間経過で「もよおし(urge)」が溜まり、散歩で 0 にリセットされる。
-    // 我慢の限界(100)を超えても散歩されないと、こらえきれず家で粗相 → 快適度ダウン(要掃除)。
-    // 発生前の快適度は comfortBeforeDirt に保存 → 掃除で復元。
-    const URGE_PER_MIN = 0.5;     // 約200分(3時間強)で限界に達する
-    const DIRT_FLOOR = 30;
-    s.urge = Math.min(100, (s.urge || 0) + elapsedMin * URGE_PER_MIN);
-    if (s.urge >= 100 && !s.hasPoop && !s.hasPee) {
-      // こらえきれず家で粗相 (綺麗好きなので最後の手段)
-      if (s.comfortBeforeDirt == null) s.comfortBeforeDirt = s.comfort;
-      if (Math.random() < 0.5) s.hasPee = true; else s.hasPoop = true;
-      s.comfort = Math.min(s.comfort, DIRT_FLOOR);
-      s.urge = 0;  // 出してしまったのでリセット
+    if (s.sleepMode) {
+      s.sleep = Math.min(100, (s.sleep || 0) + elapsedMin);
+    } else {
+      s.sleep = Math.max(0, (s.sleep || 0) - elapsedMin * 0.5);
+      s.walk = Math.max(0, (s.walk || 0) - elapsedMin / 60);
     }
   }
+  s.lastTick = now;
   return s;
 }
-function getShibaEmoji(s) {
-  if (s.hasPoop) return '🐕💩';
-  if (s.hasPee) return '🐕💧';
-  return '🐕';
+function getShibaEmoji(s) { return '🐕';
 }
 function getShibaMood(s) {
-  if (s.hasPoop && s.hasPee) return 'うんち&おしっこ…';
-  if (s.hasPoop) return 'うんちしちゃった…';
-  if (s.hasPee)  return 'おしっこ漏らした…';
-  if ((s.urge || 0) >= 80) return 'そわそわ…(おさんぽ？)';
-  const stamina = s.stamina != null ? s.stamina : 60;
-  const comfort = s.comfort != null ? s.comfort : 60;
-  if (stamina <= 15) return 'バテバテ…';
-  if (s.hunger <= 15) return 'おなかすいた…';
-  if (s.happy <= 15) return 'さみしい…';
-  if (comfort <= 15) return 'きもち悪い…';
-  if (s.happy >= 80 && s.hunger >= 60 && comfort >= 60 && stamina >= 60) return 'しあわせ！';
-  if (s.happy >= 60) return 'ごきげん';
+  const food = s.food != null ? s.food : 100;
+  const walk = s.walk || 0;
+  const sleep = s.sleep != null ? s.sleep : 50;
+  if (food <= 15) return 'おなかすいた…';
+  if (sleep <= 15) return 'ねむい…';
+  if (walk <= 15) return 'うんどうしたい…';
+  if (food >= 70 && sleep >= 60 && walk >= 50) return 'しあわせ！';
+  if (food >= 60) return 'ごきげん';
   return 'ふつう';
 }
 function updateShibaSleepBtn(on) {
@@ -4723,19 +4740,15 @@ function updateShibaAutoBtn(on) {
 function renderShiba() {
   const s = tickShiba(loadShiba());
   saveShiba(s);
-  setShibaEmoji('shibaEmoji', getShibaEmoji(s));
-  setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
+  setShibaEmoji('shibaEmoji', '🐕');
+  setShibaEmoji('shibaCard', '🐕');
   applyShibaState(s);
   updateShibaSleepBtn(!!s.sleepMode);
-  updateShibaAutoBtn(!!s.autoMode);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
-  document.getElementById('shibaCoins').textContent = s.coins;
-  document.getElementById('shibaTotalDone').textContent = s.totalDone;
-  const tp = s.totalPoints || 0;
-  const lv = levelFromPoints(tp);
+  const papa = s.papa || 0;
+  const lv = levelFromPapa(papa);
   document.getElementById('shibaLevel').textContent = lv;
-  document.getElementById('shibaToNext').textContent = pointsToNextLevel(tp);
-  // 家族表示: 匹数 = Lv (1:1)、100 匹で犬小屋 1 軒に統合
+  document.getElementById('shibaToNext').textContent = papaToNextLevel(papa);
   const houses = Math.floor(lv / 100);
   const puppies = lv % 100;
   let puppyHtml = '';
@@ -4743,26 +4756,24 @@ function renderShiba() {
   for (let i = 0; i < puppies; i++) puppyHtml += '<span class="shiba-puppy">🐕</span>';
   const puppiesEl = document.getElementById('shibaPuppies');
   if (puppiesEl) puppiesEl.innerHTML = puppyHtml;
-  // 詳細シートの各バー (段階色付き)
   const applyFill = (id, val) => {
     const el = document.getElementById(id);
     if (!el) return;
     const v = Math.max(0, Math.min(100, val));
     el.style.width = v + '%';
     LV_CLASSES.forEach(cls => el.classList.remove(cls));
-    const lv = barLevelClass(v);
-    if (lv) el.classList.add(lv);
+    const c = barLevelClass(v);
+    if (c) el.classList.add(c);
   };
-  applyFill('hungerFill',  s.hunger);
-  document.getElementById('hungerVal').textContent = s.hunger;
-  applyFill('happyFill',   s.happy);
-  document.getElementById('happyVal').textContent = s.happy;
-  const st = s.stamina != null ? s.stamina : 60;
-  applyFill('staminaFill', st);
-  document.getElementById('staminaVal').textContent = st;
-  const c = s.comfort != null ? s.comfort : 60;
-  applyFill('comfortFill', c);
-  document.getElementById('comfortVal').textContent = c;
+  const setVal = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = Math.round(n); };
+  const food = s.food != null ? s.food : 100;
+  const walk = s.walk || 0;
+  const sleep = s.sleep != null ? s.sleep : 50;
+  const papaInLevel = papa % 100;
+  applyFill('foodFill', food);   setVal('foodVal', food);
+  applyFill('walkFill', walk);   setVal('walkVal', walk);
+  applyFill('sleepFill', sleep); setVal('sleepVal', sleep);
+  applyFill('papaFill', papaInLevel); setVal('papaVal', papaInLevel);
 }
 function shibaAction(action) {
   const s = tickShiba(loadShiba());
@@ -4935,36 +4946,10 @@ function shibaAutoSpend(s) {
   }
   return null;
 }
-function pointsForCompletion() { return 15 + Math.floor(Math.random() * 16); }
-function shibaEarnPoints(amount, label) {
-  if (!amount || amount <= 0) return;
-  const s = tickShiba(loadShiba());
-  s.coins += amount;
-  // 幸福度XPはコイン消費時のみ加算するのでここでは増やさない
-  s.modifiedAt = Date.now();
-  const autoSummary = shibaAutoSpend(s);
-  saveShiba(s);
-  const baseMsg = `🪙 +${amount} ${label || ''}`.trim();
-  showToast(autoSummary ? `${baseMsg} → 🤖 ${autoSummary}` : baseMsg);
-  if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
-  setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
-  applyShibaState(s);
-}
-function shibaEarnCoin(ev) {
-  const gain = pointsForCompletion();
-  const s = tickShiba(loadShiba());
-  s.coins += gain;
-  // 幸福度XPはコイン消費時のみ加算するのでここでは増やさない
-  s.totalDone += 1;
-  s.modifiedAt = Date.now();
-  s.happy = Math.min(100, s.happy + 2);
-  const autoSummary = shibaAutoSpend(s);
-  saveShiba(s);
-  showToast(autoSummary ? `🪙 +${gain} 完了 → 🤖 ${autoSummary}` : `🪙 +${gain} 完了`);
-  if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
-  setShibaEmoji('shibaCard', s.hasPoop ? '💩' : '🐕');
-  applyShibaState(s);
-}
+// === 旧 shibaEarnPoints/shibaEarnCoin は no-op に (新仕様: ecurleOnTaskCreated を使う) ===
+function pointsForCompletion() { return 0; }
+function shibaEarnPoints(amount, label) { /* no-op */ }
+function shibaEarnCoin(ev) { /* no-op */ }
 // ============= 豆柴シート = 浮きパネル (下の画面を操作可能、自由配置、サイズ変更可) =============
 const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
 const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
@@ -5402,11 +5387,10 @@ async function quickAddFromShiba(markDone) {
       saveCardOrder();
       setCachedEvents(dateKey, eventsCache);
     }
-    shibaEarnPoints(3, '新規登録');
-    if (markDone) shibaEarnCoin(created || {});
+    // エクル: タスク入力 → papa+5、タイトル解析でご飯/散歩トリガー
+    ecurleOnTaskCreated(title);
     input.value = '';
     // 提出後は常に blur (キーボード閉じる)。
-    // (focus() してしまうと iOS でキーボードが再オープンし keyboard-open が再付与される)
     input.blur();
   } catch (e) {
     showToast('登録失敗: ' + (e.message || e));
