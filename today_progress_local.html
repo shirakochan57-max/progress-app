@@ -5064,8 +5064,8 @@ function shibaEarnCoin(ev) {
 const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
 const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
 const SHIBA_PANEL_SCALE_KEY = 'shiba_panel_scale_v1';
-const SHIBA_PANEL_MIN_W = 240;
-const SHIBA_PANEL_MIN_H = 200;
+const SHIBA_PANEL_MIN_W = 168;  // 240の70% (最小幅をさらに小さく)
+const SHIBA_PANEL_MIN_H = 140;  // 200の70%
 function getShibaContent() {
   return document.querySelector('#shibaSheet .shiba-panel-content');
 }
