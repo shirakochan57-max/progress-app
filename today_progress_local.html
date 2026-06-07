@@ -5073,18 +5073,36 @@ function applyShibaScale(s) {
   const content = getShibaContent();
   if (content) content.style.zoom = s;
 }
-function saveShibaPanelScale() {
-  const content = getShibaContent();
-  const v = content ? parseFloat(content.style.zoom) : 1;
-  try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(v || 1)); } catch (e) {}
-}
-function restoreShibaPanelScale() {
-  let s = 1;
+// 「ユーザ意図 scale」(corner で設定された値、localStorage に保存)
+function getShibaUserScale() {
   try {
     const v = parseFloat(localStorage.getItem(SHIBA_PANEL_SCALE_KEY));
-    if (!isNaN(v) && v > 0.2 && v < 5) s = v;
+    if (!isNaN(v) && v > 0.2 && v < 5) return v;
   } catch (e) {}
-  applyShibaScale(s);
+  return 1;
+}
+// panel 幅から content が収まる scale を計算
+function computeShibaFitScale(panelW) {
+  return (panelW - 32) / 288;  // 左右 edge 各 16px、content 内在幅 288
+}
+// 実効 scale = min(ユーザ scale, fit scale)。content が常に viewport に収まる
+function updateShibaDisplayScale(panelW) {
+  const fitScale = computeShibaFitScale(panelW);
+  const userScale = getShibaUserScale();
+  const effective = Math.max(0.3, Math.min(userScale, fitScale));
+  applyShibaScale(effective);
+}
+// corner ドラッグ完了時にユーザ意図 scale を保存 (fitScale = userScale が一致)
+function saveShibaPanelScale() {
+  const panel = document.getElementById('shibaSheet');
+  const r = panel.getBoundingClientRect();
+  const fitScale = computeShibaFitScale(r.width);
+  try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(fitScale)); } catch (e) {}
+}
+function restoreShibaPanelScale() {
+  const panel = document.getElementById('shibaSheet');
+  const r = panel.getBoundingClientRect();
+  updateShibaDisplayScale(r.width || 320);
 }
 function saveShibaPanelSize() {
   const panel = document.getElementById('shibaSheet');
@@ -5329,10 +5347,6 @@ function closeShibaPanel() {
       // 位置 (BL/TR/TL は片方の端を固定して反対側を動かす)
       if (mode === 'bl' || mode === 'tl') newLeft = baseLeft + (baseW - newW);
       if (mode === 'tr' || mode === 'tl') newTop = baseTop + (baseH - newH);
-      // 中身の scale も同時に更新 (viewport 幅 = panelW - 左右 edge 各 16px、内在幅 288)
-      const viewportW = newW - 32;
-      const newScale = viewportW / 288;
-      applyShibaScale(newScale);
     } else if (mode === 'x') {
       // 右辺: 幅のみ変更、scale は変えない
       const maxW = window.innerWidth - baseLeft - 8;
@@ -5365,6 +5379,13 @@ function closeShibaPanel() {
     panel.style.height = newH + 'px';
     panel.style.left = newLeft + 'px';
     panel.style.top = newTop + 'px';
+    // どのモードでも実効 scale を再計算 (corner なら fitScale = userScale で一致、edge なら必要なら自動縮小)
+    if (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl') {
+      // corner: その場でユーザ意図 scale を更新 (drag 中もリアルタイムに保存値が変わる)
+      const fitScale = computeShibaFitScale(newW);
+      try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(fitScale)); } catch (err) {}
+    }
+    updateShibaDisplayScale(newW);
     e.preventDefault();
   }
   function onUp(e) {
