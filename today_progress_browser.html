@@ -432,10 +432,12 @@ html, body {
   color: var(--text);
   height: auto;
   padding: 0;
-  font-size: 13px; font-weight: 700;
-  min-width: 88px;
-  white-space: nowrap;
+  font-size: 11px; font-weight: 700;
+  min-width: 40px;
+  white-space: pre-line;   /* 改行 \n を 2段表示する */
   letter-spacing: 0.3px;
+  text-align: center;
+  line-height: 1.15;
 }
 .card:not(.expanded) .time-pill.allday {
   background: var(--ink);
@@ -2178,7 +2180,7 @@ function getEventDateKey(ev) {
 function getStartISO(ev) { return ev.start && ev.start.dateTime ? ev.start.dateTime : null; }
 function getEndISO(ev) { return ev.end && ev.end.dateTime ? ev.end.dateTime : null; }
 function isDone(ev) { return (ev.summary || '').startsWith('✔️'); }
-// 時刻ピル表示用テキスト: "10:00-11:00" / "終日" / "✔︎"
+// 時刻ピル表示用テキスト: "10:00\n11:00" (2段) / "終日" / "✔︎"
 function timePillText(ev, opts) {
   opts = opts || {};
   const done = opts.done != null ? opts.done : isDone(ev);
@@ -2187,7 +2189,7 @@ function timePillText(ev, opts) {
   if (allDay) return '終日';
   const s = formatTime(getStartISO(ev));
   const e = formatTime(getEndISO(ev));
-  return (s && e) ? `${s}-${e}` : (s || '—');
+  return (s && e) ? `${s}\n${e}` : (s || '—');
 }
 function isMultiDay(ev) {
   if (!isAllDay(ev)) return false;
