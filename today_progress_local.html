@@ -4611,12 +4611,9 @@ const LV_CLASSES = ['lv-green','lv-yellow','lv-orange','lv-red'];
 // フローティングアイコン下の気分タグ用テキスト (詳細シートよりも短く)
 function getShibaMoodShort(s) {
   const food = s.food != null ? s.food : 100;
-  const walk = s.walk || 0;
-  const sleep = s.sleep != null ? s.sleep : 50;
+  if (s.sleepMode) return 'スヤスヤ';
   if (food <= 15) return 'お腹すいた';
-  if (sleep <= 15) return 'ねむい';
-  if (walk <= 15) return 'うずうず';
-  if (food >= 70 && sleep >= 60 && walk >= 50) return 'しあわせ〜';
+  if (food >= 70) return 'しあわせ〜';
   if (food >= 60) return 'ごきげん';
   return 'ふつう';
 }
@@ -4649,11 +4646,12 @@ function updateShibaMiniBars(s) {
 function applyShibaState(s) {
   updateShibaMiniBars(s);
   const food = s.food != null ? s.food : 100;
-  const sleep = s.sleep != null ? s.sleep : 50;
+  // 状態は sleepMode と food のみで決まる
+  // (sleep/walk バーは表示のみ、犬の状態には影響しない)
   let state = 'normal';
-  if (food <= 15) state = 'hungry';
-  else if (sleep <= 15) state = 'sleep';
-  else if (food >= 65 && sleep >= 50) state = 'happy';
+  if (s.sleepMode) state = 'sleep';
+  else if (food <= 15) state = 'hungry';
+  else if (food >= 65) state = 'happy';
   const states = ['state-normal','state-happy','state-sleep','state-hungry','state-sad','state-poop'];
   ['shibaCard','shibaEmoji'].forEach(id => {
     const el = document.getElementById(id);
@@ -4855,12 +4853,9 @@ function tickShiba(s) {
 function getShibaEmoji(s) { return '🐕'; }
 function getShibaMood(s) {
   const food = s.food != null ? s.food : 100;
-  const walk = s.walk || 0;
-  const sleep = s.sleep != null ? s.sleep : 50;
+  if (s.sleepMode) return 'スヤスヤ…';
   if (food <= 15) return 'おなかすいた…';
-  if (sleep <= 15) return 'ねむい…';
-  if (walk <= 15) return 'うんどうしたい…';
-  if (food >= 70 && sleep >= 60 && walk >= 50) return 'しあわせ！';
+  if (food >= 70) return 'しあわせ！';
   if (food >= 60) return 'ごきげん';
   return 'ふつう';
 }
