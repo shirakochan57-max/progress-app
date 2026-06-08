@@ -4618,15 +4618,22 @@ function getMealtimesAround(now) {
   }
   return { prev, next };
 }
+function getFoodAnchorTarget(now, lastFedAt) {
+  if (lastFedAt && lastFedAt > 0) {
+    const fedNext = getMealtimesAround(lastFedAt).next;
+    const target = getMealtimesAround(fedNext).next;
+    if (now <= target) return { anchor: lastFedAt, target };
+  }
+  const m = getMealtimesAround(now);
+  return { anchor: m.prev, target: m.next };
+}
 function computeFoodLevel(now, lastFedAt) {
-  const { prev, next } = getMealtimesAround(now);
-  if (next <= now) return 0;
-  const baseTime = Math.max(lastFedAt || 0, prev);
-  if (baseTime >= next || now < baseTime) return 100;
-  const remaining = next - now;
-  const total = next - baseTime;
+  const { anchor, target } = getFoodAnchorTarget(now, lastFedAt);
+  if (target <= now) return 0;
+  if (anchor >= now) return 100;
+  const total = target - anchor;
   if (total <= 0) return 0;
-  return Math.max(0, Math.min(100, 100 * remaining / total));
+  return Math.max(0, Math.min(100, 100 * (target - now) / total));
 }
 function levelFromPapa(p) {
   if (!p || p <= 0) return 0;
@@ -4641,8 +4648,12 @@ function levelFromPoints(p) { return levelFromPapa(p); }
 function pointsToNextLevel(p) { return papaToNextLevel(p); }
 function parseTaskForEcurle(title) {
   const t = title || '';
-  const r = { food: false, walk: 0 };
-  if (/ご飯|ごはん|御飯|朝食|昼食|夕食/.test(t)) r.food = true;
+  const r = { food: null, walk: 0 };
+  if (/ご飯|ごはん|御飯|朝食|昼食|夕食/.test(t)) {
+    r.food = 'meal';
+  } else if (/おやつ|間食|ごほうび/.test(t)) {
+    r.food = 'snack';
+  }
   const walkMatch = t.match(/(?:散歩|さんぽ)\s*(\d+)\s*分?/);
   if (walkMatch) {
     r.walk = parseInt(walkMatch[1], 10);
@@ -4655,22 +4666,30 @@ function applyTaskToEcurle(s, title) {
   s.papa = (s.papa || 0) + 5;
   s.totalPoints = s.papa;
   const r = parseTaskForEcurle(title);
-  if (r.food) {
+  if (r.food === 'meal') {
     s.food = 100;
     s.lastFedAt = Date.now();
+  } else if (r.food === 'snack') {
+    s.food = Math.min(100, (s.food || 0) + 15);
   }
   if (r.walk > 0) {
     s.walk = Math.min(100, (s.walk || 0) + r.walk);
   }
   s.totalDone = (s.totalDone || 0) + 1;
 }
+function ecurleOnUserActivity(s) {
+  s.sleepMode = false;
+  s.lastActivityAt = Date.now();
+  s.modifiedAt = Date.now();
+}
 function ecurleOnTaskCreated(title) {
   const s = tickShiba(loadShiba());
   applyTaskToEcurle(s, title);
-  s.modifiedAt = Date.now();
+  ecurleOnUserActivity(s);
   saveShiba(s);
   setShibaEmoji('shibaCard', '🐕');
   applyShibaState(s);
+  updateShibaSleepBtn(!!s.sleepMode);
   const sheet = document.getElementById('shibaSheet');
   if (sheet && sheet.classList.contains('open')) renderShiba();
 }
@@ -4686,22 +4705,48 @@ function saveShiba(s) {
 // 時間経過: 4 バー (満腹/気持ち/体力/快適) を相関減衰
 function tickShiba(s) {
   const now = Date.now();
-  if (s.food == null) s.food = 100;
   if (s.walk == null) s.walk = 0;
   if (s.sleep == null) s.sleep = 50;
   if (s.papa == null) s.papa = s.totalPoints || 0;
   if (s.lastFedAt == null) s.lastFedAt = 0;
+  if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
+  if (s.lastWalkResetDay == null) s.lastWalkResetDay = '';
   if (s.stamina == null) s.stamina = 60;
   if (s.comfort == null) s.comfort = 60;
   if (s.comfortBeforeDirt === undefined) s.comfortBeforeDirt = null;
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
-  s.food = computeFoodLevel(now, s.lastFedAt);
+  // 散歩: 日付が変わったらリセット
+  const todayKey = new Date(now).toDateString();
+  if (s.lastWalkResetDay && s.lastWalkResetDay !== todayKey) {
+    s.walk = 0;
+  }
+  s.lastWalkResetDay = todayKey;
+  // 自動おやすみ: 30分操作なし
+  const inactiveMin = (now - (s.lastActivityAt || now)) / 60000;
+  if (!s.sleepMode && inactiveMin >= 30) {
+    s.sleepMode = true;
+  }
+  // ご飯: 保存値ベースで減衰
+  if (s.food == null) {
+    s.food = computeFoodLevel(now, s.lastFedAt);
+  } else if (elapsedMin > 0) {
+    const { anchor, target } = getFoodAnchorTarget(now, s.lastFedAt);
+    if (now >= target) {
+      s.food = 0;
+    } else {
+      const intervalMs = target - anchor;
+      if (intervalMs > 0) {
+        const decayPerMin = 100 * 60000 / intervalMs;
+        s.food = Math.max(0, s.food - decayPerMin * elapsedMin);
+      }
+    }
+  }
+  // 睡眠
   if (elapsedMin > 0) {
     if (s.sleepMode) {
-      s.sleep = Math.min(100, (s.sleep || 0) + elapsedMin);
+      s.sleep = Math.min(100, (s.sleep || 0) + elapsedMin * 0.5);
     } else {
-      s.sleep = Math.max(0, (s.sleep || 0) - elapsedMin * 0.5);
-      s.walk = Math.max(0, (s.walk || 0) - elapsedMin / 60);
+      s.sleep = Math.max(0, (s.sleep || 0) - elapsedMin * 1);
     }
   }
   s.lastTick = now;
@@ -4946,10 +4991,24 @@ function shibaAutoSpend(s) {
   }
   return null;
 }
-// === 旧 shibaEarnPoints/shibaEarnCoin は no-op に (新仕様: ecurleOnTaskCreated を使う) ===
+// === 旧 shibaEarnPoints/shibaEarnCoin: 新仕様では「ユーザ操作」シグナル ===
 function pointsForCompletion() { return 0; }
-function shibaEarnPoints(amount, label) { /* no-op */ }
-function shibaEarnCoin(ev) { /* no-op */ }
+function shibaEarnPoints(amount, label) {
+  const s = tickShiba(loadShiba());
+  ecurleOnUserActivity(s);
+  saveShiba(s);
+  updateShibaSleepBtn(!!s.sleepMode);
+  applyShibaState(s);
+  if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
+}
+function shibaEarnCoin(ev) {
+  const s = tickShiba(loadShiba());
+  ecurleOnUserActivity(s);
+  saveShiba(s);
+  updateShibaSleepBtn(!!s.sleepMode);
+  applyShibaState(s);
+  if (document.getElementById('shibaSheet').classList.contains('open')) renderShiba();
+}
 // ============= 豆柴シート = 浮きパネル (下の画面を操作可能、自由配置、サイズ変更可) =============
 const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
 const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
@@ -5294,9 +5353,10 @@ document.getElementById('shibaSleepToggle').addEventListener('click', () => {
   s.sleepMode = !s.sleepMode;
   s.lastTick = Date.now();
   s.modifiedAt = Date.now();
+  if (!s.sleepMode) s.lastActivityAt = Date.now();
   saveShiba(s);
   updateShibaSleepBtn(s.sleepMode);
-  showToast(s.sleepMode ? '🌙 おやすみモード ON (メーター減らない)' : '☀️ おやすみモード OFF');
+  showToast(s.sleepMode ? '🌙 おやすみモード ON' : '☀️ 起きた！');
   renderShiba();
   // 手動切替後、自動おやすみタイマーを再始動 (起きた→15分計測再開 / 寝た→停止)
   if (window._shibaAutoSleepReset) window._shibaAutoSleepReset();
