@@ -2051,6 +2051,9 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="stat-row"><span class="stat-label">ご飯</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div></div><span class="stat-val" id="foodVal">100</span></div>
     <div class="stat-row"><span class="stat-label">散歩</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div></div><span class="stat-val" id="walkVal">0</span></div>
     <div class="stat-row"><span class="stat-label">睡眠</span><div class="stat-bar"><div class="stat-fill" id="sleepFill"></div></div><span class="stat-val" id="sleepVal">50</span></div>
+    <div class="stat-row"><span class="stat-label">うんこ</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div></div><span class="stat-val" id="poopVal">0</span></div>
+    <div class="stat-row"><span class="stat-label">ブラシ</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div></div><span class="stat-val" id="brushVal">0</span></div>
+    <div class="stat-row"><span class="stat-label">歯磨き</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div></div><span class="stat-val" id="toothVal">0</span></div>
     <div class="stat-row"><span class="stat-label">パパ</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
   </div>
   <div class="shiba-quick">
@@ -4669,6 +4672,9 @@ const DEFAULT_SHIBA = {
   food: 100,            // ご飯 (0-100、時間で減って7/12/21時に0)
   walk: 0,              // 散歩 (0-100、タスクで増える)
   sleep: 50,            // 睡眠 (0-100、おやすみモード中に増える)
+  poop: 0,              // うんこ (0-100、1回+50、日付変わりリセット)
+  brush: 0,             // ブラッシング (0-100、1回+50、日付変わりリセット)
+  tooth: 0,             // 歯磨き (0-100、1回+50、日付変わりリセット)
   papa: 0,              // パパ (累計、レベル = papa/100)
   lastFedAt: 0,         // 最後にご飯をあげた時刻 (food計算用)
   // === 既存(互換のため残す) ===
@@ -4739,7 +4745,7 @@ function pointsToNextLevel(p) { return papaToNextLevel(p); }
 // === タスクタイトル解析 ===
 function parseTaskForEcurle(title) {
   const t = title || '';
-  const r = { food: null, walk: 0 };  // food: 'meal' | 'snack' | null
+  const r = { food: null, walk: 0, poop: false, brush: false, tooth: false };
   if (/ご飯|ごはん|御飯|朝食|昼食|夕食/.test(t)) {
     r.food = 'meal';
   } else if (/おやつ|間食|ごほうび/.test(t)) {
@@ -4751,10 +4757,12 @@ function parseTaskForEcurle(title) {
   } else if (/散歩|さんぽ/.test(t)) {
     r.walk = 30;
   }
+  if (/うんこ|うんち|ウンコ|ウンチ/.test(t)) r.poop = true;
+  if (/ブラッシング|ぶらしんぐ|ブラシ/.test(t)) r.brush = true;
+  if (/歯磨き|歯みがき|はみがき|歯ブラシ/.test(t)) r.tooth = true;
   return r;
 }
 function applyTaskToEcurle(s, title) {
-  // パパ: タスク入力ごとに +5
   s.papa = (s.papa || 0) + 5;
   s.totalPoints = s.papa;
   const r = parseTaskForEcurle(title);
@@ -4763,11 +4771,13 @@ function applyTaskToEcurle(s, title) {
     s.lastFedAt = Date.now();
   } else if (r.food === 'snack') {
     s.food = Math.min(100, (s.food || 0) + 15);
-    // lastFedAt は更新しない (anchor は変えない)
   }
   if (r.walk > 0) {
     s.walk = Math.min(100, (s.walk || 0) + r.walk);
   }
+  if (r.poop)  s.poop  = Math.min(100, (s.poop  || 0) + 50);
+  if (r.brush) s.brush = Math.min(100, (s.brush || 0) + 50);
+  if (r.tooth) s.tooth = Math.min(100, (s.tooth || 0) + 50);
   s.totalDone = (s.totalDone || 0) + 1;
 }
 // === ユーザアクション (タスク入力/保存/削除/完了等) で「起きる」+ 活動時刻更新 ===
@@ -4808,6 +4818,9 @@ function tickShiba(s) {
   // 新フィールド初期化 + 旧データから移行
   if (s.walk == null) s.walk = 0;
   if (s.sleep == null) s.sleep = 50;
+  if (s.poop == null) s.poop = 0;
+  if (s.brush == null) s.brush = 0;
+  if (s.tooth == null) s.tooth = 0;
   if (s.papa == null) s.papa = s.totalPoints || 0;
   if (s.lastFedAt == null) s.lastFedAt = 0;
   if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
@@ -4816,10 +4829,13 @@ function tickShiba(s) {
   if (s.comfort == null) s.comfort = 60;
   if (s.comfortBeforeDirt === undefined) s.comfortBeforeDirt = null;
   const elapsedMin = (now - (s.lastTick || now)) / 60000;
-  // === 散歩: 日付が変わったらリセット ===
+  // === 散歩・うんこ・ブラシ・歯磨き: 日付が変わったらリセット ===
   const todayKey = new Date(now).toDateString();
   if (s.lastWalkResetDay && s.lastWalkResetDay !== todayKey) {
     s.walk = 0;
+    s.poop = 0;
+    s.brush = 0;
+    s.tooth = 0;
   }
   s.lastWalkResetDay = todayKey;
   // === 自動おやすみ: 30分操作なし ===
@@ -4918,6 +4934,10 @@ function renderShiba() {
   applyFill('foodFill', food);   setVal('foodVal', food);
   applyFill('walkFill', walk);   setVal('walkVal', walk);
   applyFill('sleepFill', sleep); setVal('sleepVal', sleep);
+  const poop = s.poop || 0, brush = s.brush || 0, tooth = s.tooth || 0;
+  applyFill('poopFill', poop);   setVal('poopVal', poop);
+  applyFill('brushFill', brush); setVal('brushVal', brush);
+  applyFill('toothFill', tooth); setVal('toothVal', tooth);
   applyFill('papaFill', papaInLevel); setVal('papaVal', papaInLevel);
 }
 function shibaAction(action) {
