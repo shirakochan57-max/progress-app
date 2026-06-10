@@ -1418,27 +1418,23 @@ body.shiba-sleeping .shiba-emoji::after {
   background: var(--ink);
   transition: height 0.3s ease, background 0.3s ease;
 }
-/* バーの目盛り (横線) - アイコンに合わせた色 */
+/* バーの目盛り (横線) */
 .stat-mark {
   position: absolute;
-  left: -1px; right: -1px;
-  height: 3px;
+  left: 0; right: 0;
+  height: 2px;
   background: var(--text-muted);
   pointer-events: none;
-  z-index: 3;
+  z-index: 2;
 }
-.stat-row[title*="ご飯"]  .stat-mark { background: #B8860B !important; }  /* 焼肉ブラウン */
-.stat-row[title*="散歩"]  .stat-mark { background: #1976D2 !important; }  /* 歩く人の青 */
-.stat-row[title*="うんこ"] .stat-mark { background: #5D4037 !important; }  /* うんこブラウン */
-.stat-row[title*="ブラシ"] .stat-mark { background: #C2185B !important; }  /* ブラシピンク */
-.stat-row[title*="歯磨き"] .stat-mark { background: #0097A7 !important; }  /* 歯ブラシ青緑 */
 /* 数値表示は廃止 (目盛りで把握する) */
 .stat-row > .stat-val { display: none; }
-/* バーの値段階に応じた色 (≤80緑 / ≤60黄 / ≤40橙 / ≤20赤) */
-.stat-fill.lv-green  { background: #2e8b57; }
-.stat-fill.lv-yellow { background: #d4a017; }
-.stat-fill.lv-orange { background: #d97a2c; }
-.stat-fill.lv-red    { background: #c0392b; }
+/* バーの fill 色をアイコンに合わせる */
+.stat-row[title*="ご飯"]  .stat-fill { background: #B8860B !important; }  /* 焼肉ブラウン */
+.stat-row[title*="散歩"]  .stat-fill { background: #1976D2 !important; }  /* 歩く人の青 */
+.stat-row[title*="うんこ"] .stat-fill { background: #5D4037 !important; }  /* うんこブラウン */
+.stat-row[title*="ブラシ"] .stat-fill { background: #C2185B !important; }  /* ブラシピンク */
+.stat-row[title*="歯磨き"] .stat-fill { background: #0097A7 !important; }  /* 歯ブラシ青緑 */
 .shiba-actions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
