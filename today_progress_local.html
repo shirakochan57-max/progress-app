@@ -771,11 +771,7 @@ body.card-on-top .card.expanded {
   line-height: 1;
 }
 #shibaSheet.shiba-panel .sheet-handle::after {
-  content: 'ドラッグして移動';
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 700;
-  letter-spacing: 0.5px;
+  content: '';
 }
 /* h3 も予備のドラッグハンドル (タイトル長押しでも掴める) */
 #shibaSheet.shiba-panel h3 {
@@ -1063,27 +1059,25 @@ body.card-on-top .card.expanded {
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .shiba-floating:active { background: var(--surface-2); }
-/* フローティングアイコン上のミニバロメーター (アイコンと合わせて 1.2 倍) */
+/* フローティングアイコン = 6本ミニバロメーターのみ */
 .shiba-mini-bars {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
+  position: static;
+  transform: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
   display: flex;
-  gap: 2px;
-  margin-bottom: 5px;
-  padding: 3px 4px;
-  background: var(--bg);
-  border: 1px solid var(--border-soft, var(--border));
-  border-radius: 3px;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
-  opacity: 0.9;
-  z-index: 1;
+  opacity: 1;
 }
 .shiba-mini-bar {
   position: relative;
   width: 5px;
-  height: 34px;        /* 17px × 200% (縦のみ拡大) */
+  height: 38px;
   background: rgba(0,0,0,0.08);
   border-radius: 1px;
   overflow: hidden;
@@ -1140,9 +1134,14 @@ body.card-on-top .card.expanded {
 }
 /* フローティングアイコンの emoji も 1.2 倍 */
 #shibaCard.shiba-floating {
-  width: 54px;       /* 45px × 1.2 */
-  height: 54px;
-  font-size: 30px;   /* 元 25px × 1.2 */
+  width: auto;
+  min-width: 56px;
+  height: 50px;
+  padding: 4px 6px;
+  font-size: 0;        /* 中身テキストなし */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 #shibaCard .shiba-inner,
 .shiba-emoji .shiba-inner {
@@ -1903,15 +1902,16 @@ body.shiba-sleeping .shiba-emoji::after {
   </div>
 
   <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
-  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="豆柴ちゃん" tabindex="0">
+  <div class="action-icon shiba-floating" id="shibaCard" role="button" aria-label="エクル" tabindex="0">
     <div class="shiba-mini-bars" id="shibaMiniBars" aria-hidden="true">
       <div class="shiba-mini-bar" data-bar="food" title="ご飯"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="walk" title="散歩"><span class="fill"></span></div>
-      <div class="shiba-mini-bar" data-bar="sleep" title="睡眠"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="poop" title="うんこ"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="brush" title="ブラシ"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="tooth" title="歯磨き"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="papa" title="パパ"><span class="fill"></span></div>
     </div>
-    <span class="shiba-inner">🐕</span>
-    <div class="shiba-mood-tag" id="shibaMoodTag" aria-hidden="true">ふつう</div>
+    <span id="shibaMoodTag" style="display:none;">ふつう</span>
   </div>
   <div class="photo-lightbox" id="photoLightbox">
     <div class="close-hint">タップで閉じる</div>
@@ -4617,6 +4617,8 @@ const SHIBA_CLOTHES_SVG = `<svg viewBox="0 0 100 55" xmlns="http://www.w3.org/20
   </g>
 </svg>`;
 function setShibaContent(containerId, isPoop) {
+  // shibaCard (フローティング) はバロメーターのみで犬イラストは描画しない
+  if (containerId === 'shibaCard') return;
   const el = document.getElementById(containerId);
   if (!el) return;
   let inner = el.querySelector('.shiba-inner');
@@ -4662,11 +4664,13 @@ function updateShibaMiniBars(s) {
   const c = document.getElementById('shibaMiniBars');
   if (c) {
     const papa = s.papa || 0;
-    const papaInLevel = papa % 100;  // 現在レベル内の進捗 0-99
+    const papaInLevel = papa % 100;
     const bars = {
       food:  s.food != null ? s.food : 100,
       walk:  s.walk || 0,
-      sleep: s.sleep != null ? s.sleep : 50,
+      poop:  s.poop || 0,
+      brush: s.brush || 0,
+      tooth: s.tooth || 0,
       papa:  papaInLevel
     };
     Object.keys(bars).forEach(key => {
@@ -4915,7 +4919,7 @@ function getShibaMood(s) {
 function updateShibaSleepBtn(on) {
   const btn = document.getElementById('shibaSleepToggle');
   if (btn) {
-    btn.textContent = on ? '☀️ 起きる' : '🌙 おやすみ';
+    btn.textContent = on ? '☀️' : '🌙';
     btn.style.background = on ? 'var(--ink)' : '';
     btn.style.color = on ? 'var(--inverted)' : '';
   }
