@@ -701,7 +701,9 @@ body.card-on-top .card.expanded {
   bottom: 32px;  /* 下の bottom edge 分 */
   left: 16px;    /* 左辺の edge 分 */
   right: 16px;   /* 右辺の edge 分 */
-  overflow: hidden;  /* スクロールしない (中身は等倍スケールで丸ごと収まる) */
+  overflow: hidden;  /* ネイティブスクロールはせず、ドラッグでクロップ位置をパンする */
+  touch-action: none;  /* タッチで中身をパンできるよう既定スクロールを抑制 */
+  cursor: grab;
   background: var(--bg);
 }
 /* 中身 = 固定サイズの「設計図」(288 × H0)。JS が transform: scale(s) を掛けて
@@ -5146,7 +5148,7 @@ const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
 const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
 const SHIBA_PANEL_SCALE_KEY = 'shiba_panel_scale_v1';
 const SHIBA_PANEL_MIN_W = 168;  // 240の70%
-const SHIBA_PANEL_MIN_H = 140;  // 200の70%
+const SHIBA_PANEL_MIN_H = 84;   // 上端を下ろして犬を隠し、ボタン行だけまで圧縮できるよう小さく
 function getShibaContent() {
   return document.querySelector('#shibaSheet .shiba-panel-content');
 }
@@ -5187,9 +5189,14 @@ function clampShibaScale(s) {
 function applyShibaTransform() {
   const content = getShibaContent();
   if (!content) return;
+  const panel = document.getElementById('shibaSheet');
   const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
-  shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - 24)));
-  shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - 24)));
+  const pr = panel.getBoundingClientRect();
+  const bodyW = Math.max(0, pr.width - 32);   // 覗き窓の幅
+  const bodyH = Math.max(0, pr.height - 64);  // 覗き窓の高さ
+  // 中身の下端/右端が覗き窓の外に出ない範囲に制限 = 下や右に無駄な空白を作らない
+  shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - bodyW)));
+  shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - bodyH)));
   content.style.height = shibaH0 + 'px';
   content.style.transformOrigin = 'top left';
   content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
@@ -5231,7 +5238,9 @@ function restoreShibaPanelScale() {
   let sz = null, cr = null;
   try { sz = JSON.parse(localStorage.getItem(SHIBA_PANEL_SIZE_KEY) || 'null'); } catch (e) {}
   try { cr = JSON.parse(localStorage.getItem(SHIBA_PANEL_CROP_KEY) || 'null'); } catch (e) {}
-  const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+  // 窓は中身より大きくしない (無駄な空白を作らない)
+  const capW = 32 + SHIBA_W0 * shibaScaleVal, capH = 64 + shibaH0 * shibaScaleVal;
+  const maxW = Math.min(capW, window.innerWidth - 16), maxH = Math.min(capH, window.innerHeight - 16);
   if (sz && typeof sz.w === 'number' && typeof sz.h === 'number') {
     w = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, sz.w));
     h = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, sz.h));
@@ -5475,22 +5484,25 @@ function closeShibaPanel() {
       applyShibaTransform();
     } else {
       // === 4辺: scale 固定。窓の幅/高さ/位置を自由に変え、中身をクロップ/露出 ===
+      // 窓は中身より大きくしない (capW/capH)。= 下や右に無駄な空白を作らない。
+      const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
+      const capW = 32 + visW, capH = 64 + visH;
       let newW = baseW, newH = baseH, newLeft = baseLeft, newTop = baseTop;
       shibaCropX = baseCropX; shibaCropY = baseCropY;
       if (mode === 'x') {
-        const maxW = window.innerWidth - baseLeft - 8;
+        const maxW = Math.min(capW, window.innerWidth - baseLeft - 8);
         newW = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, baseW + dx));
       } else if (mode === 'y') {
-        const maxH = window.innerHeight - baseTop - 8;
+        const maxH = Math.min(capH, window.innerHeight - baseTop - 8);
         newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
       } else if (mode === 'l') {
-        const minLeft = 8;
+        const minLeft = Math.max(8, baseLeft + baseW - capW);
         const maxLeft = baseLeft + baseW - SHIBA_PANEL_MIN_W;
         newLeft = Math.max(minLeft, Math.min(maxLeft, baseLeft + dx));
         newW = baseW + (baseLeft - newLeft);
         shibaCropX = baseCropX + (newLeft - baseLeft);
       } else if (mode === 't') {
-        const minTop = 8;
+        const minTop = Math.max(8, baseTop + baseH - capH);
         const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
         newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
         newH = baseH + (baseTop - newTop);
@@ -5538,6 +5550,75 @@ function closeShibaPanel() {
     }
   });
   if (!window.PointerEvent) {
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+})();
+// 中身をドラッグして覗き窓の中をパン (= 窓内スクロール)。
+// クロップ余地があるときだけ働き、閾値未満の操作はタップとして通す (ボタン/入力は通常動作)。
+(function setupShibaPanelPan() {
+  const panel = document.getElementById('shibaSheet');
+  const body = panel ? panel.querySelector('.shiba-panel-body') : null;
+  if (!body) return;
+  let active = false, panned = false, sx = 0, sy = 0, cx0 = 0, cy0 = 0;
+  function maxCrop() {
+    const pr = panel.getBoundingClientRect();
+    const bodyW = Math.max(0, pr.width - 32), bodyH = Math.max(0, pr.height - 64);
+    return {
+      x: Math.max(0, SHIBA_W0 * shibaScaleVal - bodyW),
+      y: Math.max(0, shibaH0 * shibaScaleVal - bodyH)
+    };
+  }
+  function onDown(e) {
+    if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
+    if (panel.classList.contains('resizing') || panel.classList.contains('dragging')) return;
+    const m = maxCrop();
+    if (m.x <= 0 && m.y <= 0) return;  // スクロールの必要なし → タップ等は通常通り
+    active = true; panned = false;
+    const pt = e.touches ? e.touches[0] : e;
+    sx = pt.clientX; sy = pt.clientY;
+    cx0 = shibaCropX; cy0 = shibaCropY;
+  }
+  function onMove(e) {
+    if (!active) return;
+    const pt = e.touches ? e.touches[0] : e;
+    const dx = pt.clientX - sx, dy = pt.clientY - sy;
+    if (!panned && (Math.abs(dx) + Math.abs(dy)) < 6) return;  // タップ閾値
+    if (!panned) {
+      panned = true;
+      body.style.cursor = 'grabbing';
+      if (e.pointerId != null && body.setPointerCapture) {
+        try { body.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+    }
+    // 指を下げる → 中身を下げて上 (犬) を見せる = cropY を下げる
+    shibaCropX = cx0 - dx;
+    shibaCropY = cy0 - dy;
+    applyShibaTransform();  // クランプ込み
+    if (e.cancelable) e.preventDefault();
+  }
+  function onUp(e) {
+    if (!active) return;
+    active = false;
+    body.style.cursor = 'grab';
+    if (panned) {
+      saveShibaCrop();
+      // パン直後の click を 1 回だけ抑制 (ボタン誤爆防止)
+      const supp = ev => { ev.stopPropagation(); ev.preventDefault(); };
+      body.addEventListener('click', supp, true);
+      setTimeout(() => body.removeEventListener('click', supp, true), 320);
+    }
+  }
+  if (window.PointerEvent) {
+    body.addEventListener('pointerdown', onDown);
+    body.addEventListener('pointermove', onMove);
+    body.addEventListener('pointerup', onUp);
+    body.addEventListener('pointercancel', onUp);
+  } else {
+    body.addEventListener('touchstart', onDown, { passive: true });
+    body.addEventListener('touchmove', onMove, { passive: false });
+    body.addEventListener('touchend', onUp);
+    body.addEventListener('mousedown', onDown);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }
