@@ -5146,7 +5146,7 @@ const SHIBA_PANEL_POS_KEY = 'shiba_panel_pos_v1';
 const SHIBA_PANEL_SIZE_KEY = 'shiba_panel_size_v1';
 const SHIBA_PANEL_SCALE_KEY = 'shiba_panel_scale_v1';
 const SHIBA_PANEL_MIN_W = 168;  // 240の70%
-const SHIBA_PANEL_MIN_H = 140;  // 200の70%
+const SHIBA_PANEL_MIN_H = 84;   // 上端を下ろして犬を隠し、ボタン行だけまで圧縮できるよう小さく
 function getShibaContent() {
   return document.querySelector('#shibaSheet .shiba-panel-content');
 }
@@ -5187,9 +5187,14 @@ function clampShibaScale(s) {
 function applyShibaTransform() {
   const content = getShibaContent();
   if (!content) return;
+  const panel = document.getElementById('shibaSheet');
   const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
-  shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - 24)));
-  shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - 24)));
+  const pr = panel.getBoundingClientRect();
+  const bodyW = Math.max(0, pr.width - 32);   // 覗き窓の幅
+  const bodyH = Math.max(0, pr.height - 64);  // 覗き窓の高さ
+  // 中身の下端/右端が覗き窓の外に出ない範囲に制限 = 下や右に無駄な空白を作らない
+  shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - bodyW)));
+  shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - bodyH)));
   content.style.height = shibaH0 + 'px';
   content.style.transformOrigin = 'top left';
   content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
@@ -5231,7 +5236,9 @@ function restoreShibaPanelScale() {
   let sz = null, cr = null;
   try { sz = JSON.parse(localStorage.getItem(SHIBA_PANEL_SIZE_KEY) || 'null'); } catch (e) {}
   try { cr = JSON.parse(localStorage.getItem(SHIBA_PANEL_CROP_KEY) || 'null'); } catch (e) {}
-  const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+  // 窓は中身より大きくしない (無駄な空白を作らない)
+  const capW = 32 + SHIBA_W0 * shibaScaleVal, capH = 64 + shibaH0 * shibaScaleVal;
+  const maxW = Math.min(capW, window.innerWidth - 16), maxH = Math.min(capH, window.innerHeight - 16);
   if (sz && typeof sz.w === 'number' && typeof sz.h === 'number') {
     w = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, sz.w));
     h = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, sz.h));
@@ -5475,22 +5482,25 @@ function closeShibaPanel() {
       applyShibaTransform();
     } else {
       // === 4辺: scale 固定。窓の幅/高さ/位置を自由に変え、中身をクロップ/露出 ===
+      // 窓は中身より大きくしない (capW/capH)。= 下や右に無駄な空白を作らない。
+      const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
+      const capW = 32 + visW, capH = 64 + visH;
       let newW = baseW, newH = baseH, newLeft = baseLeft, newTop = baseTop;
       shibaCropX = baseCropX; shibaCropY = baseCropY;
       if (mode === 'x') {
-        const maxW = window.innerWidth - baseLeft - 8;
+        const maxW = Math.min(capW, window.innerWidth - baseLeft - 8);
         newW = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, baseW + dx));
       } else if (mode === 'y') {
-        const maxH = window.innerHeight - baseTop - 8;
+        const maxH = Math.min(capH, window.innerHeight - baseTop - 8);
         newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
       } else if (mode === 'l') {
-        const minLeft = 8;
+        const minLeft = Math.max(8, baseLeft + baseW - capW);
         const maxLeft = baseLeft + baseW - SHIBA_PANEL_MIN_W;
         newLeft = Math.max(minLeft, Math.min(maxLeft, baseLeft + dx));
         newW = baseW + (baseLeft - newLeft);
         shibaCropX = baseCropX + (newLeft - baseLeft);
       } else if (mode === 't') {
-        const minTop = 8;
+        const minTop = Math.max(8, baseTop + baseH - capH);
         const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
         newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
         newH = baseH + (baseTop - newTop);
