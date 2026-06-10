@@ -693,24 +693,27 @@ body.card-on-top .card.expanded {
   position: relative;
   z-index: 29;
 }
-/* viewport = パネル内の覗き窓 (ハンドルを除いた領域) */
+/* viewport = パネル内の覗き窓 (ハンドルを除いた領域)。
+   中身は transform: scale で等倍拡縮するので、ここはスクロールさせず clip するだけ。 */
 #shibaSheet.shiba-panel .shiba-panel-body {
   position: absolute;
   top: 32px;     /* 上の drag bar + top edge 分 */
   bottom: 32px;  /* 下の bottom edge 分 */
   left: 16px;    /* 左辺の edge 分 */
   right: 16px;   /* 右辺の edge 分 */
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;  /* スクロールしない (中身は等倍スケールで丸ごと収まる) */
   background: var(--bg);
 }
-/* 中身 = 固定サイズの「設計図」。4隅ドラッグで zoom を変える */
+/* 中身 = 固定サイズの「設計図」(288 × H0)。JS が transform: scale(s) を掛けて
+   窓と中身を一体で等倍拡縮する。transform は layout を変えないのでズレない。 */
 #shibaSheet.shiba-panel .shiba-panel-content {
-  position: relative;
+  position: absolute;
+  top: 0; left: 0;
   width: 288px;
   padding: 8px 14px;
   box-sizing: border-box;
-  /* zoom は JS で設定 */
+  transform-origin: top left;
+  /* transform: scale(s) と height は JS で設定 */
 }
 /* 子犬・犬小屋エリアの高さ固定 + あふれた分は隠す */
 #shibaSheet.shiba-panel .shiba-puppies {
@@ -1389,7 +1392,7 @@ body.shiba-sleeping .shiba-emoji::after {
   color: var(--text-muted);
 }
 .stat-bar {
-  width: 10px;
+  width: 16px;
   height: 56px;
   background: var(--surface-2);
   border: 1.5px solid var(--border);
@@ -5147,40 +5150,64 @@ const SHIBA_PANEL_MIN_H = 140;  // 200の70%
 function getShibaContent() {
   return document.querySelector('#shibaSheet .shiba-panel-content');
 }
+// === 等倍スケール方式 ===
+// 中身は固定サイズ (SHIBA_W0 × shibaH0) の「設計図」。transform: scale(s) で
+// 窓と中身を一体で拡縮するので、レイアウトはリフローしない。
+const SHIBA_W0 = 288;     // 中身の固定内在幅
+let shibaH0 = 456;        // 中身の固定内在高さ (open 時に実測)
+function measureShibaH0() {
+  const content = getShibaContent();
+  if (!content) return shibaH0;
+  const pt = content.style.transform, ph = content.style.height;
+  content.style.transform = 'none';
+  content.style.height = 'auto';
+  const h = content.offsetHeight;
+  content.style.transform = pt;
+  content.style.height = ph;
+  if (h && h > 120) shibaH0 = h;
+  return shibaH0;
+}
+function shibaScaleFromW(w) { return (w - 32) / SHIBA_W0; }
+function shibaScaleBounds() {
+  const sMin = shibaScaleFromW(SHIBA_PANEL_MIN_W);
+  const maxW = window.innerWidth - 16;
+  const maxH = window.innerHeight - 16;
+  const sMax = Math.max(sMin, Math.min(shibaScaleFromW(maxW), (maxH - 64) / shibaH0));
+  return { sMin, sMax };
+}
+function clampShibaScale(s) {
+  const b = shibaScaleBounds();
+  return Math.max(b.sMin, Math.min(b.sMax, s));
+}
 function applyShibaScale(s) {
   const content = getShibaContent();
-  if (content) content.style.zoom = s;
-  // iOS PWA で CSS zoom + IME 変換候補ハイライトの描画バグを回避するため、
-  // 入力欄だけ zoom を打ち消して native スケールで描画する
-  const input = document.getElementById('shibaQuickTitle');
-  if (input && s > 0) input.style.zoom = (1 / s).toString();
+  if (!content) return;
+  content.style.height = shibaH0 + 'px';
+  content.style.transformOrigin = 'top left';
+  content.style.transform = 'scale(' + s + ')';
 }
-function getShibaUserScale() {
+function applyShibaPanelScale(s) {
+  const panel = document.getElementById('shibaSheet');
+  s = clampShibaScale(s);
+  panel.style.width = (32 + SHIBA_W0 * s) + 'px';
+  panel.style.height = (64 + shibaH0 * s) + 'px';
+  panel.style.maxHeight = 'none';
+  applyShibaScale(s);
+  return s;
+}
+function getShibaScale() {
   try {
     const v = parseFloat(localStorage.getItem(SHIBA_PANEL_SCALE_KEY));
-    if (!isNaN(v) && v > 0.2 && v < 5) return v;
+    if (!isNaN(v) && v > 0.2 && v < 6) return v;
   } catch (e) {}
   return 1;
 }
-function computeShibaFitScale(panelW) {
-  return (panelW - 32) / 288;
-}
-function updateShibaDisplayScale(panelW) {
-  const fitScale = computeShibaFitScale(panelW);
-  const userScale = getShibaUserScale();
-  const effective = Math.max(0.3, Math.min(userScale, fitScale));
-  applyShibaScale(effective);
-}
-function saveShibaPanelScale() {
-  const panel = document.getElementById('shibaSheet');
-  const r = panel.getBoundingClientRect();
-  const fitScale = computeShibaFitScale(r.width);
-  try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(fitScale)); } catch (e) {}
+function saveShibaScale(s) {
+  try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(s)); } catch (e) {}
 }
 function restoreShibaPanelScale() {
-  const panel = document.getElementById('shibaSheet');
-  const r = panel.getBoundingClientRect();
-  updateShibaDisplayScale(r.width || 320);
+  measureShibaH0();
+  applyShibaPanelScale(getShibaScale());
 }
 function saveShibaPanelSize() {
   const panel = document.getElementById('shibaSheet');
@@ -5190,20 +5217,8 @@ function saveShibaPanelSize() {
   } catch (e) {}
 }
 function restoreShibaPanelSize() {
-  const panel = document.getElementById('shibaSheet');
-  let sz = null;
-  try { sz = JSON.parse(localStorage.getItem(SHIBA_PANEL_SIZE_KEY) || 'null'); } catch (e) {}
-  if (sz && typeof sz.w === 'number' && typeof sz.h === 'number') {
-    const maxW = window.innerWidth - 16;
-    const maxH = window.innerHeight - 16;
-    panel.style.width = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, sz.w)) + 'px';
-    panel.style.height = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, sz.h)) + 'px';
-    panel.style.maxHeight = 'none';
-  } else {
-    panel.style.width = '';
-    panel.style.height = '';
-    panel.style.maxHeight = '';
-  }
+  // 窓の寸法は scale から算出する (restoreShibaPanelScale が担当)。
+  // 後方互換のため関数は残すが、ここでは何もしない。
 }
 function clampShibaPanelToViewport() {
   const panel = document.getElementById('shibaSheet');
@@ -5255,12 +5270,11 @@ function openShibaPanel() {
   panel.classList.add('open');
   const bd = document.getElementById('shibaBackdrop');
   if (bd) bd.classList.remove('open');
-  restoreShibaPanelSize();
-  restoreShibaPanelScale();
-  restoreShibaPanelPos();
   // 開いた直後は豆柴パネルを前面に
   document.body.classList.remove('card-on-top');
-  renderShiba();
+  renderShiba();                 // 先に中身を確定させてから測定する
+  restoreShibaPanelScale();      // H0 を実測 → 保存スケールを窓+中身へ適用
+  restoreShibaPanelPos();
   // パネルを開いたら「毎日エクル」の最新値をカレンダーから取得
   if (typeof pullDailyEcurleFromCalendar === 'function') {
     pullDailyEcurleFromCalendar().catch(() => {});
@@ -5402,71 +5416,45 @@ function closeShibaPanel() {
     const pt = e.touches ? e.touches[0] : e;
     const dx = pt.clientX - startX;
     const dy = pt.clientY - startY;
-    let newW = baseW, newH = baseH, newLeft = baseLeft, newTop = baseTop;
-    const isCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
-    if (isCorner) {
-      // 4隅: アスペクト比固定で等倍リサイズ
-      const ratio = baseW / baseH;
-      let dxAdj = dx, dyAdj = dy;
-      if (mode === 'bl' || mode === 'tl') dxAdj = -dx;
-      if (mode === 'tr' || mode === 'tl') dyAdj = -dy;
-      const propX = dxAdj / baseW;
-      const propY = dyAdj / baseH;
+    // すべてのハンドルを「単一スケール s」へ写像する。窓も中身も s から一括算出するので、
+    // 4隅でも辺でも中身は常に等倍のまま = レイアウトはリフローせず、ズレない。
+    let dxAdj = dx, dyAdj = dy;
+    if (mode === 'bl' || mode === 'tl' || mode === 'l') dxAdj = -dx;
+    if (mode === 'tr' || mode === 'tl' || mode === 't') dyAdj = -dy;
+    const widthDriven  = (mode === 'x' || mode === 'l');
+    const heightDriven = (mode === 'y' || mode === 't');
+    let s;
+    if (heightDriven) {
+      s = (baseH + dyAdj - 64) / shibaH0;
+    } else if (widthDriven) {
+      s = (baseW + dxAdj - 32) / SHIBA_W0;
+    } else {
+      const baseS = shibaScaleFromW(baseW);
+      const propX = dxAdj / baseW, propY = dyAdj / baseH;
       const p = Math.abs(propX) > Math.abs(propY) ? propX : propY;
-      let scale = 1 + p;
-      newW = baseW * scale;
-      newH = baseH * scale;
-      const maxW = window.innerWidth - 16;
-      const maxH = window.innerHeight - 16;
-      if (newW < SHIBA_PANEL_MIN_W) { newW = SHIBA_PANEL_MIN_W; newH = newW / ratio; }
-      if (newH < SHIBA_PANEL_MIN_H) { newH = SHIBA_PANEL_MIN_H; newW = newH * ratio; }
-      if (newW > maxW) { newW = maxW; newH = newW / ratio; }
-      if (newH > maxH) { newH = maxH; newW = newH * ratio; }
-      if (mode === 'bl' || mode === 'tl') newLeft = baseLeft + (baseW - newW);
-      if (mode === 'tr' || mode === 'tl') newTop = baseTop + (baseH - newH);
-    } else if (mode === 'x') {
-      const maxW = window.innerWidth - baseLeft - 8;
-      newW = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, baseW + dx));
-    } else if (mode === 'y') {
-      const maxH = window.innerHeight - baseTop - 8;
-      newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
-    } else if (mode === 'l') {
-      const minLeft = 8;
-      const maxLeft = baseLeft + baseW - SHIBA_PANEL_MIN_W;
-      newLeft = Math.max(minLeft, Math.min(maxLeft, baseLeft + dx));
-      newW = baseW + (baseLeft - newLeft);
-    } else if (mode === 't') {
-      const minTop = 8;
-      const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
-      newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
-      newH = baseH + (baseTop - newTop);
-      // 中身の画面位置を固定するため、body.scrollTop を上辺の移動量だけ調整
-      const body = getPanelBody();
-      if (body) {
-        const actualDy = newTop - baseTop;
-        body.scrollTop = Math.max(0, baseScrollTop + actualDy);
-      }
+      s = baseS * (1 + p);
     }
+    s = clampShibaScale(s);
+    const newW = 32 + SHIBA_W0 * s;
+    const newH = 64 + shibaH0 * s;
+    let newLeft = baseLeft, newTop = baseTop;
+    if (mode === 'bl' || mode === 'tl' || mode === 'l') newLeft = baseLeft + (baseW - newW);
+    if (mode === 'tr' || mode === 'tl' || mode === 't') newTop = baseTop + (baseH - newH);
     panel.style.width = newW + 'px';
     panel.style.height = newH + 'px';
     panel.style.left = newLeft + 'px';
     panel.style.top = newTop + 'px';
-    if (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl') {
-      const fitScale = computeShibaFitScale(newW);
-      try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(fitScale)); } catch (err) {}
-    }
-    updateShibaDisplayScale(newW);
+    applyShibaScale(s);
+    saveShibaScale(s);
     e.preventDefault();
   }
   function onUp(e) {
     if (!resizing) return;
     const handle = resizing;
-    const wasCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
     resizing = null;
     panel.classList.remove('resizing');
-    saveShibaPanelSize();
     saveShibaPanelPos();
-    if (wasCorner) saveShibaPanelScale();
+    saveShibaScale(shibaScaleFromW(panel.getBoundingClientRect().width));
     if (e && e.pointerId != null && handle.releasePointerCapture) {
       try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
     }
