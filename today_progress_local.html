@@ -1387,19 +1387,53 @@ body.shiba-sleeping .shiba-emoji::after {
 .shiba-header-row .shiba-header-lv { font-size: 14px; }
 .shiba-header-row .shiba-header-next { font-size: 11px; font-weight: 500; }
 .shiba-header-row .shiba-header-coin { margin-left: auto; font-size: 14px; }
-.shiba-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.stat-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.stat-row > .stat-label { width: 36px; font-weight: 700; letter-spacing: 0.5px; }
-.stat-row > .stat-val { width: 32px; text-align: right; font-size: 11px; color: var(--text-muted); }
-.stat-bar {
+/* === 縦型バー (横並び、アイコンラベル) === */
+.shiba-stats {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  justify-content: space-around;
+  margin-bottom: 12px;
+}
+.stat-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   flex: 1;
-  height: 10px;
+  min-width: 0;
+}
+.stat-row > .stat-label {
+  width: auto;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.stat-row > .stat-val {
+  width: auto;
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+.stat-bar {
+  width: 10px;
+  height: 56px;
   background: var(--surface-2);
   border: 1.5px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
 }
-.stat-fill { height: 100%; background: var(--ink); transition: width 0.3s, background 0.3s; }
+/* 縦バーの fill (bottom から上に伸びる) */
+.stat-bar { position: relative; overflow: hidden; }
+.stat-fill {
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 100%;
+  height: 0%;
+  background: var(--ink);
+  transition: height 0.3s ease, background 0.3s ease;
+}
 /* バーの値段階に応じた色 (≤80緑 / ≤60黄 / ≤40橙 / ≤20赤) */
 .stat-fill.lv-green  { background: #2e8b57; }
 .stat-fill.lv-yellow { background: #d4a017; }
@@ -2048,13 +2082,13 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-mood" id="shibaMood">ごきげん</div>
   </div>
   <div class="shiba-stats">
-    <div class="stat-row"><span class="stat-label">ご飯</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div></div><span class="stat-val" id="foodVal">100</span></div>
-    <div class="stat-row"><span class="stat-label">散歩</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div></div><span class="stat-val" id="walkVal">0</span></div>
-    <div class="stat-row"><span class="stat-label">睡眠</span><div class="stat-bar"><div class="stat-fill" id="sleepFill"></div></div><span class="stat-val" id="sleepVal">50</span></div>
-    <div class="stat-row"><span class="stat-label">うんこ</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div></div><span class="stat-val" id="poopVal">0</span></div>
-    <div class="stat-row"><span class="stat-label">ブラシ</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div></div><span class="stat-val" id="brushVal">0</span></div>
-    <div class="stat-row"><span class="stat-label">歯磨き</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div></div><span class="stat-val" id="toothVal">0</span></div>
-    <div class="stat-row"><span class="stat-label">パパ</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
+    <div class="stat-row" title="ご飯"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div></div><span class="stat-val" id="foodVal">100</span></div>
+    <div class="stat-row" title="散歩"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div></div><span class="stat-val" id="walkVal">0</span></div>
+    <div class="stat-row" title="うんこ"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div></div><span class="stat-val" id="poopVal">0</span></div>
+    <div class="stat-row" title="ブラシ"><span class="stat-label">🪮</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div></div><span class="stat-val" id="brushVal">0</span></div>
+    <div class="stat-row" title="歯磨き"><span class="stat-label">🪥</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div></div><span class="stat-val" id="toothVal">0</span></div>
+    <div class="stat-row" title="パパ"><span class="stat-label">⭐</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
+    <span id="sleepFill" style="display:none;"></span><span id="sleepVal" style="display:none;">50</span>
   </div>
   <div class="shiba-quick">
     <input type="text" id="shibaQuickTitle" placeholder="タスクを入力"
@@ -4917,11 +4951,12 @@ function renderShiba() {
   const puppiesEl = document.getElementById('shibaPuppies');
   if (puppiesEl) puppiesEl.innerHTML = puppyHtml;
   // 4バー
+  // 縦バー: height で fill 量を表現 (bottom から上に伸びる)
   const applyFill = (id, val) => {
     const el = document.getElementById(id);
     if (!el) return;
     const v = Math.max(0, Math.min(100, val));
-    el.style.width = v + '%';
+    el.style.height = v + '%';
     LV_CLASSES.forEach(cls => el.classList.remove(cls));
     const c = barLevelClass(v);
     if (c) el.classList.add(c);
@@ -4929,11 +4964,9 @@ function renderShiba() {
   const setVal = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = Math.round(n); };
   const food = s.food != null ? s.food : 100;
   const walk = s.walk || 0;
-  const sleep = s.sleep != null ? s.sleep : 50;
   const papaInLevel = papa % 100;
   applyFill('foodFill', food);   setVal('foodVal', food);
   applyFill('walkFill', walk);   setVal('walkVal', walk);
-  applyFill('sleepFill', sleep); setVal('sleepVal', sleep);
   const poop = s.poop || 0, brush = s.brush || 0, tooth = s.tooth || 0;
   applyFill('poopFill', poop);   setVal('poopVal', poop);
   applyFill('brushFill', brush); setVal('brushVal', brush);
