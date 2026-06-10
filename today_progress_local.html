@@ -1418,6 +1418,17 @@ body.shiba-sleeping .shiba-emoji::after {
   background: var(--ink);
   transition: height 0.3s ease, background 0.3s ease;
 }
+/* バーの目盛り (横線) */
+.stat-mark {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: var(--text-muted);
+  pointer-events: none;
+  z-index: 2;
+}
+/* 数値表示は廃止 (目盛りで把握する) */
+.stat-row > .stat-val { display: none; }
 /* バーの値段階に応じた色 (≤80緑 / ≤60黄 / ≤40橙 / ≤20赤) */
 .stat-fill.lv-green  { background: #2e8b57; }
 .stat-fill.lv-yellow { background: #d4a017; }
@@ -2067,11 +2078,11 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-mood" id="shibaMood" style="display:none;">ごきげん</div>
   </div>
   <div class="shiba-stats">
-    <div class="stat-row" title="ご飯"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div></div><span class="stat-val" id="foodVal">100</span></div>
-    <div class="stat-row" title="散歩"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div></div><span class="stat-val" id="walkVal">0</span></div>
-    <div class="stat-row" title="うんこ"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div></div><span class="stat-val" id="poopVal">0</span></div>
-    <div class="stat-row" title="ブラシ"><span class="stat-label">🪮</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div></div><span class="stat-val" id="brushVal">0</span></div>
-    <div class="stat-row" title="歯磨き"><span class="stat-label">🪥</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div></div><span class="stat-val" id="toothVal">0</span></div>
+    <div class="stat-row" title="ご飯 (最大3)"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="foodVal">0</span></div>
+    <div class="stat-row" title="散歩 (最大5km)"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark" style="bottom:60%"></div><div class="stat-mark" style="bottom:80%"></div></div><span class="stat-val" id="walkVal">0</span></div>
+    <div class="stat-row" title="うんこ (最大3)"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="poopVal">0</span></div>
+    <div class="stat-row" title="ブラシ (最大2)"><span class="stat-label">🪮</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="brushVal">0</span></div>
+    <div class="stat-row" title="歯磨き (最大2)"><span class="stat-label">🪥</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="toothVal">0</span></div>
     <div class="stat-row" title="パパ"><span class="stat-label">⭐</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
     <span id="sleepFill" style="display:none;"></span><span id="sleepVal" style="display:none;">50</span>
   </div>
@@ -4510,11 +4521,11 @@ function barLevelClass(v) {
 const LV_CLASSES = ['lv-green','lv-yellow','lv-orange','lv-red'];
 // フローティングアイコン下の気分タグ用テキスト (詳細シートよりも短く)
 function getShibaMoodShort(s) {
-  const food = s.food != null ? s.food : 100;
+  const food = s.food || 0;
   if (s.sleepMode) return 'スヤスヤ';
-  if (food <= 15) return 'お腹すいた';
-  if (food >= 70) return 'しあわせ〜';
-  if (food >= 60) return 'ごきげん';
+  if (food === 0) return 'お腹すいた';
+  if (food >= ECURLE_MAX.food) return 'しあわせ〜';
+  if (food >= 2) return 'ごきげん';
   return 'ふつう';
 }
 // フローティングアイコン上のミニバロメーターを更新 (段階色付き)
@@ -4522,24 +4533,23 @@ function updateShibaMiniBars(s) {
   const c = document.getElementById('shibaMiniBars');
   if (c) {
     const papa = s.papa || 0;
-    const papaInLevel = papa % 100;
+    // 生値とそれぞれの最大値で % を計算 (バーは縦に伸びる)
     const bars = {
-      food:  s.food != null ? s.food : 100,
-      walk:  s.walk || 0,
-      poop:  s.poop || 0,
-      brush: s.brush || 0,
-      tooth: s.tooth || 0,
-      papa:  papaInLevel
+      food:  { v: s.food  || 0, max: ECURLE_MAX.food },
+      walk:  { v: s.walk  || 0, max: ECURLE_MAX.walk },
+      poop:  { v: s.poop  || 0, max: ECURLE_MAX.poop },
+      brush: { v: s.brush || 0, max: ECURLE_MAX.brush },
+      tooth: { v: s.tooth || 0, max: ECURLE_MAX.tooth },
+      papa:  { v: papa % 100,    max: 100 }
     };
     Object.keys(bars).forEach(key => {
       const el = c.querySelector(`[data-bar="${key}"]`);
       if (!el) return;
-      const v = Math.max(0, Math.min(100, bars[key]));
+      const { v, max } = bars[key];
+      const pct = max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
       const fill = el.querySelector('.fill');
-      if (fill) fill.style.height = v + '%';
+      if (fill) fill.style.height = pct + '%';
       LV_CLASSES.forEach(cls => el.classList.remove(cls));
-      const lv = barLevelClass(v);
-      if (lv) el.classList.add(lv);
     });
   }
   const tag = document.getElementById('shibaMoodTag');
@@ -4547,13 +4557,12 @@ function updateShibaMiniBars(s) {
 }
 function applyShibaState(s) {
   updateShibaMiniBars(s);
-  const food = s.food != null ? s.food : 100;
+  const food = s.food || 0;
   // 状態は sleepMode と food のみで決まる
-  // (sleep/walk バーは表示のみ、犬の状態には影響しない)
   let state = 'normal';
   if (s.sleepMode) state = 'sleep';
-  else if (food <= 15) state = 'hungry';
-  else if (food >= 65) state = 'happy';
+  else if (food === 0) state = 'hungry';
+  else if (food >= ECURLE_MAX.food) state = 'happy';
   const states = ['state-normal','state-happy','state-sleep','state-hungry','state-sad','state-poop'];
   ['shibaCard','shibaEmoji'].forEach(id => {
     const el = document.getElementById(id);
@@ -4563,16 +4572,18 @@ function applyShibaState(s) {
   });
 }
 const SHIBA_KEY = 'shiba_state_v1';
+// === エクル: バーの最大値 (積立式、日付変わりでリセット) ===
+const ECURLE_MAX = { food: 3, walk: 5, poop: 3, brush: 2, tooth: 2 };
 const DEFAULT_SHIBA = {
-  // === 新ゲーム性: エクル ===
-  food: 100,            // ご飯 (0-100、時間で減って7/12/21時に0)
-  walk: 0,              // 散歩 (0-100、タスクで増える)
-  sleep: 50,            // 睡眠 (0-100、おやすみモード中に増える)
-  poop: 0,              // うんこ (0-100、1回+50、日付変わりリセット)
-  brush: 0,             // ブラッシング (0-100、1回+50、日付変わりリセット)
-  tooth: 0,             // 歯磨き (0-100、1回+50、日付変わりリセット)
+  // === 新ゲーム性: エクル (積立式、減らない) ===
+  food: 0,              // ご飯 (0-3、1食=+1、おやつ=+0.5)
+  walk: 0,              // 散歩 (0-5km、入力したkm数だけ加算)
+  sleep: 0,             // 睡眠 (未使用、互換のため残す)
+  poop: 0,              // うんこ (0-3、1回=+1)
+  brush: 0,             // ブラッシング (0-2、1回=+1)
+  tooth: 0,             // 歯磨き (0-2、1回=+1)
   papa: 0,              // パパ (累計、レベル = papa/100)
-  lastFedAt: 0,         // 最後にご飯をあげた時刻 (food計算用)
+  lastFedAt: 0,         // 互換のため残す
   // === 既存(互換のため残す) ===
   coins: 0, totalDone: 0,
   hunger: 60, happy: 60, stamina: 60, comfort: 60,
@@ -4647,11 +4658,12 @@ function parseTaskForEcurle(title) {
   } else if (/おやつ|間食|ごほうび/.test(t)) {
     r.food = 'snack';
   }
-  const walkMatch = t.match(/(?:散歩|さんぽ)\s*(\d+)\s*分?/);
+  // 散歩: 「散歩1km」「さんぽ1.6キロ」「散歩1k」「さんぽ1」など、小数点対応
+  const walkMatch = t.match(/(?:散歩|さんぽ)\s*(\d+(?:\.\d+)?)/);
   if (walkMatch) {
-    r.walk = parseInt(walkMatch[1], 10);
+    r.walk = parseFloat(walkMatch[1]);
   } else if (/散歩|さんぽ/.test(t)) {
-    r.walk = 30;
+    r.walk = 1;  // 数値なしは 1km
   }
   if (/うんこ|うんち|ウンコ|ウンチ/.test(t)) r.poop = true;
   if (/ブラッシング|ぶらしんぐ|ブラシ/.test(t)) r.brush = true;
@@ -4659,21 +4671,22 @@ function parseTaskForEcurle(title) {
   return r;
 }
 function applyTaskToEcurle(s, title) {
+  // パパ: タスク入力ごとに +5
   s.papa = (s.papa || 0) + 5;
   s.totalPoints = s.papa;
   const r = parseTaskForEcurle(title);
   if (r.food === 'meal') {
-    s.food = 100;
-    s.lastFedAt = Date.now();
+    s.food = Math.min(ECURLE_MAX.food, (s.food || 0) + 1);
   } else if (r.food === 'snack') {
-    s.food = Math.min(100, (s.food || 0) + 15);
+    s.food = Math.min(ECURLE_MAX.food, (s.food || 0) + 0.5);
   }
   if (r.walk > 0) {
-    s.walk = Math.min(100, (s.walk || 0) + r.walk);
+    // 0.1km 単位で四捨五入
+    s.walk = Math.min(ECURLE_MAX.walk, Math.round(((s.walk || 0) + r.walk) * 10) / 10);
   }
-  if (r.poop)  s.poop  = Math.min(100, (s.poop  || 0) + 50);
-  if (r.brush) s.brush = Math.min(100, (s.brush || 0) + 50);
-  if (r.tooth) s.tooth = Math.min(100, (s.tooth || 0) + 50);
+  if (r.poop)  s.poop  = Math.min(ECURLE_MAX.poop,  (s.poop  || 0) + 1);
+  if (r.brush) s.brush = Math.min(ECURLE_MAX.brush, (s.brush || 0) + 1);
+  if (r.tooth) s.tooth = Math.min(ECURLE_MAX.tooth, (s.tooth || 0) + 1);
   s.totalDone = (s.totalDone || 0) + 1;
 }
 // === ユーザアクション (タスク入力/保存/削除/完了等) で「起きる」+ 活動時刻更新 ===
@@ -4702,32 +4715,37 @@ function loadShiba() {
 function saveShiba(s) {
   try { localStorage.setItem(SHIBA_KEY, JSON.stringify(s)); } catch (e) {}
 }
-// === エクル: 時間経過処理 ===
-//   ご飯 (food): 7/12/21時に0になるよう線形減衰。給餌時は次の次のmealに合わせて減衰
-//                スナック (おやつ/間食/ごほうび) は +15
-//   散歩 (walk): 0時にリセット (日付が変わったら0)、タスクで増加
-//   睡眠 (sleep): おやすみモード中 +0.5/分、起きてる時 -1/分
-//   パパ (papa): タスクで+5、減衰なし
+// === エクル: 時間経過処理 (積立式、減衰なし、日付変わりでリセット) ===
+//   全バー: タスク入力で加算、自動減少なし
+//   ご飯/散歩/うんこ/ブラシ/歯磨き: 日付が変わると0にリセット
+//   パパ: 累計 (リセットなし)、レベル = papa / 100
 //   自動おやすみ: 30分操作なしで sleepMode = true
 function tickShiba(s) {
   const now = Date.now();
-  // 新フィールド初期化 + 旧データから移行
+  // 初期化
+  if (s.food == null) s.food = 0;
   if (s.walk == null) s.walk = 0;
-  if (s.sleep == null) s.sleep = 50;
+  if (s.sleep == null) s.sleep = 0;
   if (s.poop == null) s.poop = 0;
   if (s.brush == null) s.brush = 0;
   if (s.tooth == null) s.tooth = 0;
   if (s.papa == null) s.papa = s.totalPoints || 0;
-  if (s.lastFedAt == null) s.lastFedAt = 0;
   if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
   if (s.lastWalkResetDay == null) s.lastWalkResetDay = '';
+  // 旧スケール (0-100) で保存されたデータをマイグレーション: 新最大値より大きければ 0 に
+  if (s.food > ECURLE_MAX.food)   s.food = 0;
+  if (s.walk > ECURLE_MAX.walk)   s.walk = 0;
+  if (s.poop > ECURLE_MAX.poop)   s.poop = 0;
+  if (s.brush > ECURLE_MAX.brush) s.brush = 0;
+  if (s.tooth > ECURLE_MAX.tooth) s.tooth = 0;
+  // 旧フィールド互換
   if (s.stamina == null) s.stamina = 60;
   if (s.comfort == null) s.comfort = 60;
   if (s.comfortBeforeDirt === undefined) s.comfortBeforeDirt = null;
-  const elapsedMin = (now - (s.lastTick || now)) / 60000;
-  // === 散歩・うんこ・ブラシ・歯磨き: 日付が変わったらリセット ===
+  // === 日付が変わったらバーをリセット (パパ以外) ===
   const todayKey = new Date(now).toDateString();
   if (s.lastWalkResetDay && s.lastWalkResetDay !== todayKey) {
+    s.food = 0;
     s.walk = 0;
     s.poop = 0;
     s.brush = 0;
@@ -4739,39 +4757,16 @@ function tickShiba(s) {
   if (!s.sleepMode && inactiveMin >= 30) {
     s.sleepMode = true;
   }
-  // === ご飯: 保存値ベースで減衰 (スナックで +15 可能、メールで 100リセット) ===
-  if (s.food == null) {
-    s.food = computeFoodLevel(now, s.lastFedAt);
-  } else if (elapsedMin > 0) {
-    const { anchor, target } = getFoodAnchorTarget(now, s.lastFedAt);
-    if (now >= target) {
-      s.food = 0;
-    } else {
-      const intervalMs = target - anchor;
-      if (intervalMs > 0) {
-        const decayPerMin = 100 * 60000 / intervalMs;
-        s.food = Math.max(0, s.food - decayPerMin * elapsedMin);
-      }
-    }
-  }
-  // === 睡眠 ===
-  if (elapsedMin > 0) {
-    if (s.sleepMode) {
-      s.sleep = Math.min(100, (s.sleep || 0) + elapsedMin * 0.5);
-    } else {
-      s.sleep = Math.max(0, (s.sleep || 0) - elapsedMin * 1);
-    }
-  }
   s.lastTick = now;
   return s;
 }
 function getShibaEmoji(s) { return '🐕'; }
 function getShibaMood(s) {
-  const food = s.food != null ? s.food : 100;
+  const food = s.food || 0;
   if (s.sleepMode) return 'スヤスヤ…';
-  if (food <= 15) return 'おなかすいた…';
-  if (food >= 70) return 'しあわせ！';
-  if (food >= 60) return 'ごきげん';
+  if (food === 0) return 'おなかすいた…';
+  if (food >= ECURLE_MAX.food) return 'しあわせ！';
+  if (food >= 2) return 'ごきげん';
   return 'ふつう';
 }
 function updateShibaSleepBtn(on) {
@@ -4812,28 +4807,25 @@ function renderShiba() {
   for (let i = 0; i < puppies; i++) puppyHtml += '<span class="shiba-puppy">🐕</span>';
   const puppiesEl = document.getElementById('shibaPuppies');
   if (puppiesEl) puppiesEl.innerHTML = puppyHtml;
-  // 4バー
-  // 縦バー: height で fill 量を表現 (bottom から上に伸びる)
-  const applyFill = (id, val) => {
+  // バー: 生値を 最大値に対する % に変換して height で表現
+  const applyFill = (id, val, max) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const v = Math.max(0, Math.min(100, val));
-    el.style.height = v + '%';
+    const pct = max > 0 ? Math.max(0, Math.min(100, (val / max) * 100)) : 0;
+    el.style.height = pct + '%';
     LV_CLASSES.forEach(cls => el.classList.remove(cls));
-    const c = barLevelClass(v);
-    if (c) el.classList.add(c);
   };
-  const setVal = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = Math.round(n); };
-  const food = s.food != null ? s.food : 100;
+  const food = s.food || 0;
   const walk = s.walk || 0;
-  const papaInLevel = papa % 100;
-  applyFill('foodFill', food);   setVal('foodVal', food);
-  applyFill('walkFill', walk);   setVal('walkVal', walk);
-  const poop = s.poop || 0, brush = s.brush || 0, tooth = s.tooth || 0;
-  applyFill('poopFill', poop);   setVal('poopVal', poop);
-  applyFill('brushFill', brush); setVal('brushVal', brush);
-  applyFill('toothFill', tooth); setVal('toothVal', tooth);
-  applyFill('papaFill', papaInLevel); setVal('papaVal', papaInLevel);
+  const poop = s.poop || 0;
+  const brush = s.brush || 0;
+  const tooth = s.tooth || 0;
+  applyFill('foodFill',  food,  ECURLE_MAX.food);
+  applyFill('walkFill',  walk,  ECURLE_MAX.walk);
+  applyFill('poopFill',  poop,  ECURLE_MAX.poop);
+  applyFill('brushFill', brush, ECURLE_MAX.brush);
+  applyFill('toothFill', tooth, ECURLE_MAX.tooth);
+  applyFill('papaFill',  papa % 100, 100);
 }
 function shibaAction(action) {
   const s = tickShiba(loadShiba());
