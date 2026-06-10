@@ -4587,18 +4587,160 @@ function applyTaskToEcurle(s, title) {
   s.papa = (s.papa || 0) + 5;
   s.totalPoints = s.papa;
   const r = parseTaskForEcurle(title);
+  const t = ensureDailyTotals(s);
+  let changed = false;
   if (r.food === 'meal') {
     s.food = Math.min(ECURLE_MAX.food, (s.food || 0) + 1);
+    t.food = Math.round(((t.food || 0) + 1) * 10) / 10;
+    changed = true;
   } else if (r.food === 'snack') {
     s.food = Math.min(ECURLE_MAX.food, (s.food || 0) + 0.5);
+    t.food = Math.round(((t.food || 0) + 0.5) * 10) / 10;
+    changed = true;
   }
   if (r.walk > 0) {
     s.walk = Math.min(ECURLE_MAX.walk, Math.round(((s.walk || 0) + r.walk) * 10) / 10);
+    t.walk = Math.round(((t.walk || 0) + r.walk) * 10) / 10;
+    changed = true;
   }
-  if (r.poop)  s.poop  = Math.min(ECURLE_MAX.poop,  (s.poop  || 0) + 1);
-  if (r.brush) s.brush = Math.min(ECURLE_MAX.brush, (s.brush || 0) + 1);
-  if (r.tooth) s.tooth = Math.min(ECURLE_MAX.tooth, (s.tooth || 0) + 1);
+  if (r.poop)  { s.poop  = Math.min(ECURLE_MAX.poop,  (s.poop  || 0) + 1); t.poop  = (t.poop  || 0) + 1; changed = true; }
+  if (r.brush) { s.brush = Math.min(ECURLE_MAX.brush, (s.brush || 0) + 1); t.brush = (t.brush || 0) + 1; changed = true; }
+  if (r.tooth) { s.tooth = Math.min(ECURLE_MAX.tooth, (s.tooth || 0) + 1); t.tooth = (t.tooth || 0) + 1; changed = true; }
   s.totalDone = (s.totalDone || 0) + 1;
+  if (changed) s._dailyDirty = true;
+}
+// === 毎日エクル: Googleカレンダー記録 ===
+function ymdLocalKey(d) {
+  d = d || new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + dd;
+}
+function addDaysYmd(ymd, n) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return ymdLocalKey(dt);
+}
+function ensureDailyTotals(s) {
+  const today = ymdLocalKey();
+  if (!s.dailyTotals || s.dailyTotals.date !== today) {
+    s.dailyTotals = { date: today, food: 0, walk: 0, poop: 0, brush: 0, tooth: 0, eventId: null };
+  }
+  return s.dailyTotals;
+}
+function formatEcurleNum(v) {
+  v = v || 0;
+  if (Math.abs(v - Math.round(v)) < 0.05) return String(Math.round(v));
+  return (Math.round(v * 10) / 10).toString();
+}
+function buildDailyEcurleDescription(t) {
+  return [
+    '食事 ' + formatEcurleNum(t.food) + '杯',
+    '散歩 ' + formatEcurleNum(t.walk) + 'km',
+    'うんち ' + formatEcurleNum(t.poop) + '回',
+    'ブラッシング ' + formatEcurleNum(t.brush) + '回',
+    '歯磨き ' + formatEcurleNum(t.tooth) + '回'
+  ].join('\n');
+}
+// 「食事 1.5杯」「散歩 7km」等を解析して dailyTotals に詰める
+function parseDailyEcurleDescription(desc) {
+  const out = { food: 0, walk: 0, poop: 0, brush: 0, tooth: 0 };
+  if (!desc) return out;
+  const lines = String(desc).split(/\r?\n/);
+  for (const line of lines) {
+    let m;
+    if ((m = line.match(/食事\s*([0-9]+(?:\.[0-9]+)?)/))) out.food = parseFloat(m[1]);
+    else if ((m = line.match(/散歩\s*([0-9]+(?:\.[0-9]+)?)/))) out.walk = parseFloat(m[1]);
+    else if ((m = line.match(/うんち\s*([0-9]+(?:\.[0-9]+)?)/))) out.poop = parseFloat(m[1]);
+    else if ((m = line.match(/ブラッシング\s*([0-9]+(?:\.[0-9]+)?)/))) out.brush = parseFloat(m[1]);
+    else if ((m = line.match(/歯磨き\s*([0-9]+(?:\.[0-9]+)?)/))) out.tooth = parseFloat(m[1]);
+  }
+  return out;
+}
+// 「毎日エクル」記述からメーター値を反映 (散歩は5km上限、他は各最大値)
+function applyDailyTotalsToBars(s) {
+  const t = s.dailyTotals;
+  if (!t) return;
+  s.food  = Math.min(ECURLE_MAX.food,  Math.round((t.food  || 0) * 10) / 10);
+  s.walk  = Math.min(ECURLE_MAX.walk,  Math.round((t.walk  || 0) * 10) / 10);
+  s.poop  = Math.min(ECURLE_MAX.poop,  t.poop  || 0);
+  s.brush = Math.min(ECURLE_MAX.brush, t.brush || 0);
+  s.tooth = Math.min(ECURLE_MAX.tooth, t.tooth || 0);
+}
+let _dailyEcurleSyncTimer = null;
+let _dailyEcurleSyncing = false;
+async function syncDailyEcurleToCalendar() {
+  if (_dailyEcurleSyncing) { scheduleDailyEcurleSync(800); return; }
+  const url = (typeof getGasUrl === 'function') ? getGasUrl() : '';
+  if (!url) return;
+  const s = loadShiba();
+  const t = s.dailyTotals;
+  if (!t || !t.date) return;
+  const desc = buildDailyEcurleDescription(t);
+  _dailyEcurleSyncing = true;
+  try {
+    let eventId = t.eventId;
+    if (!eventId) {
+      try {
+        const data = await gasCall('list', { date: t.date });
+        const ev = (data.events || []).find(e => (e.summary || '') === '毎日エクル');
+        if (ev) eventId = ev.id;
+      } catch (e) {}
+    }
+    if (eventId) {
+      await gasCall('update', { eventId, description: desc });
+    } else {
+      const res = await gasCall('create', {
+        summary: '毎日エクル',
+        description: desc,
+        allDay: true,
+        startTime: t.date,
+        endTime: addDaysYmd(t.date, 1)
+      });
+      eventId = res && res.id;
+    }
+    const s2 = loadShiba();
+    if (s2.dailyTotals && s2.dailyTotals.date === t.date) {
+      s2.dailyTotals.eventId = eventId;
+      s2._dailyDirty = false;
+      saveShiba(s2);
+    }
+  } catch (err) {
+    console.warn('syncDailyEcurleToCalendar failed', err);
+  } finally {
+    _dailyEcurleSyncing = false;
+  }
+}
+function scheduleDailyEcurleSync(delay) {
+  if (_dailyEcurleSyncTimer) clearTimeout(_dailyEcurleSyncTimer);
+  _dailyEcurleSyncTimer = setTimeout(syncDailyEcurleToCalendar, delay || 1500);
+}
+// Googleカレンダー → メーター: 「毎日エクル」記述から値を取り込む
+async function pullDailyEcurleFromCalendar() {
+  const url = (typeof getGasUrl === 'function') ? getGasUrl() : '';
+  if (!url) return false;
+  const today = ymdLocalKey();
+  try {
+    const data = await gasCall('list', { date: today });
+    const ev = (data.events || []).find(e => (e.summary || '') === '毎日エクル');
+    if (!ev) return false;
+    const parsed = parseDailyEcurleDescription(ev.description || '');
+    const s = loadShiba();
+    s.dailyTotals = Object.assign({ date: today, eventId: ev.id }, parsed);
+    applyDailyTotalsToBars(s);
+    s._dailyDirty = false;
+    saveShiba(s);
+    if (typeof applyShibaState === 'function') applyShibaState(s);
+    if (typeof renderShiba === 'function') {
+      const sheet = document.getElementById('shibaSheet');
+      if (sheet && sheet.classList.contains('open')) renderShiba();
+    }
+    return true;
+  } catch (e) {
+    console.warn('pullDailyEcurleFromCalendar failed', e);
+    return false;
+  }
 }
 function ecurleOnUserActivity(s) {
   s.sleepMode = false;
@@ -4615,6 +4757,7 @@ function ecurleOnTaskCreated(title) {
   updateShibaSleepBtn(!!s.sleepMode);
   const sheet = document.getElementById('shibaSheet');
   if (sheet && sheet.classList.contains('open')) renderShiba();
+  if (s._dailyDirty) scheduleDailyEcurleSync();
 }
 function loadShiba() {
   try {
@@ -4655,6 +4798,7 @@ function tickShiba(s) {
     s.poop = 0;
     s.brush = 0;
     s.tooth = 0;
+    s.dailyTotals = null;
   }
   s.lastWalkResetDay = todayKey;
   // 自動おやすみ: 30分操作なし
@@ -5572,6 +5716,8 @@ function shibaApplyIfNewer(remote) {
     ]);
     if (remote) shibaApplyIfNewer(remote);
   } catch (e) { /* silent */ }
+  // 「毎日エクル」イベントの値をメーターに反映 (カレンダー優先)
+  try { await pullDailyEcurleFromCalendar(); } catch (e) {}
   _shibaGasInitDone = true;
   shibaPushDebounced();
 })();
@@ -5579,6 +5725,8 @@ setInterval(async () => {
   if (!getGasUrl()) return;
   const remote = await shibaPullRemote();
   shibaApplyIfNewer(remote);
+  // カレンダー側で書き換えられた「毎日エクル」を取り込む
+  try { await pullDailyEcurleFromCalendar(); } catch (e) {}
 }, 120000);
 const _shibaOriginalSave = saveShiba;
 saveShiba = function (s) {
