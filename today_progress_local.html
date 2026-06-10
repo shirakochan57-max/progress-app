@@ -4738,7 +4738,7 @@ function buildDailyEcurleDescription(t) {
 let _dailyEcurleSyncTimer = null;
 let _dailyEcurleSyncing = false;
 async function syncDailyEcurleToCalendar() {
-  if (_dailyEcurleSyncing) { scheduleDailyEcurleSync(800); return; }
+  if (_dailyEcurleSyncing) { scheduleDailyEcurleSync(600); return; }
   const url = (typeof getGasUrl === 'function') ? getGasUrl() : '';
   if (!url) return;
   const s = loadShiba();
@@ -4747,18 +4747,25 @@ async function syncDailyEcurleToCalendar() {
   const desc = buildDailyEcurleDescription(t);
   _dailyEcurleSyncing = true;
   try {
-    let eventId = t.eventId;
-    if (!eventId) {
-      // 既存の「毎日エクル」を探す
-      try {
-        const data = await gasCall('list', { date: t.date });
-        const ev = (data.events || []).find(e => (e.summary || '') === '毎日エクル');
-        if (ev) eventId = ev.id;
-      } catch (e) {}
-    }
+    // 常にカレンダーを確認 (削除→再入力にも対応)
+    let eventId = null;
+    try {
+      const data = await gasCall('list', { date: t.date });
+      const ev = (data.events || []).find(e => (e.summary || '') === '毎日エクル');
+      if (ev) eventId = ev.id;
+    } catch (e) {}
+    // 既存があれば update、無ければ (or update失敗時は) create
+    let updated = false;
     if (eventId) {
-      await gasCall('update', { eventId, description: desc });
-    } else {
+      try {
+        await gasCall('update', { eventId, description: desc });
+        updated = true;
+      } catch (e) {
+        // update失敗 (削除済み等) → 新規作成にフォールバック
+        eventId = null;
+      }
+    }
+    if (!updated) {
       const res = await gasCall('create', {
         summary: '毎日エクル',
         description: desc,
@@ -4775,6 +4782,10 @@ async function syncDailyEcurleToCalendar() {
       s2._dailyDirty = false;
       saveShiba(s2);
     }
+    // アプリの予定リストにも反映
+    if (typeof refresh === 'function') {
+      try { await refresh(); } catch (e) {}
+    }
   } catch (err) {
     console.warn('syncDailyEcurleToCalendar failed', err);
   } finally {
@@ -4783,7 +4794,7 @@ async function syncDailyEcurleToCalendar() {
 }
 function scheduleDailyEcurleSync(delay) {
   if (_dailyEcurleSyncTimer) clearTimeout(_dailyEcurleSyncTimer);
-  _dailyEcurleSyncTimer = setTimeout(syncDailyEcurleToCalendar, delay || 1500);
+  _dailyEcurleSyncTimer = setTimeout(syncDailyEcurleToCalendar, delay != null ? delay : 400);
 }
 // 「食事 1.5杯」「散歩 7km」等を解析して dailyTotals に詰める
 function parseDailyEcurleDescription(desc) {
