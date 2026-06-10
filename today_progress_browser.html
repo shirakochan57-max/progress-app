@@ -5462,31 +5462,26 @@ function closeShibaPanel() {
     const dy = pt.clientY - startY;
     const isCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
     if (isCorner) {
-      // === 4隅: 現在の窓の縦横比を保ったまま等倍ズーム ===
-      // 窓比率 (baseW:baseH) を固定して拡縮。中身スケールは覗き窓を覆うよう決める
-      // (空白を作らない)。クロップの相対位置 (フレーミング) も維持する。
-      const ratio = baseW / baseH;
+      // === 4隅: 覗き窓(中身)を等倍スケール。レイアウト/フレーミングを完全維持 ===
+      // 覗き窓(body)を係数 k で拡縮し、中身スケール s・クロップも同じ k 倍にする。
+      // body・visW/H・crop が全て同率で変わるので、見えている割合(フレーミング)が一切ずれない。
+      // 窓(panel)= body + 固定chrome(横32/縦64) なので窓の外寸比だけ僅かに変わるが、中身は完全等倍。
+      const baseBodyW = baseW - 32, baseBodyH = baseH - 64;
       let dxAdj = dx, dyAdj = dy;
       if (mode === 'bl' || mode === 'tl') dxAdj = -dx;
       if (mode === 'tr' || mode === 'tl') dyAdj = -dy;
-      const propX = dxAdj / baseW, propY = dyAdj / baseH;
+      const propX = dxAdj / baseBodyW, propY = dyAdj / baseBodyH;
       const p = Math.abs(propX) > Math.abs(propY) ? propX : propY;
-      let newW = baseW * (1 + p), newH = newW / ratio;
+      let k = 1 + p;
+      // panel が画面内 & 最小サイズに収まるよう k をクランプ
       const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
-      if (newW < SHIBA_PANEL_MIN_W) { newW = SHIBA_PANEL_MIN_W; newH = newW / ratio; }
-      if (newH < SHIBA_PANEL_MIN_H) { newH = SHIBA_PANEL_MIN_H; newW = newH * ratio; }
-      if (newW > maxW) { newW = maxW; newH = newW / ratio; }
-      if (newH > maxH) { newH = maxH; newW = newH * ratio; }
-      const baseVisW = SHIBA_W0 * baseScale, baseVisH = shibaH0 * baseScale;
-      const baseBodyW = baseW - 32, baseBodyH = baseH - 64;
-      const fracX = (baseVisW - baseBodyW) > 0 ? baseCropX / (baseVisW - baseBodyW) : 0;
-      const fracY = (baseVisH - baseBodyH) > 0 ? baseCropY / (baseVisH - baseBodyH) : 0;
-      const bodyW = newW - 32, bodyH = newH - 64;
-      const s = Math.max(bodyW / SHIBA_W0, bodyH / shibaH0);
-      const visW = SHIBA_W0 * s, visH = shibaH0 * s;
-      shibaScaleVal = s;
-      shibaCropX = fracX * Math.max(0, visW - bodyW);
-      shibaCropY = fracY * Math.max(0, visH - bodyH);
+      const kMin = Math.max((SHIBA_PANEL_MIN_W - 32) / baseBodyW, (SHIBA_PANEL_MIN_H - 64) / baseBodyH);
+      const kMax = Math.min((maxW - 32) / baseBodyW, (maxH - 64) / baseBodyH);
+      k = Math.max(kMin, Math.min(kMax, k));
+      const newW = baseBodyW * k + 32, newH = baseBodyH * k + 64;
+      shibaScaleVal = baseScale * k;
+      shibaCropX = baseCropX * k;
+      shibaCropY = baseCropY * k;
       let newLeft = baseLeft, newTop = baseTop;
       if (mode === 'bl' || mode === 'tl') newLeft = baseLeft + (baseW - newW);
       if (mode === 'tr' || mode === 'tl') newTop = baseTop + (baseH - newH);
