@@ -675,7 +675,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--ink); }
   height: 520px;             /* 既定の高さ (scale 1 で中身がちょうど収まるサイズ) */
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 120px);
-  min-height: 220px;
+  min-height: 0;             /* 縮小の下限は JS (SHIBA_PANEL_MIN_H=84) が管理。CSS で固定しない */
   margin: 0;
   padding: 0;                /* 内側の .shiba-panel-body 側で padding */
   border: 1.5px solid var(--border);
