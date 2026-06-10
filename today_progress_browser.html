@@ -3412,6 +3412,10 @@ async function saveCardEvent(card, ev, btn) {
   renderEvents();
   showToast('保存しました');
   shibaEarnPoints(3, '保存');
+  // 「毎日エクル」の編集 → メーターも即時反映 (GAS同期完了を待たない)
+  if (isDailyEcurleTitle(newTitle)) {
+    applyDailyEcurleDescriptionToBars(memo.value, eventId);
+  }
 
   // === 背景同期 ===
   (async () => {
@@ -4563,8 +4567,17 @@ function papaToNextLevel(p) {
 }
 function levelFromPoints(p) { return levelFromPapa(p); }
 function pointsToNextLevel(p) { return papaToNextLevel(p); }
+// 全角→半角、全角ドット/カンマ→半角に正規化
+function normalizeEcurleText(s) {
+  return String(s || '')
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[．。]/g, '.')
+    .replace(/[，、]/g, ',')
+    .replace(/[ｋＫ]/g, 'k')
+    .replace(/[ｍＭ]/g, 'm');
+}
 function parseTaskForEcurle(title) {
-  const t = title || '';
+  const t = normalizeEcurleText(title || '');
   const r = { food: null, walk: 0, poop: false, brush: false, tooth: false };
   if (/ご飯|ごはん|御飯|朝食|昼食|夕食/.test(t)) {
     r.food = 'meal';
@@ -4647,13 +4660,13 @@ function buildDailyEcurleDescription(t) {
 function parseDailyEcurleDescription(desc) {
   const out = { food: 0, walk: 0, poop: 0, brush: 0, tooth: 0 };
   if (!desc) return out;
-  const lines = String(desc).split(/\r?\n/);
+  const lines = normalizeEcurleText(desc).split(/\r?\n/);
   for (const line of lines) {
     let m;
     if ((m = line.match(/食事\s*([0-9]+(?:\.[0-9]+)?)/))) out.food = parseFloat(m[1]);
     else if ((m = line.match(/散歩\s*([0-9]+(?:\.[0-9]+)?)/))) out.walk = parseFloat(m[1]);
-    else if ((m = line.match(/うんち\s*([0-9]+(?:\.[0-9]+)?)/))) out.poop = parseFloat(m[1]);
-    else if ((m = line.match(/ブラッシング\s*([0-9]+(?:\.[0-9]+)?)/))) out.brush = parseFloat(m[1]);
+    else if ((m = line.match(/うん(?:ち|こ)\s*([0-9]+(?:\.[0-9]+)?)/))) out.poop = parseFloat(m[1]);
+    else if ((m = line.match(/ブラ[ッシ]+ング\s*([0-9]+(?:\.[0-9]+)?)/))) out.brush = parseFloat(m[1]);
     else if ((m = line.match(/歯磨き\s*([0-9]+(?:\.[0-9]+)?)/))) out.tooth = parseFloat(m[1]);
   }
   return out;
@@ -4724,6 +4737,23 @@ async function syncDailyEcurleToCalendar() {
 function scheduleDailyEcurleSync(delay) {
   if (_dailyEcurleSyncTimer) clearTimeout(_dailyEcurleSyncTimer);
   _dailyEcurleSyncTimer = setTimeout(syncDailyEcurleToCalendar, delay != null ? delay : 400);
+}
+// 「毎日エクル」の description テキストを即座にメーターへ反映 (GAS往復不要)
+function applyDailyEcurleDescriptionToBars(desc, eventIdHint) {
+  const parsed = parseDailyEcurleDescription(desc);
+  const today = ymdLocalKey();
+  const s = loadShiba();
+  const prevId = (s.dailyTotals && s.dailyTotals.date === today) ? s.dailyTotals.eventId : null;
+  s.dailyTotals = Object.assign({ date: today, eventId: eventIdHint || prevId || null }, parsed);
+  applyDailyTotalsToBars(s);
+  s._dailyDirty = false;
+  saveShiba(s);
+  if (typeof applyShibaState === 'function') applyShibaState(s);
+  const sheet = document.getElementById('shibaSheet');
+  if (sheet && sheet.classList.contains('open') && typeof renderShiba === 'function') renderShiba();
+}
+function isDailyEcurleTitle(title) {
+  return String(title || '').replace(/^✔️\s*/, '').trim() === '毎日エクル';
 }
 // Googleカレンダー → メーター: 「毎日エクル」記述から値を取り込む
 async function pullDailyEcurleFromCalendar() {
@@ -5196,7 +5226,22 @@ function openShibaPanel() {
   // 開いた直後は豆柴パネルを前面に
   document.body.classList.remove('card-on-top');
   renderShiba();
+  // パネルを開いたら「毎日エクル」の最新値をカレンダーから取得
+  if (typeof pullDailyEcurleFromCalendar === 'function') {
+    pullDailyEcurleFromCalendar().catch(() => {});
+  }
 }
+// アプリがフォアグラウンドに戻ったら最新値を取り込む
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && typeof pullDailyEcurleFromCalendar === 'function') {
+    pullDailyEcurleFromCalendar().catch(() => {});
+  }
+});
+window.addEventListener('focus', () => {
+  if (typeof pullDailyEcurleFromCalendar === 'function') {
+    pullDailyEcurleFromCalendar().catch(() => {});
+  }
+});
 function closeShibaPanel() {
   document.getElementById('shibaSheet').classList.remove('open');
 }
