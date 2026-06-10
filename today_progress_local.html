@@ -626,8 +626,7 @@ html, body {
   font-weight: 700;
 }
 .memo-save-btn:active { background: transparent; color: var(--text); }
-.memo-input { min-height: 110px; }
-.progress-log { min-height: 50px; }
+.memo-input { min-height: 220px; }
 
 textarea {
   font-size: 16px;
@@ -638,20 +637,6 @@ textarea {
   line-height: 1.5; width: 100%;
 }
 textarea:focus, input:focus { outline: none; border-color: var(--ink); }
-
-.progress-log {
-  font-size: 14px; color: var(--text);
-  background: var(--surface-2); border: 1.5px solid var(--border); border-radius: 10px;
-  padding: 10px 12px;
-  white-space: pre-wrap;
-  line-height: 1.5;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  min-height: 60px;
-  width: 100%;
-  resize: vertical;
-  font-weight: 400;
-}
-.progress-log:focus { outline: none; border-color: var(--ink); }
 
 .sheet-backdrop {
   position: fixed; inset: 0;
@@ -2275,16 +2260,9 @@ function sortEvents(events) {
   });
 }
 
-function getProgressLog(eventId) {
-  return localStorage.getItem('progress_' + eventId) || '';
-}
-function appendProgressLog(eventId, text) {
-  const cur = getProgressLog(eventId);
-  const line = '✔️ [' + nowStamp() + '] ' + text;
-  const next = cur ? cur + '\n' + line : line;
-  localStorage.setItem('progress_' + eventId, next);
-  return next;
-}
+// 進捗メモ機能は廃止。互換のため空関数のみ残す
+function getProgressLog(eventId) { return ''; }
+function appendProgressLog(eventId, text) { return ''; }
 
 function parseScheduleText(text) {
   const norm = normalizeChars(text);
@@ -2504,11 +2482,6 @@ function swapEventId(tempId, realId) {
     if (photo) {
       localStorage.setItem('photo_' + realId, photo);
       localStorage.removeItem('photo_' + tempId);
-    }
-    const prog = localStorage.getItem('progress_' + tempId);
-    if (prog) {
-      localStorage.setItem('progress_' + realId, prog);
-      localStorage.removeItem('progress_' + tempId);
     }
   } catch (e) {}
   persistCache();
@@ -3042,68 +3015,6 @@ function renderCard(ev) {
   memoSec.appendChild(memo);
   body.appendChild(memoSec);
 
-  const progSec = document.createElement('div');
-  progSec.className = 'memo-section';
-  const progLblRow = document.createElement('div');
-  progLblRow.className = 'memo-label-row';
-  const progLabel = document.createElement('span');
-  progLabel.className = 'memo-label';
-  progLabel.textContent = '進捗メモ';
-  // ラベル行右側にローカル保存ボタンを配置 (badgeの代わり)
-  const progSaveBtn = document.createElement('button');
-  progSaveBtn.className = 'memo-save-btn';
-  progSaveBtn.type = 'button';
-  progSaveBtn.textContent = 'ローカル保存';
-  progLblRow.appendChild(progLabel);
-  progLblRow.appendChild(progSaveBtn);
-  const progLog = document.createElement('textarea');
-  progLog.className = 'progress-log';
-  // baselineValue = この時点でlocalStorageに保存されている値。
-  // blurによる横取り保存を廃止したため、ボタン押下時の差分判定が正しく動く。
-  let baselineValue = getProgressLog(ev.id);
-  progLog.value = baselineValue;
-  progLog.placeholder = '';
-  // ※ blurでの自動保存はあえて削除。ボタンを押した時のみ保存される。
-  function progLocalSave() {
-    const current = progLog.value;
-    if (current === baselineValue) { showToast('変更なし'); return; }
-    // 末尾に追記された部分を抽出 (baseline が prefix の場合のみ "新規部分" 判定)
-    let newPart = '';
-    if (baselineValue && current.startsWith(baselineValue)) {
-      newPart = current.substring(baselineValue.length).replace(/^\n+/, '');
-    } else if (!baselineValue) {
-      newPart = current;
-    }
-    newPart = newPart.trim();
-    const d = new Date();
-    const stamp = pad(d.getHours()) + ':' + pad(d.getMinutes());
-    if (newPart) {
-      const entry = '✔️ ' + stamp + ' ' + newPart;
-      const baseTrimmed = baselineValue.trim();
-      const next = baseTrimmed ? baseTrimmed + '\n' + entry : entry;
-      localStorage.setItem('progress_' + ev.id, next);
-      progLog.value = next;
-      baselineValue = next;
-      showToast('進捗メモに追記しました');
-    } else {
-      // 中間編集など末尾追加でないケース: 現在値をそのまま保存(タイムスタンプ無し)
-      if (current.trim()) {
-        localStorage.setItem('progress_' + ev.id, current);
-      } else {
-        localStorage.removeItem('progress_' + ev.id);
-      }
-      baselineValue = current;
-      showToast('保存しました');
-    }
-  }
-  progSaveBtn.addEventListener('click', e => { e.stopPropagation(); progLocalSave(); });
-  progLog.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); progLocalSave(); }
-  });
-  progSec.appendChild(progLblRow);
-  progSec.appendChild(progLog);
-  body.appendChild(progSec);
-
   // 分解セクション (初期非表示)。timeRow(終日チェック)直下に置き、操作距離を短くする。
   const splitSec = document.createElement('div');
   splitSec.className = 'split-section';
@@ -3418,37 +3329,8 @@ async function startRoulette() {
   rouletteRunning = false;
 }
 
-// 進捗メモがあるカードすべてに対して、カレンダーのdescriptionに追記する
-async function appendAllProgressToCalendar() {
-  const cards = [...document.querySelectorAll('.card')];
-  const targets = cards.filter(card => {
-    const eventId = card.dataset.eventId;
-    if (!eventId) return false;
-    const memo = localStorage.getItem('progress_' + eventId);
-    return memo && memo.trim();
-  });
-  if (!targets.length) return { ok: 0, fail: 0 };
-  // 並列実行
-  const results = await Promise.allSettled(targets.map(card => {
-    const eventId = card.dataset.eventId;
-    const progress = (localStorage.getItem('progress_' + eventId) || '').trim();
-    const memoEl = card.querySelector('.memo-input');
-    const existingDesc = memoEl ? memoEl.value : '';
-    const newDesc = existingDesc.trim() ? existingDesc.trim() + '\n' + progress : progress;
-    return gasCall('update', { eventId, description: newDesc })
-      .then(() => {
-        if (memoEl) memoEl.value = newDesc;
-        localStorage.removeItem('progress_' + eventId);
-        const progLog = card.querySelector('.progress-log');
-        if (progLog) progLog.value = '';
-      });
-  }));
-  let ok = 0, fail = 0;
-  for (const r of results) {
-    if (r.status === 'fulfilled') ok++; else fail++;
-  }
-  return { ok, fail };
-}
+// 進捗メモ機能廃止。互換のため空関数を残す
+async function appendAllProgressToCalendar() { return { ok: 0, fail: 0 }; }
 
 async function refresh() {
   const status = document.getElementById('cardsStatus');
@@ -3551,23 +3433,6 @@ async function saveCardEvent(card, ev, btn) {
   }
   card.classList.toggle('allday', nowAllDay);
 
-  // 進捗メモのローカル同期(GAS不要)
-  [...document.querySelectorAll('.card[data-event-id]')].forEach(c => {
-    const evId = c.dataset.eventId;
-    const addIn = c.querySelector('.append-input');
-    if (addIn && addIn.value.trim()) {
-      const next = appendProgressLog(evId, addIn.value.trim());
-      const pl = c.querySelector('.progress-log');
-      if (pl) pl.value = next;
-      addIn.value = '';
-    }
-    const pl = c.querySelector('.progress-log');
-    if (pl) {
-      const v = pl.value;
-      if (v.trim()) localStorage.setItem('progress_' + evId, v);
-      else localStorage.removeItem('progress_' + evId);
-    }
-  });
   persistCache();
   // 保存後はカードを自動で折りたたんでから並び替え
   card.classList.remove('expanded');
@@ -3608,13 +3473,6 @@ async function saveCardEvent(card, ev, btn) {
           startTime: localISO(dateObj, startInput.value),
           endTime: localISO(dateObj, endInput.value)
         });
-      }
-      // 進捗メモ一括追記 (並列化済み)
-      const bulk = await appendAllProgressToCalendar();
-      if (bulk.ok > 0 && bulk.fail === 0) {
-        showToast(`進捗 ${bulk.ok}件追記`);
-      } else if (bulk.fail > 0) {
-        showToast(`進捗 ${bulk.ok}件追記、${bulk.fail}件失敗`);
       }
       persistCache();
     } catch (err) {
