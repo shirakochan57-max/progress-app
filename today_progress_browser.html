@@ -701,9 +701,8 @@ body.card-on-top .card.expanded {
   bottom: 32px;  /* 下の bottom edge 分 */
   left: 16px;    /* 左辺の edge 分 */
   right: 16px;   /* 右辺の edge 分 */
-  overflow: hidden;  /* ネイティブスクロールはせず、ドラッグでクロップ位置をパンする */
-  touch-action: none;  /* タッチで中身をパンできるよう既定スクロールを抑制 */
-  cursor: grab;
+  overflow: hidden;  /* ネイティブスクロールはせず、ホイール/スワイプでクロップ位置を動かす */
+  touch-action: none;  /* タッチスワイプで中身を動かせるよう既定スクロールを抑制 */
   background: var(--bg);
 }
 /* 中身 = 固定サイズの「設計図」(288 × H0)。JS が transform: scale(s) を掛けて
@@ -5463,20 +5462,34 @@ function closeShibaPanel() {
     const dy = pt.clientY - startY;
     const isCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
     if (isCorner) {
-      // === 4隅: 等倍スケール (縦横比固定、中身を丸ごと、crop = 0) ===
+      // === 4隅: 現在の窓の縦横比を保ったまま等倍ズーム ===
+      // 窓比率 (baseW:baseH) を固定して拡縮。中身スケールは覗き窓を覆うよう決める
+      // (空白を作らない)。クロップの相対位置 (フレーミング) も維持する。
+      const ratio = baseW / baseH;
       let dxAdj = dx, dyAdj = dy;
       if (mode === 'bl' || mode === 'tl') dxAdj = -dx;
       if (mode === 'tr' || mode === 'tl') dyAdj = -dy;
       const propX = dxAdj / baseW, propY = dyAdj / baseH;
       const p = Math.abs(propX) > Math.abs(propY) ? propX : propY;
-      const s = clampShibaScale(baseScale * (1 + p));
-      const newW = 32 + SHIBA_W0 * s;
-      const newH = 64 + shibaH0 * s;
+      let newW = baseW * (1 + p), newH = newW / ratio;
+      const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+      if (newW < SHIBA_PANEL_MIN_W) { newW = SHIBA_PANEL_MIN_W; newH = newW / ratio; }
+      if (newH < SHIBA_PANEL_MIN_H) { newH = SHIBA_PANEL_MIN_H; newW = newH * ratio; }
+      if (newW > maxW) { newW = maxW; newH = newW / ratio; }
+      if (newH > maxH) { newH = maxH; newW = newH * ratio; }
+      const baseVisW = SHIBA_W0 * baseScale, baseVisH = shibaH0 * baseScale;
+      const baseBodyW = baseW - 32, baseBodyH = baseH - 64;
+      const fracX = (baseVisW - baseBodyW) > 0 ? baseCropX / (baseVisW - baseBodyW) : 0;
+      const fracY = (baseVisH - baseBodyH) > 0 ? baseCropY / (baseVisH - baseBodyH) : 0;
+      const bodyW = newW - 32, bodyH = newH - 64;
+      const s = Math.max(bodyW / SHIBA_W0, bodyH / shibaH0);
+      const visW = SHIBA_W0 * s, visH = shibaH0 * s;
+      shibaScaleVal = s;
+      shibaCropX = fracX * Math.max(0, visW - bodyW);
+      shibaCropY = fracY * Math.max(0, visH - bodyH);
       let newLeft = baseLeft, newTop = baseTop;
       if (mode === 'bl' || mode === 'tl') newLeft = baseLeft + (baseW - newW);
       if (mode === 'tr' || mode === 'tl') newTop = baseTop + (baseH - newH);
-      shibaScaleVal = s;
-      shibaCropX = 0; shibaCropY = 0;
       panel.style.width = newW + 'px';
       panel.style.height = newH + 'px';
       panel.style.left = newLeft + 'px';
@@ -5519,19 +5532,13 @@ function closeShibaPanel() {
   function onUp(e) {
     if (!resizing) return;
     const handle = resizing;
-    const wasCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
     resizing = null;
     panel.classList.remove('resizing');
+    // 4隅・4辺とも、現在の窓サイズ/クロップ/スケールをそのまま保存
     saveShibaPanelPos();
-    if (wasCorner) {
-      saveShibaScale(shibaScaleVal);
-      try { localStorage.removeItem(SHIBA_PANEL_SIZE_KEY); } catch (err) {}
-      try { localStorage.removeItem(SHIBA_PANEL_CROP_KEY); } catch (err) {}
-    } else {
-      saveShibaPanelSize();
-      saveShibaCrop();
-      saveShibaScale(shibaScaleVal);
-    }
+    saveShibaPanelSize();
+    saveShibaCrop();
+    saveShibaScale(shibaScaleVal);
     if (e && e.pointerId != null && handle.releasePointerCapture) {
       try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
     }
@@ -5554,73 +5561,93 @@ function closeShibaPanel() {
     document.addEventListener('mouseup', onUp);
   }
 })();
-// 中身をドラッグして覗き窓の中をパン (= 窓内スクロール)。
-// クロップ余地があるときだけ働き、閾値未満の操作はタップとして通す (ボタン/入力は通常動作)。
-(function setupShibaPanelPan() {
+// 窓内スクロール。Mac = マウスホイール / トラックパッド、iPhone/iPad = タッチスワイプ。
+// クロップ余地があるときだけ働く。transform だけを rAF でまとめて更新するので軽い。
+(function setupShibaPanelScroll() {
   const panel = document.getElementById('shibaSheet');
   const body = panel ? panel.querySelector('.shiba-panel-body') : null;
   if (!body) return;
-  let active = false, panned = false, sx = 0, sy = 0, cx0 = 0, cy0 = 0;
-  function maxCrop() {
+  let maxX = 0, maxY = 0;
+  function recalcMax() {
     const pr = panel.getBoundingClientRect();
-    const bodyW = Math.max(0, pr.width - 32), bodyH = Math.max(0, pr.height - 64);
-    return {
-      x: Math.max(0, SHIBA_W0 * shibaScaleVal - bodyW),
-      y: Math.max(0, shibaH0 * shibaScaleVal - bodyH)
-    };
+    maxX = Math.max(0, SHIBA_W0 * shibaScaleVal - (pr.width - 32));
+    maxY = Math.max(0, shibaH0 * shibaScaleVal - (pr.height - 64));
   }
-  function onDown(e) {
-    if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
-    if (panel.classList.contains('resizing') || panel.classList.contains('dragging')) return;
-    const m = maxCrop();
-    if (m.x <= 0 && m.y <= 0) return;  // スクロールの必要なし → タップ等は通常通り
-    active = true; panned = false;
-    const pt = e.touches ? e.touches[0] : e;
-    sx = pt.clientX; sy = pt.clientY;
-    cx0 = shibaCropX; cy0 = shibaCropY;
+  function clampCrop() {
+    shibaCropX = shibaCropX < 0 ? 0 : (shibaCropX > maxX ? maxX : shibaCropX);
+    shibaCropY = shibaCropY < 0 ? 0 : (shibaCropY > maxY ? maxY : shibaCropY);
   }
-  function onMove(e) {
+  let rafId = 0;
+  function render() {
+    rafId = 0;
+    const content = getShibaContent();
+    if (content) content.style.transform =
+      'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
+  }
+  function schedule() { if (!rafId) rafId = requestAnimationFrame(render); }
+  let saveTimer = 0;
+  function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveShibaCrop, 250); }
+  function ready() {
+    return panel.classList.contains('shiba-panel') && panel.classList.contains('open')
+      && !panel.classList.contains('resizing') && !panel.classList.contains('dragging');
+  }
+
+  // --- マウスホイール / トラックパッド (Mac) ---
+  function onWheel(e) {
+    if (!ready()) return;
+    recalcMax();
+    if (maxX <= 0 && maxY <= 0) return;  // スクロール不要
+    shibaCropY += e.deltaY;
+    shibaCropX += e.deltaX;
+    clampCrop();
+    schedule();
+    saveSoon();
+    e.preventDefault();
+  }
+  body.addEventListener('wheel', onWheel, { passive: false });
+
+  // --- タッチスワイプ (iPhone/iPad) ---
+  let active = false, swiped = false, sx = 0, sy = 0, cx0 = 0, cy0 = 0;
+  function tStart(e) {
+    if (!ready()) return;
+    recalcMax();
+    if (maxX <= 0 && maxY <= 0) return;
+    const t = e.touches ? e.touches[0] : e;
+    active = true; swiped = false; sx = t.clientX; sy = t.clientY; cx0 = shibaCropX; cy0 = shibaCropY;
+  }
+  function tMove(e) {
     if (!active) return;
-    const pt = e.touches ? e.touches[0] : e;
-    const dx = pt.clientX - sx, dy = pt.clientY - sy;
-    if (!panned && (Math.abs(dx) + Math.abs(dy)) < 6) return;  // タップ閾値
-    if (!panned) {
-      panned = true;
-      body.style.cursor = 'grabbing';
-      if (e.pointerId != null && body.setPointerCapture) {
-        try { body.setPointerCapture(e.pointerId); } catch (err) {}
-      }
-    }
-    // 指を下げる → 中身を下げて上 (犬) を見せる = cropY を下げる
+    const t = e.touches ? e.touches[0] : e;
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (!swiped && (Math.abs(dx) + Math.abs(dy)) < 6) return;  // タップ閾値
+    swiped = true;
     shibaCropX = cx0 - dx;
     shibaCropY = cy0 - dy;
-    applyShibaTransform();  // クランプ込み
+    clampCrop();
+    schedule();
     if (e.cancelable) e.preventDefault();
   }
-  function onUp(e) {
+  function tEnd() {
     if (!active) return;
     active = false;
-    body.style.cursor = 'grab';
-    if (panned) {
+    if (swiped) {
       saveShibaCrop();
-      // パン直後の click を 1 回だけ抑制 (ボタン誤爆防止)
+      // スワイプ直後の click を 1 回だけ抑制 (ボタン誤爆防止)
       const supp = ev => { ev.stopPropagation(); ev.preventDefault(); };
       body.addEventListener('click', supp, true);
       setTimeout(() => body.removeEventListener('click', supp, true), 320);
     }
   }
+  // タッチのみパン (マウスは掴まない → Mac はホイール/トラックパッドで)
   if (window.PointerEvent) {
-    body.addEventListener('pointerdown', onDown);
-    body.addEventListener('pointermove', onMove);
-    body.addEventListener('pointerup', onUp);
-    body.addEventListener('pointercancel', onUp);
+    body.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') tStart(e); });
+    body.addEventListener('pointermove', e => { if (e.pointerType === 'touch') tMove(e); });
+    body.addEventListener('pointerup',   e => { if (e.pointerType === 'touch') tEnd(e); });
+    body.addEventListener('pointercancel', e => { if (e.pointerType === 'touch') tEnd(e); });
   } else {
-    body.addEventListener('touchstart', onDown, { passive: true });
-    body.addEventListener('touchmove', onMove, { passive: false });
-    body.addEventListener('touchend', onUp);
-    body.addEventListener('mousedown', onDown);
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    body.addEventListener('touchstart', tStart, { passive: true });
+    body.addEventListener('touchmove', tMove, { passive: false });
+    body.addEventListener('touchend', tEnd);
   }
 })();
 document.getElementById('shibaCard').addEventListener('click', () => {
