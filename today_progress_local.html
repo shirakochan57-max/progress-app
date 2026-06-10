@@ -5042,6 +5042,11 @@ function getShibaContent() {
 function applyShibaScale(s) {
   const content = getShibaContent();
   if (content) content.style.zoom = s;
+  // iOS PWA で CSS zoom + IME 変換候補ハイライトの描画バグを回避するため、
+  // 入力欄だけ zoom を打ち消して native スケールで描画する
+  // (副作用: 入力欄が他要素より相対的に大きく見える)
+  const input = document.getElementById('shibaQuickTitle');
+  if (input && s > 0) input.style.zoom = (1 / s).toString();
 }
 // 「ユーザ意図 scale」(corner で設定された値、localStorage に保存)
 function getShibaUserScale() {
