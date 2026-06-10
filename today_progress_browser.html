@@ -1409,17 +1409,17 @@ body.shiba-sleeping .shiba-emoji::after {
 /* バーの目盛り (横線) - アイコンに合わせた色 */
 .stat-mark {
   position: absolute;
-  left: 0; right: 0;
-  height: 2px;
+  left: -1px; right: -1px;
+  height: 3px;
   background: var(--text-muted);
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
-.stat-row[title*="ご飯"]  .stat-mark { background: #B8860B; }
-.stat-row[title*="散歩"]  .stat-mark { background: #1976D2; }
-.stat-row[title*="うんこ"] .stat-mark { background: #5D4037; }
-.stat-row[title*="ブラシ"] .stat-mark { background: #C2185B; }
-.stat-row[title*="歯磨き"] .stat-mark { background: #0097A7; }
+.stat-row[title*="ご飯"]  .stat-mark { background: #B8860B !important; }
+.stat-row[title*="散歩"]  .stat-mark { background: #1976D2 !important; }
+.stat-row[title*="うんこ"] .stat-mark { background: #5D4037 !important; }
+.stat-row[title*="ブラシ"] .stat-mark { background: #C2185B !important; }
+.stat-row[title*="歯磨き"] .stat-mark { background: #0097A7 !important; }
 /* 数値表示は廃止 (目盛りで把握する) */
 .stat-row > .stat-val { display: none; }
 /* バーの値段階に応じた色 (≤80緑 / ≤60黄 / ≤40橙 / ≤20赤) */
