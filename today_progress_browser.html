@@ -2610,6 +2610,8 @@ async function autoCarryUndoneTasks() {
     if (!isAllDay(ev)) return false;
     if (isMultiDay(ev)) return false;
     if (ev.id && /_\d{8}T\d{6}Z/.test(String(ev.id))) return false;
+    // 「毎日エクル」は日ごとの記録なので持ち越さない
+    if (typeof isDailyEcurleTitle === 'function' && isDailyEcurleTitle(ev.summary)) return false;
     return true;
   });
 
@@ -3619,10 +3621,8 @@ async function doReschedule() {
   const orig = btn.textContent;
   const memoEl = card.querySelector('.memo-input');
   const existingDesc = memoEl ? memoEl.value : (ev.description || '');
-  const stamp = nowStamp();
-  const timeInfo = newAllDay ? '終日' : `${newStartHM}〜${newEndHM}`;
-  const note = `🔄 [${stamp}] ${fmtDate(currentDate)} から ${newDate} ${timeInfo} に振替\n次のアクション: ${action}`;
-  const newDesc = existingDesc.trim() ? existingDesc.trim() + '\n' + note : note;
+  // 振替の理由・時刻はメモ欄に一切反映しない（理由入力は必須のまま、記録だけ残さない）
+  const newDesc = existingDesc;
   const oldId = ev.id;
 
   // 即時UI: カード削除・シート閉・トースト表示
