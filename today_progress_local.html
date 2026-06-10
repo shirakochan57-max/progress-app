@@ -738,9 +738,9 @@ body.card-on-top .card.expanded {
 /* 上部ドラッグバー (top edge の下に配置) */
 #shibaSheet.shiba-panel .sheet-handle {
   position: absolute;
-  top: 10px; left: 32px; right: 32px;   /* top edge (10px) の下 */
+  top: 16px; left: 27px; right: 27px;   /* 上辺=表示領域16px / 移動16px の半々。左右は縮小コーナー(27)に合わせる */
   width: auto;
-  height: 22px;
+  height: 16px;
   margin: 0;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -781,12 +781,12 @@ body.card-on-top .card.expanded {
 #shibaSheet.shiba-panel .shiba-corner {
   display: block;
   position: absolute;
-  width: 32px; height: 32px;
+  width: 27px; height: 27px;   /* 32の85% (中身を見やすくするため縮小) */
   background: var(--surface-2);
   color: var(--text);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 30px;
+  line-height: 25px;
   text-align: center;
   touch-action: none;
   user-select: none;
@@ -820,7 +820,7 @@ body.card-on-top .card.expanded {
   display: block;
   position: absolute;
   bottom: 0; right: 0;
-  width: 32px; height: 32px;
+  width: 27px; height: 27px;   /* 32の85% */
   cursor: nwse-resize;
   touch-action: none;
   background: var(--surface-2);
@@ -828,9 +828,9 @@ body.card-on-top .card.expanded {
   border-left: 1.5px solid var(--border);
   border-radius: 0 0 12px 0;
   color: var(--text);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 30px;
+  line-height: 25px;
   text-align: center;
   user-select: none;
   -webkit-user-select: none;
@@ -841,7 +841,7 @@ body.card-on-top .card.expanded {
 #shibaSheet.shiba-panel .shiba-edge-b {
   display: block;
   position: absolute;
-  bottom: 0; left: 32px; right: 32px;
+  bottom: 0; left: 27px; right: 27px;
   height: 32px;
   cursor: ns-resize;
   touch-action: none;
@@ -905,16 +905,16 @@ body.card-on-top .card.expanded {
 #shibaSheet.shiba-panel .shiba-edge-t {
   display: block;
   position: absolute;
-  top: 0; left: 32px; right: 32px;
-  height: 10px;
+  top: 0; left: 27px; right: 27px;
+  height: 16px;             /* 上辺=表示領域(16) と 移動(16) を半々に */
   cursor: ns-resize;
   touch-action: none;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-soft, var(--border));
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 3px;
-  line-height: 10px;
+  line-height: 16px;
   text-align: center;
   user-select: none;
   -webkit-user-select: none;
