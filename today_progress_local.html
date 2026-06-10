@@ -5266,13 +5266,19 @@ const SHIBA_PANEL_MIN_H = 140;  // 200の70%
 function getShibaContent() {
   return document.querySelector('#shibaSheet .shiba-panel-content');
 }
-// === 等倍スケール方式 ===
-// 中身は固定サイズ (SHIBA_W0 × shibaH0) の「設計図」。
-// transform: scale(s) で窓と中身を一体で拡縮するので、レイアウトはリフローしない。
-// 窓 (panel) の覗き窓 = (panelW-32) × (panelH-64)。これがスケール後の中身と常に一致するよう
-// panelH を panelW (= scale) から算出する。
+// === 等倍スケール + 自由クロップ方式 ===
+// 中身は固定サイズ (SHIBA_W0 × shibaH0) の「設計図」。表示は
+//   transform: translate(-cropX,-cropY) scale(s)
+// で行う。
+//   ・4隅ドラッグ → s を変えて等倍拡縮 (中身を丸ごと表示、crop = 0)
+//   ・4辺ドラッグ → s はそのまま、窓 (覗き窓) のサイズ/位置だけ自由に変えて
+//                   中身をクロップ/露出する (上辺で犬を隠す等、縦横比も自由)
+// 覗き窓 = (panelW-32) × (panelH-64)。中身はこの窓に対して clip される。
 const SHIBA_W0 = 288;     // 中身の固定内在幅 (.shiba-panel-content の width と一致)
 let shibaH0 = 456;        // 中身の固定内在高さ (open 時に実測して更新)
+let shibaScaleVal = 1;          // 現在の中身スケール (4隅で変化)
+let shibaCropX = 0, shibaCropY = 0;  // 覗き窓に対する中身のクロップ量 (screen px)
+const SHIBA_PANEL_CROP_KEY = 'shiba_panel_crop_v1';
 // 中身の自然な高さ (scale 1 / height:auto) を実測してキャッシュ
 function measureShibaH0() {
   const content = getShibaContent();
@@ -5298,23 +5304,32 @@ function clampShibaScale(s) {
   const b = shibaScaleBounds();
   return Math.max(b.sMin, Math.min(b.sMax, s));
 }
-// 中身に transform: scale を掛け、height も内在値に固定 (body と一致させる)
-function applyShibaScale(s) {
+// 状態 (scale + crop) を中身の transform へ反映。crop は妥当範囲にクランプ。
+function applyShibaTransform() {
   const content = getShibaContent();
   if (!content) return;
+  const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
+  shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - 24)));
+  shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - 24)));
   content.style.height = shibaH0 + 'px';
   content.style.transformOrigin = 'top left';
-  content.style.transform = 'scale(' + s + ')';
+  content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
 }
-// scale から 窓 (panel) 寸法 と 中身スケールを一括設定
+// 後方互換: scale だけ変更 (crop は維持)
+function applyShibaScale(s) {
+  shibaScaleVal = clampShibaScale(s);
+  applyShibaTransform();
+}
+// 4隅/復元: scale から窓寸法を等倍算出し、中身を丸ごと表示 (crop = 0)
 function applyShibaPanelScale(s) {
   const panel = document.getElementById('shibaSheet');
-  s = clampShibaScale(s);
-  panel.style.width = (32 + SHIBA_W0 * s) + 'px';
-  panel.style.height = (64 + shibaH0 * s) + 'px';
+  shibaScaleVal = clampShibaScale(s);
+  shibaCropX = 0; shibaCropY = 0;
+  panel.style.width = (32 + SHIBA_W0 * shibaScaleVal) + 'px';
+  panel.style.height = (64 + shibaH0 * shibaScaleVal) + 'px';
   panel.style.maxHeight = 'none';
-  applyShibaScale(s);
-  return s;
+  applyShibaTransform();
+  return shibaScaleVal;
 }
 function getShibaScale() {
   try {
@@ -5326,10 +5341,33 @@ function getShibaScale() {
 function saveShibaScale(s) {
   try { localStorage.setItem(SHIBA_PANEL_SCALE_KEY, String(s)); } catch (e) {}
 }
-// open 時: 中身の自然高さを実測 → 保存スケールを適用 (窓と中身を一括復元)
+function saveShibaCrop() {
+  try { localStorage.setItem(SHIBA_PANEL_CROP_KEY, JSON.stringify({ x: shibaCropX, y: shibaCropY })); } catch (e) {}
+}
+// open 時: 中身の自然高さを実測 → scale を適用。辺で自由変形した窓サイズ/crop が
+// 保存されていればそれを復元する (4辺の自由レイアウトを次回も維持)。
 function restoreShibaPanelScale() {
   measureShibaH0();
-  applyShibaPanelScale(getShibaScale());
+  const panel = document.getElementById('shibaSheet');
+  shibaScaleVal = clampShibaScale(getShibaScale());
+  shibaCropX = 0; shibaCropY = 0;
+  let w = 32 + SHIBA_W0 * shibaScaleVal;
+  let h = 64 + shibaH0 * shibaScaleVal;
+  let sz = null, cr = null;
+  try { sz = JSON.parse(localStorage.getItem(SHIBA_PANEL_SIZE_KEY) || 'null'); } catch (e) {}
+  try { cr = JSON.parse(localStorage.getItem(SHIBA_PANEL_CROP_KEY) || 'null'); } catch (e) {}
+  const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+  if (sz && typeof sz.w === 'number' && typeof sz.h === 'number') {
+    w = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, sz.w));
+    h = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, sz.h));
+  }
+  if (cr && typeof cr.x === 'number' && typeof cr.y === 'number') {
+    shibaCropX = cr.x; shibaCropY = cr.y;
+  }
+  panel.style.width = w + 'px';
+  panel.style.height = h + 'px';
+  panel.style.maxHeight = 'none';
+  applyShibaTransform();
 }
 function saveShibaPanelSize() {
   const panel = document.getElementById('shibaSheet');
@@ -5514,8 +5552,7 @@ function closeShibaPanel() {
   let resizing = null;
   let mode = 'br';
   let startX = 0, startY = 0, baseW = 0, baseH = 0, baseLeft = 0, baseTop = 0;
-  let baseScrollTop = 0;
-  function getPanelBody() { return panel.querySelector('.shiba-panel-body'); }
+  let baseScale = 1, baseCropX = 0, baseCropY = 0;
   function onDown(e) {
     if (!panel.classList.contains('shiba-panel') || !panel.classList.contains('open')) return;
     const handle = e.currentTarget;
@@ -5527,9 +5564,10 @@ function closeShibaPanel() {
     baseH = r.height;
     baseLeft = r.left;
     baseTop = r.top;
-    // 上辺ドラッグ時に中身の画面位置を固定するため、現スクロール位置を保存
-    const body = getPanelBody();
-    baseScrollTop = body ? body.scrollTop : 0;
+    // ドラッグ開始時の scale / crop を記憶 (4辺の差分計算に使う)
+    baseScale = shibaScaleVal;
+    baseCropX = shibaCropX;
+    baseCropY = shibaCropY;
     panel.style.left = baseLeft + 'px';
     panel.style.top = baseTop + 'px';
     panel.style.right = 'auto';
@@ -5549,52 +5587,80 @@ function closeShibaPanel() {
     const pt = e.touches ? e.touches[0] : e;
     const dx = pt.clientX - startX;
     const dy = pt.clientY - startY;
-    // すべてのハンドルを「単一スケール s」へ写像する。
-    // 窓 (panel) も中身 (content) も s から一括算出するので、4隅でも辺でも
-    // 中身は常に等倍のまま = レイアウトはリフローせず、ズレない。
-    // 外側方向への伸びを正の量へ正規化
-    let dxAdj = dx, dyAdj = dy;
-    if (mode === 'bl' || mode === 'tl' || mode === 'l') dxAdj = -dx;
-    if (mode === 'tr' || mode === 'tl' || mode === 't') dyAdj = -dy;
-    const widthDriven  = (mode === 'x' || mode === 'l');
-    const heightDriven = (mode === 'y' || mode === 't');
-    let s;
-    if (heightDriven) {
-      // 高さ駆動のハンドル: 目標の高さから s を逆算
-      s = (baseH + dyAdj - 64) / shibaH0;
-    } else if (widthDriven) {
-      // 幅駆動のハンドル: 目標の幅から s を逆算
-      s = (baseW + dxAdj - 32) / SHIBA_W0;
-    } else {
-      // 4隅: 大きく動いた軸を採用して現スケールから拡縮
-      const baseS = shibaScaleFromW(baseW);
+    const isCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
+    if (isCorner) {
+      // === 4隅: 等倍スケール (縦横比固定、中身を丸ごと、crop = 0) ===
+      let dxAdj = dx, dyAdj = dy;
+      if (mode === 'bl' || mode === 'tl') dxAdj = -dx;
+      if (mode === 'tr' || mode === 'tl') dyAdj = -dy;
       const propX = dxAdj / baseW, propY = dyAdj / baseH;
       const p = Math.abs(propX) > Math.abs(propY) ? propX : propY;
-      s = baseS * (1 + p);
+      const s = clampShibaScale(baseScale * (1 + p));
+      const newW = 32 + SHIBA_W0 * s;
+      const newH = 64 + shibaH0 * s;
+      let newLeft = baseLeft, newTop = baseTop;
+      if (mode === 'bl' || mode === 'tl') newLeft = baseLeft + (baseW - newW);
+      if (mode === 'tr' || mode === 'tl') newTop = baseTop + (baseH - newH);
+      shibaScaleVal = s;
+      shibaCropX = 0; shibaCropY = 0;
+      panel.style.width = newW + 'px';
+      panel.style.height = newH + 'px';
+      panel.style.left = newLeft + 'px';
+      panel.style.top = newTop + 'px';
+      applyShibaTransform();
+    } else {
+      // === 4辺: scale 固定。窓の幅/高さ/位置を自由に変え、中身をクロップ/露出 ===
+      let newW = baseW, newH = baseH, newLeft = baseLeft, newTop = baseTop;
+      shibaCropX = baseCropX; shibaCropY = baseCropY;
+      if (mode === 'x') {
+        // 右辺: 幅だけ変更
+        const maxW = window.innerWidth - baseLeft - 8;
+        newW = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, baseW + dx));
+      } else if (mode === 'y') {
+        // 下辺: 高さだけ変更
+        const maxH = window.innerHeight - baseTop - 8;
+        newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
+      } else if (mode === 'l') {
+        // 左辺: 左端を動かす (右端固定)。隠れた分だけ中身を左へクロップ
+        const minLeft = 8;
+        const maxLeft = baseLeft + baseW - SHIBA_PANEL_MIN_W;
+        newLeft = Math.max(minLeft, Math.min(maxLeft, baseLeft + dx));
+        newW = baseW + (baseLeft - newLeft);
+        shibaCropX = baseCropX + (newLeft - baseLeft);
+      } else if (mode === 't') {
+        // 上辺: 上端を動かす (下端固定)。隠れた分だけ中身を上へクロップ (犬を隠す)
+        const minTop = 8;
+        const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
+        newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
+        newH = baseH + (baseTop - newTop);
+        shibaCropY = baseCropY + (newTop - baseTop);
+      }
+      panel.style.width = newW + 'px';
+      panel.style.height = newH + 'px';
+      panel.style.left = newLeft + 'px';
+      panel.style.top = newTop + 'px';
+      applyShibaTransform();  // scale 不変、crop を反映
     }
-    s = clampShibaScale(s);
-    const newW = 32 + SHIBA_W0 * s;
-    const newH = 64 + shibaH0 * s;
-    let newLeft = baseLeft, newTop = baseTop;
-    // 反対側の端を固定して、掴んだ側だけを動かす
-    if (mode === 'bl' || mode === 'tl' || mode === 'l') newLeft = baseLeft + (baseW - newW);
-    if (mode === 'tr' || mode === 'tl' || mode === 't') newTop = baseTop + (baseH - newH);
-    panel.style.width = newW + 'px';
-    panel.style.height = newH + 'px';
-    panel.style.left = newLeft + 'px';
-    panel.style.top = newTop + 'px';
-    applyShibaScale(s);
-    saveShibaScale(s);
     e.preventDefault();
   }
   function onUp(e) {
     if (!resizing) return;
     const handle = resizing;
+    const wasCorner = (mode === 'br' || mode === 'bl' || mode === 'tr' || mode === 'tl');
     resizing = null;
     panel.classList.remove('resizing');
     saveShibaPanelPos();
-    // 現在の窓幅から scale を確定保存 (幅 = 32 + 288*s)
-    saveShibaScale(shibaScaleFromW(panel.getBoundingClientRect().width));
+    if (wasCorner) {
+      // 等倍に戻したので scale を保存し、辺の自由レイアウト (size/crop) はクリア
+      saveShibaScale(shibaScaleVal);
+      try { localStorage.removeItem(SHIBA_PANEL_SIZE_KEY); } catch (err) {}
+      try { localStorage.removeItem(SHIBA_PANEL_CROP_KEY); } catch (err) {}
+    } else {
+      // 辺: 窓サイズ + クロップを保存 (scale は不変)
+      saveShibaPanelSize();
+      saveShibaCrop();
+      saveShibaScale(shibaScaleVal);
+    }
     if (e && e.pointerId != null && handle.releasePointerCapture) {
       try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
     }
