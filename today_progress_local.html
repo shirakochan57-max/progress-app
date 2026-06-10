@@ -2212,6 +2212,29 @@ async function gasCall(action, payload) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
   if (data && data.error) throw new Error(data.error);
+  // === 「毎日エクル」イベントへの update/create を検出してメーターを即座に再同期 ===
+  try {
+    if ((action === 'update' || action === 'create') && payload &&
+        typeof isDailyEcurleTitle === 'function' &&
+        isDailyEcurleTitle(payload.summary || '')) {
+      if (typeof applyDailyEcurleDescriptionToBars === 'function' && payload.description !== undefined) {
+        const evId = (data && data.id) || payload.eventId || null;
+        applyDailyEcurleDescriptionToBars(payload.description, evId);
+      }
+    }
+    // list 結果の中に「毎日エクル」があれば、未送信ローカル変更がない場合に限り反映
+    if (action === 'list' && data && Array.isArray(data.events) &&
+        typeof applyDailyEcurleDescriptionToBars === 'function') {
+      const ev = data.events.find(e => isDailyEcurleTitle && isDailyEcurleTitle(e && e.summary));
+      if (ev) {
+        let s = null;
+        try { s = loadShiba(); } catch (e) {}
+        if (!s || !s._dailyDirty) {
+          applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
+        }
+      }
+    }
+  } catch (e) { /* swallow: 反映失敗は無視 */ }
   return data;
 }
 
@@ -2688,6 +2711,21 @@ function renderEvents() {
     if (c) c.classList.add('expanded');
   });
   persistCache();
+  // 安全網: eventsCache 内に「毎日エクル」があればメーターへ反映
+  try { applyDailyEcurleFromEventsCache(); } catch (e) {}
+}
+
+// eventsCache を走査して「毎日エクル」を見つけたら description をメーターへ反映
+// (ローカルに未送信の変更があれば適用しない: 入力直後の上書き防止)
+function applyDailyEcurleFromEventsCache() {
+  if (typeof applyDailyEcurleDescriptionToBars !== 'function') return;
+  if (!Array.isArray(eventsCache)) return;
+  let s = null;
+  try { s = loadShiba(); } catch (e) {}
+  if (s && s._dailyDirty) return;
+  const ev = eventsCache.find(e => isDailyEcurleTitle(e && e.summary));
+  if (!ev) return;
+  applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
 }
 
 // ============= Drag & drop reorder =============
