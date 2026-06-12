@@ -5284,12 +5284,14 @@ const SHIBA_PANEL_CROP_KEY = 'shiba_panel_crop_v1';
 function measureShibaH0() {
   const content = getShibaContent();
   if (!content) return shibaH0;
-  const pt = content.style.transform, ph = content.style.height;
+  const pt = content.style.transform, ph = content.style.height, pz = content.style.zoom;
   content.style.transform = 'none';
   content.style.height = 'auto';
+  content.style.zoom = '1';
   const h = content.offsetHeight;
   content.style.transform = pt;
   content.style.height = ph;
+  content.style.zoom = pz;
   if (h && h > 120) shibaH0 = h;
   return shibaH0;
 }
@@ -5319,19 +5321,25 @@ function applyShibaTransform() {
   shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - bodyW)));
   shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - bodyH)));
   content.style.height = shibaH0 + 'px';
+  // 拡縮は zoom。transform: scale は iOS の IME 変換候補ハイライトを壊すため使わない。
+  content.style.zoom = shibaScaleVal;
+  // クロップは translate。zoom が translate を s 倍するので /s で打ち消して screen px にする。
   content.style.transformOrigin = 'top left';
-  content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
+  content.style.transform = shibaScaleVal > 0
+    ? 'translate(' + (-shibaCropX / shibaScaleVal) + 'px,' + (-shibaCropY / shibaScaleVal) + 'px)'
+    : 'none';
   applyShibaInputCounter();
 }
-// iPad の PWA (ホーム画面アプリ) では、scale された祖先の中にあると日本語IMEの
-// 変換候補ハイライトが正しく描画されない (ブラウザ表示では問題なし)。
-// 入力欄だけ逆スケールして実効スケールを 1 に戻し、ネイティブ同等の描画にして直す。
-// (見た目の相対サイズ差は許容。旧 zoom 方式の counter-zoom と同じ考え方)
+// iPad の PWA (ホーム画面アプリ) では、zoom された祖先の中にあると日本語IMEの
+// 変換候補ハイライト(選択中の文節の色)が正しく描画されない。
+// 入力欄だけ逆 zoom して実効 zoom を 1 (ネイティブ) に戻すと IME が正常化する。
+// ただし s<1 (4隅で縮小) のとき逆 zoom すると入力欄が巨大化してボタンを隠すので、
+// 逆 zoom は拡大時 (s>1) のみ適用する。縮小時は中身と一緒に小さくする。
 function applyShibaInputCounter() {
   const qinput = document.getElementById('shibaQuickTitle');
   if (!qinput) return;
-  qinput.style.transformOrigin = 'top left';
-  qinput.style.transform = shibaScaleVal > 0 ? 'scale(' + (1 / shibaScaleVal) + ')' : 'none';
+  qinput.style.zoom = shibaScaleVal > 1 ? (1 / shibaScaleVal) : '';
+  qinput.style.transform = 'none';
 }
 // 後方互換: scale だけ変更 (crop は維持)
 function applyShibaScale(s) {
@@ -5727,8 +5735,9 @@ function closeShibaPanel() {
   function render() {
     rafId = 0;
     const content = getShibaContent();
-    if (content) content.style.transform =
-      'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
+    if (content) content.style.transform = shibaScaleVal > 0
+      ? 'translate(' + (-shibaCropX / shibaScaleVal) + 'px,' + (-shibaCropY / shibaScaleVal) + 'px)'
+      : 'none';
   }
   function schedule() { if (!rafId) rafId = requestAnimationFrame(render); }
   let saveTimer = 0;
