@@ -2072,7 +2072,7 @@ body.shiba-sleeping .shiba-emoji::after {
   <div class="shiba-stats">
     <div class="stat-row" title="ご飯 (最大3)"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="foodVal">0</span></div>
     <div class="stat-row" title="散歩 (最大5km)"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark" style="bottom:60%"></div><div class="stat-mark" style="bottom:80%"></div></div><span class="stat-val" id="walkVal">0</span></div>
-    <div class="stat-row" title="うんこ (最大3)"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="poopVal">0</span></div>
+    <div class="stat-row" title="うんこ (最大2)"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="poopVal">0</span></div>
     <div class="stat-row" title="ブラシ (最大2)"><span class="stat-label">🪮</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="brushVal">0</span></div>
     <div class="stat-row" title="歯磨き (最大2)"><span class="stat-label">🪥</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="toothVal">0</span></div>
     <div class="stat-row" title="パパ"><span class="stat-label">⭐</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
@@ -4577,7 +4577,7 @@ function applyShibaState(s) {
 }
 const SHIBA_KEY = 'shiba_state_v1';
 // === エクル: バーの最大値 (積立式、日付変わりでリセット) ===
-const ECURLE_MAX = { food: 3, walk: 5, poop: 3, brush: 2, tooth: 2 };
+const ECURLE_MAX = { food: 3, walk: 5, poop: 2, brush: 2, tooth: 2 };
 const DEFAULT_SHIBA = {
   food: 0, walk: 0, sleep: 0, poop: 0, brush: 0, tooth: 0, papa: 0, lastFedAt: 0,
   coins: 0, totalDone: 0,
@@ -4649,22 +4649,31 @@ function normalizeEcurleText(s) {
 }
 function parseTaskForEcurle(title) {
   const t = normalizeEcurleText(title || '');
-  const r = { food: null, walk: 0, poop: false, brush: false, tooth: false };
-  if (/ご飯|ごはん|御飯|朝食|昼食|夕食/.test(t)) {
-    r.food = 'meal';
+  // 各項目は数値。「キーワード N」で N、数値なしは 1。おやつ等は 0.5。
+  const r = { food: 0, walk: 0, poop: 0, brush: 0, tooth: 0 };
+  // ごはん N 杯 (ごはん2 = 2杯)。おやつ/間食/ごほうび は 0.5。
+  const mealMatch = t.match(/(?:ご飯|ごはん|御飯|朝食|昼食|夕食)\s*(\d+(?:\.\d+)?)?/);
+  if (mealMatch) {
+    r.food = mealMatch[1] ? parseFloat(mealMatch[1]) : 1;
   } else if (/おやつ|間食|ごほうび/.test(t)) {
-    r.food = 'snack';
+    r.food = 0.5;
   }
-  // 散歩: 「散歩1km」「さんぽ1.6キロ」など、小数点対応
+  // 散歩 N km (散歩1.6 = 1.6km、数値なしは 1km)
   const walkMatch = t.match(/(?:散歩|さんぽ)\s*(\d+(?:\.\d+)?)/);
-  if (walkMatch) {
-    r.walk = parseFloat(walkMatch[1]);
-  } else if (/散歩|さんぽ/.test(t)) {
-    r.walk = 1;
-  }
-  if (/うんこ|うんち|ウンコ|ウンチ/.test(t)) r.poop = true;
-  if (/ブラッシング|ぶらしんぐ|ブラシ/.test(t)) r.brush = true;
-  if (/歯磨き|歯みがき|はみがき|歯ブラシ/.test(t)) r.tooth = true;
+  if (walkMatch) r.walk = parseFloat(walkMatch[1]);
+  else if (/散歩|さんぽ/.test(t)) r.walk = 1;
+  // うんこ N 回 (うんこ2 = 2回、数値なしは 1回)
+  const poopMatch = t.match(/(?:うんこ|うんち|ウンコ|ウンチ)\s*(\d+(?:\.\d+)?)/);
+  if (poopMatch) r.poop = parseFloat(poopMatch[1]);
+  else if (/うんこ|うんち|ウンコ|ウンチ/.test(t)) r.poop = 1;
+  // ブラシ N 回 (「ブラシ」「ブラッシング」許容。ブラシ1 = 1回、数値なしは 1回)
+  const brushMatch = t.match(/(?:ブラッシング|ぶらしんぐ|ブラシ)\s*(\d+(?:\.\d+)?)/);
+  if (brushMatch) r.brush = parseFloat(brushMatch[1]);
+  else if (/ブラッシング|ぶらしんぐ|ブラシ/.test(t)) r.brush = 1;
+  // 歯磨き N 回 (歯磨き2 = 2回、数値なしは 1回)
+  const toothMatch = t.match(/(?:歯磨き|歯みがき|はみがき|歯ブラシ)\s*(\d+(?:\.\d+)?)/);
+  if (toothMatch) r.tooth = parseFloat(toothMatch[1]);
+  else if (/歯磨き|歯みがき|はみがき|歯ブラシ/.test(t)) r.tooth = 1;
   return r;
 }
 // ③ 入力が「エクル語だけ」か判定 (ごはん / うんこ / 散歩1.2k 等)。
@@ -4674,15 +4683,16 @@ function isEcurleOnlyInput(title) {
   let t = normalizeEcurleText(title || '').trim();
   if (!t) return false;
   const r = parseTaskForEcurle(title);
-  const matched = (r.food !== null) || r.walk > 0 || r.poop || r.brush || r.tooth;
+  const matched = r.food > 0 || r.walk > 0 || r.poop > 0 || r.brush > 0 || r.tooth > 0;
   if (!matched) return false;
   t = t
-    .replace(/ご飯|ごはん|御飯|朝食|昼食|夕食|おやつ|間食|ごほうび/g, '')
-    .replace(/(?:散歩|さんぽ)\s*\d+(?:\.\d+)?\s*(?:km|k|キロ|メートル|m)?/g, '')
-    .replace(/散歩|さんぽ/g, '')
-    .replace(/うんこ|うんち|ウンコ|ウンチ/g, '')
-    .replace(/ブラッシング|ぶらしんぐ|ブラシ/g, '')
-    .replace(/歯磨き|歯みがき|はみがき|歯ブラシ/g, '')
+    .replace(/(?:ご飯|ごはん|御飯|朝食|昼食|夕食)\s*\d*(?:\.\d+)?/g, '')
+    .replace(/おやつ|間食|ごほうび/g, '')
+    .replace(/(?:散歩|さんぽ)\s*\d*(?:\.\d+)?\s*(?:km|k|キロ|メートル|m)?/g, '')
+    .replace(/(?:うんこ|うんち|ウンコ|ウンチ)\s*\d*(?:\.\d+)?/g, '')
+    .replace(/(?:ブラッシング|ぶらしんぐ|ブラシ)\s*\d*(?:\.\d+)?/g, '')
+    .replace(/(?:歯磨き|歯みがき|はみがき|歯ブラシ)\s*\d*(?:\.\d+)?/g, '')
+    .replace(/杯|回/g, '')
     .replace(/[\s,、.。･・]/g, '');
   return t.length === 0;
 }
@@ -4692,13 +4702,10 @@ function applyTaskToEcurle(s, title) {
   const r = parseTaskForEcurle(title);
   const t = ensureDailyTotals(s);
   let changed = false;
-  if (r.food === 'meal') {
-    s.food = Math.min(ECURLE_MAX.food, (s.food || 0) + 1);
-    t.food = Math.round(((t.food || 0) + 1) * 10) / 10;
-    changed = true;
-  } else if (r.food === 'snack') {
-    s.food = Math.min(ECURLE_MAX.food, (s.food || 0) + 0.5);
-    t.food = Math.round(((t.food || 0) + 0.5) * 10) / 10;
+  // メーターは各最大値で頭打ち。記録(t.*)は上限なしで上積み (超過分も毎日エクルに加算)。
+  if (r.food > 0) {
+    s.food = Math.min(ECURLE_MAX.food, Math.round(((s.food || 0) + r.food) * 10) / 10);
+    t.food = Math.round(((t.food || 0) + r.food) * 10) / 10;
     changed = true;
   }
   if (r.walk > 0) {
@@ -4706,9 +4713,9 @@ function applyTaskToEcurle(s, title) {
     t.walk = Math.round(((t.walk || 0) + r.walk) * 10) / 10;
     changed = true;
   }
-  if (r.poop)  { s.poop  = Math.min(ECURLE_MAX.poop,  (s.poop  || 0) + 1); t.poop  = (t.poop  || 0) + 1; changed = true; }
-  if (r.brush) { s.brush = Math.min(ECURLE_MAX.brush, (s.brush || 0) + 1); t.brush = (t.brush || 0) + 1; changed = true; }
-  if (r.tooth) { s.tooth = Math.min(ECURLE_MAX.tooth, (s.tooth || 0) + 1); t.tooth = (t.tooth || 0) + 1; changed = true; }
+  if (r.poop > 0)  { s.poop  = Math.min(ECURLE_MAX.poop,  Math.round(((s.poop  || 0) + r.poop)  * 10) / 10); t.poop  = Math.round(((t.poop  || 0) + r.poop)  * 10) / 10; changed = true; }
+  if (r.brush > 0) { s.brush = Math.min(ECURLE_MAX.brush, Math.round(((s.brush || 0) + r.brush) * 10) / 10); t.brush = Math.round(((t.brush || 0) + r.brush) * 10) / 10; changed = true; }
+  if (r.tooth > 0) { s.tooth = Math.min(ECURLE_MAX.tooth, Math.round(((s.tooth || 0) + r.tooth) * 10) / 10); t.tooth = Math.round(((t.tooth || 0) + r.tooth) * 10) / 10; changed = true; }
   s.totalDone = (s.totalDone || 0) + 1;
   if (changed) s._dailyDirty = true;
 }
@@ -5629,12 +5636,26 @@ function closeShibaPanel() {
   function render() {
     rafId = 0;
     const content = getShibaContent();
+    // スクロール中は translate3d でGPUレイヤー上を移動 (再描画を避けて滑らかに)
     if (content) content.style.transform =
-      'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
+      'translate3d(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px,0) scale(' + shibaScaleVal + ')';
   }
   function schedule() { if (!rafId) rafId = requestAnimationFrame(render); }
   let saveTimer = 0;
   function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveShibaCrop, 250); }
+  // スクロール中だけ中身をGPUレイヤー化して軽くする。停止 300ms 後にレイヤー指定を解除し、
+  // 通常の 2D transform に戻す (静止時のにじみ等の副作用を出さない)。
+  let wcTimer = 0;
+  function markScrolling() {
+    const c = getShibaContent();
+    if (c && c.style.willChange !== 'transform') c.style.willChange = 'transform';
+    clearTimeout(wcTimer);
+    wcTimer = setTimeout(() => {
+      const c2 = getShibaContent();
+      if (c2) c2.style.willChange = '';
+      applyShibaTransform();  // 2D transform に戻して crisp に
+    }, 300);
+  }
   function ready() {
     return panel.classList.contains('shiba-panel') && panel.classList.contains('open')
       && !panel.classList.contains('resizing') && !panel.classList.contains('dragging');
@@ -5645,6 +5666,7 @@ function closeShibaPanel() {
     if (!ready()) return;
     recalcMax();
     if (maxX <= 0 && maxY <= 0) return;  // スクロール不要
+    markScrolling();
     shibaCropY += e.deltaY;
     shibaCropX += e.deltaX;
     clampCrop();
@@ -5662,6 +5684,7 @@ function closeShibaPanel() {
     if (maxX <= 0 && maxY <= 0) return;
     const t = e.touches ? e.touches[0] : e;
     active = true; swiped = false; sx = t.clientX; sy = t.clientY; cx0 = shibaCropX; cy0 = shibaCropY;
+    markScrolling();  // 触れた時点でGPUレイヤー化しておく (初動のカクつき防止)
   }
   function tMove(e) {
     if (!active) return;
@@ -5669,6 +5692,7 @@ function closeShibaPanel() {
     const dx = t.clientX - sx, dy = t.clientY - sy;
     if (!swiped && (Math.abs(dx) + Math.abs(dy)) < 6) return;  // タップ閾値
     swiped = true;
+    markScrolling();
     shibaCropX = cx0 - dx;
     shibaCropY = cy0 - dy;
     clampCrop();
