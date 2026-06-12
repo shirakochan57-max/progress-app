@@ -2229,9 +2229,11 @@ async function gasCall(action, payload) {
         applyDailyEcurleDescriptionToBars(payload.description, evId);
       }
     }
-    // list 結果の中に「毎日エクル」があれば、未送信ローカル変更がない場合に限り反映
+    // list 結果の中に「毎日エクル」があれば、未送信ローカル変更がない場合に限り反映。
+    // ただし「今日」を list した時だけ (前日等を list しても今日のメーターを汚さない)。
     if (action === 'list' && data && Array.isArray(data.events) &&
-        typeof applyDailyEcurleDescriptionToBars === 'function') {
+        typeof applyDailyEcurleDescriptionToBars === 'function' &&
+        payload && payload.date === ymdLocalKey()) {
       const ev = data.events.find(e => isDailyEcurleTitle && isDailyEcurleTitle(e && e.summary));
       if (ev) {
         let s = null;
@@ -2674,6 +2676,28 @@ async function autoCarryUndoneTasks() {
     showToast(`${success}件のタスクを昨日から持ち越しました`);
     // 表示中が今日のままなら最新を取得して再描画
     if (fmtDate(currentDate) === todayKey) await refresh();
+  }
+}
+// ② 日付が変わったら、前日の「毎日エクル」(未完了)を自動で ✔️ 完了にする。
+//    完了済み(✔️付き)はそのまま。1日1回でよいので LAST_ECURLE_DONE_KEY でガード。
+const LAST_ECURLE_DONE_KEY = 'last_ecurle_autodone_date';
+async function autoCompleteYesterdayEcurle() {
+  if (!getGasUrl()) return;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayKey = fmtDate(today);
+  if (localStorage.getItem(LAST_ECURLE_DONE_KEY) === todayKey) return; // 今日は処理済
+  const ydKey = fmtDate(new Date(today.getTime() - 86400000));
+  try {
+    const data = await gasCall('list', { date: ydKey });
+    // 未完了 (= summary がちょうど「毎日エクル」、✔️ なし) を探して完了化
+    const ev = (data.events || []).find(e => ((e && e.summary) || '') === '毎日エクル');
+    if (ev) {
+      await gasCall('update', { eventId: ev.id, summary: '✔️ 毎日エクル' });
+      try { localStorage.removeItem(EVENTS_CACHE_PREFIX + ydKey); } catch (e) {}
+    }
+    localStorage.setItem(LAST_ECURLE_DONE_KEY, todayKey);
+  } catch (e) {
+    console.error('autoCompleteYesterdayEcurle error', e);
   }
 }
 
@@ -3863,6 +3887,14 @@ document.getElementById('addTimeToggle').addEventListener('click', (e) => {
 async function addSubmitFlow(markDone) {
   const titleRaw = document.getElementById('addTitle').value.trim();
   if (!titleRaw) { showToast('タイトルを入力'); return; }
+  // ③ エクル語だけの入力は個別カードを作らず、毎日エクル記録だけ更新する
+  if (isEcurleOnlyInput(titleRaw)) {
+    ecurleOnTaskCreated(titleRaw);
+    showToast('毎日エクルに記録しました');
+    closeSheet('add');
+    resetAddSheet();
+    return;
+  }
   const title = markDone ? '✔️ ' + titleRaw : titleRaw;
   // 時間行が開いていれば時間指定、閉じていれば終日 (dataset で判定)
   const timeRow = document.getElementById('addTimeRow');
@@ -4728,6 +4760,25 @@ function parseTaskForEcurle(title) {
   if (/ブラッシング|ぶらしんぐ|ブラシ/.test(t)) r.brush = true;
   if (/歯磨き|歯みがき|はみがき|歯ブラシ/.test(t)) r.tooth = true;
   return r;
+}
+// ③ 入力が「エクル語だけ」か判定 (ごはん / うんこ / 散歩1.2k 等)。
+//    エクル語を認識し、かつ認識語を取り除いた残りが無ければ true。
+//    (「ごはんを買いに行く」等の長い文は false → 通常どおり個別カードを作る)
+function isEcurleOnlyInput(title) {
+  let t = normalizeEcurleText(title || '').trim();
+  if (!t) return false;
+  const r = parseTaskForEcurle(title);
+  const matched = (r.food !== null) || r.walk > 0 || r.poop || r.brush || r.tooth;
+  if (!matched) return false;
+  t = t
+    .replace(/ご飯|ごはん|御飯|朝食|昼食|夕食|おやつ|間食|ごほうび/g, '')
+    .replace(/(?:散歩|さんぽ)\s*\d+(?:\.\d+)?\s*(?:km|k|キロ|メートル|m)?/g, '')
+    .replace(/散歩|さんぽ/g, '')
+    .replace(/うんこ|うんち|ウンコ|ウンチ/g, '')
+    .replace(/ブラッシング|ぶらしんぐ|ブラシ/g, '')
+    .replace(/歯磨き|歯みがき|はみがき|歯ブラシ/g, '')
+    .replace(/[\s,、.。･・]/g, '');
+  return t.length === 0;
 }
 function applyTaskToEcurle(s, title) {
   // パパ: タスク入力ごとに +5
@@ -5870,6 +5921,14 @@ async function quickAddFromShiba(markDone) {
   const input = document.getElementById('shibaQuickTitle');
   const titleRaw = input.value.trim();
   if (!titleRaw) { showToast('タイトルを入力'); return; }
+  // ③ エクル語だけの入力は個別カードを作らず、毎日エクル記録だけ更新する
+  if (isEcurleOnlyInput(titleRaw)) {
+    ecurleOnTaskCreated(titleRaw);
+    showToast('毎日エクルに記録しました');
+    input.value = '';
+    input.blur();
+    return;
+  }
   const title = markDone ? ('✔️ ' + titleRaw) : titleRaw;
   const btnId = markDone ? 'shibaQuickDone' : 'shibaQuickAdd';
   const btn = document.getElementById(btnId);
@@ -6186,7 +6245,8 @@ updateDateLabel();
 syncTabs();
 (async () => {
   await refresh();
-  // 初回描画後にバックグラウンドで未完了持ち越し処理
+  // 前日の「毎日エクル」を自動完了 → その後で未完了持ち越し処理
+  await autoCompleteYesterdayEcurle().catch(e => console.error('autoCompleteYesterdayEcurle error', e));
   autoCarryUndoneTasks().catch(e => console.error('autoCarry error', e));
 })();
 </script>
