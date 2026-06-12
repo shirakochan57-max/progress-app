@@ -5321,6 +5321,17 @@ function applyShibaTransform() {
   content.style.height = shibaH0 + 'px';
   content.style.transformOrigin = 'top left';
   content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
+  applyShibaInputCounter();
+}
+// iPad の PWA (ホーム画面アプリ) では、scale された祖先の中にあると日本語IMEの
+// 変換候補ハイライトが正しく描画されない (ブラウザ表示では問題なし)。
+// 入力欄だけ逆スケールして実効スケールを 1 に戻し、ネイティブ同等の描画にして直す。
+// (見た目の相対サイズ差は許容。旧 zoom 方式の counter-zoom と同じ考え方)
+function applyShibaInputCounter() {
+  const qinput = document.getElementById('shibaQuickTitle');
+  if (!qinput) return;
+  qinput.style.transformOrigin = 'top left';
+  qinput.style.transform = shibaScaleVal > 0 ? 'scale(' + (1 / shibaScaleVal) + ')' : 'none';
 }
 // 後方互換: scale だけ変更 (crop は維持)
 function applyShibaScale(s) {
