@@ -4787,7 +4787,8 @@ async function syncDailyEcurleToCalendar() {
     let eventId = null;
     try {
       const data = await gasCall('list', { date: t.date });
-      const ev = (data.events || []).find(e => (e.summary || '') === '毎日エクル');
+      // 完了済み(✔️ 毎日エクル)も同じ記録として拾い、新規作成せず更新する
+      const ev = (data.events || []).find(e => isDailyEcurleTitle(e && e.summary));
       if (ev) eventId = ev.id;
     } catch (e) {}
     let updated = false;
@@ -4852,7 +4853,8 @@ async function pullDailyEcurleFromCalendar() {
   const today = ymdLocalKey();
   try {
     const data = await gasCall('list', { date: today });
-    const ev = (data.events || []).find(e => (e.summary || '') === '毎日エクル');
+    // 完了済み(✔️ 毎日エクル)も拾う
+    const ev = (data.events || []).find(e => isDailyEcurleTitle(e && e.summary));
     if (!ev) return false;
     const parsed = parseDailyEcurleDescription(ev.description || '');
     const s = loadShiba();
