@@ -701,13 +701,27 @@ body.card-on-top .card.expanded {
 #shibaSheet.shiba-panel .shiba-panel-body {
   position: absolute;
   top: 32px;     /* 上の drag bar + top edge 分 */
-  bottom: 32px;  /* 下の bottom edge 分 */
+  bottom: 116px; /* 下端 chrome(32) + 固定バー高さ分。実値は JS が body.style.bottom で設定 */
   left: 16px;    /* 左辺の edge 分 */
   right: 16px;   /* 右辺の edge 分 */
   overflow: hidden;  /* ネイティブスクロールはせず、ホイール/スワイプでクロップ位置を動かす */
   touch-action: none;  /* タッチスワイプで中身を動かせるよう既定スクロールを抑制 */
   background: var(--bg);
 }
+/* 固定バー: 入力欄 + 操作ボタン。body の下・下端リサイズchrome(32)の上に native 表示。
+   transform 拡縮の外なので iOS PWA でも IME 変換候補ハイライトが正常に出る。 */
+#shibaSheet.shiba-panel .shiba-fixed-bar {
+  position: absolute;
+  left: 16px; right: 16px;
+  bottom: 32px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 5px 6px 4px;
+  z-index: 4;
+}
+#shibaSheet.shiba-panel .shiba-fixed-bar .shiba-quick { margin: 0 0 4px; }
+/* 固定バーでない通常状態 (sheet モード) では、バーは中身の続きとして普通に流す */
+.shiba-fixed-bar { }
 /* 中身 = 固定サイズの「設計図」(288 × H0)。
    4隅/辺ドラッグで JS が transform: scale(s) を掛け、窓と中身が一体で等倍に拡縮する。
    transform は layout box を変えないので、レイアウトは一切リフローしない = ズレない。 */
@@ -2094,22 +2108,25 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="stat-row" title="パパ"><span class="stat-label">⭐</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
     <span id="sleepFill" style="display:none;"></span><span id="sleepVal" style="display:none;">50</span>
   </div>
-  <div class="shiba-quick">
-    <input type="text" id="shibaQuickTitle" placeholder="タスクを入力"
-      lang="ja" autocomplete="off" autocorrect="off">
-  </div>
-  <div class="sheet-actions shiba-bottom-actions">
-    <button class="btn secondary" id="shibaQuickAdd" title="登録のみ">＋</button>
-    <button class="btn primary" id="shibaQuickDone" title="登録 + 完了">✔</button>
-    <button class="btn secondary" id="shibaSyncNow" title="同期">🔄</button>
-    <button class="btn secondary" id="shibaSleepToggle" title="おやすみ">🌙</button>
-    <button class="btn secondary" id="shibaClose" title="閉じる">✕</button>
-    <button id="shibaAutoToggle" style="display:none;">🤖</button>
-  </div>
-  <span id="shibaSyncStatus" style="display:none;">-</span>
-  <span id="shibaLog" style="display:none;"></span>
   </div><!-- /shiba-panel-content -->
   </div><!-- /shiba-panel-body -->
+  <!-- 固定バー: 入力欄+操作ボタン。拡縮の影響を受けないネイティブ表示にして IME を正常化する -->
+  <div class="shiba-fixed-bar">
+    <div class="shiba-quick">
+      <input type="text" id="shibaQuickTitle" placeholder="タスクを入力"
+        lang="ja" autocomplete="off" autocorrect="off">
+    </div>
+    <div class="sheet-actions shiba-bottom-actions">
+      <button class="btn secondary" id="shibaQuickAdd" title="登録のみ">＋</button>
+      <button class="btn primary" id="shibaQuickDone" title="登録 + 完了">✔</button>
+      <button class="btn secondary" id="shibaSyncNow" title="同期">🔄</button>
+      <button class="btn secondary" id="shibaSleepToggle" title="おやすみ">🌙</button>
+      <button class="btn secondary" id="shibaClose" title="閉じる">✕</button>
+      <button id="shibaAutoToggle" style="display:none;">🤖</button>
+    </div>
+    <span id="shibaSyncStatus" style="display:none;">-</span>
+    <span id="shibaLog" style="display:none;"></span>
+  </div>
   <div class="shiba-corner shiba-corner-tl" id="shibaCornerTL" data-resize-mode="tl" title="サイズ変更">↖</div>
   <div class="shiba-corner shiba-corner-tr" id="shibaCornerTR" data-resize-mode="tr" title="サイズ変更">↗</div>
   <div class="shiba-corner shiba-corner-bl" id="shibaCornerBL" data-resize-mode="bl" title="サイズ変更">↙</div>
@@ -5280,18 +5297,33 @@ let shibaH0 = 456;        // 中身の固定内在高さ (open 時に実測し�
 let shibaScaleVal = 1;          // 現在の中身スケール (4隅で変化)
 let shibaCropX = 0, shibaCropY = 0;  // 覗き窓に対する中身のクロップ量 (screen px)
 const SHIBA_PANEL_CROP_KEY = 'shiba_panel_crop_v1';
+// 固定バー(入力欄+操作ボタン)の高さ。中身(content)とは別の native 表示で、縦chromeに含める。
+let shibaBarH = 84;
+// 縦chrome合計 = 上 drag/edge(32) + 下 edge(32) + 固定バー
+function shibaChromeH() { return 64 + shibaBarH; }
+// 最小パネル高さ = chrome のみ (= 固定バーだけ表示、中身ビューポート0)
+function shibaMinH() { return shibaChromeH(); }
+// 固定バー高さを実測し、body の下インセットをバー分だけ広げて重ならないようにする
+function measureShibaBarH() {
+  const bar = document.querySelector('#shibaSheet .shiba-fixed-bar');
+  if (bar) {
+    const h = bar.offsetHeight;
+    if (h && h > 24) shibaBarH = h;
+  }
+  const body = document.querySelector('#shibaSheet .shiba-panel-body');
+  if (body) body.style.bottom = (32 + shibaBarH) + 'px';
+  return shibaBarH;
+}
 // 中身の自然な高さ (scale 1 / height:auto) を実測してキャッシュ
 function measureShibaH0() {
   const content = getShibaContent();
   if (!content) return shibaH0;
-  const pt = content.style.transform, ph = content.style.height, pz = content.style.zoom;
+  const pt = content.style.transform, ph = content.style.height;
   content.style.transform = 'none';
   content.style.height = 'auto';
-  content.style.zoom = '1';
   const h = content.offsetHeight;
   content.style.transform = pt;
   content.style.height = ph;
-  content.style.zoom = pz;
   if (h && h > 120) shibaH0 = h;
   return shibaH0;
 }
@@ -5300,7 +5332,7 @@ function shibaScaleBounds() {
   const sMin = shibaScaleFromW(SHIBA_PANEL_MIN_W);
   const maxW = window.innerWidth - 16;
   const maxH = window.innerHeight - 16;
-  const sMax = Math.max(sMin, Math.min(shibaScaleFromW(maxW), (maxH - 64) / shibaH0));
+  const sMax = Math.max(sMin, Math.min(shibaScaleFromW(maxW), (maxH - shibaChromeH()) / shibaH0));
   return { sMin, sMax };
 }
 function clampShibaScale(s) {
@@ -5316,30 +5348,13 @@ function applyShibaTransform() {
   const panel = document.getElementById('shibaSheet');
   const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
   const pr = panel.getBoundingClientRect();
-  const bodyW = Math.max(0, pr.width - 32);   // 覗き窓の幅
-  const bodyH = Math.max(0, pr.height - 64);  // 覗き窓の高さ
+  const bodyW = Math.max(0, pr.width - 32);                // 覗き窓の幅
+  const bodyH = Math.max(0, pr.height - shibaChromeH());   // 覗き窓の高さ (固定バー分を除く)
   shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - bodyW)));
   shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - bodyH)));
   content.style.height = shibaH0 + 'px';
-  // 拡縮は zoom。transform: scale は iOS の IME 変換候補ハイライトを壊すため使わない。
-  content.style.zoom = shibaScaleVal;
-  // クロップは translate。zoom が translate を s 倍するので /s で打ち消して screen px にする。
   content.style.transformOrigin = 'top left';
-  content.style.transform = shibaScaleVal > 0
-    ? 'translate(' + (-shibaCropX / shibaScaleVal) + 'px,' + (-shibaCropY / shibaScaleVal) + 'px)'
-    : 'none';
-  applyShibaInputCounter();
-}
-// iPad の PWA (ホーム画面アプリ) では、zoom された祖先の中にあると日本語IMEの
-// 変換候補ハイライト(選択中の文節の色)が正しく描画されない。
-// 入力欄だけ逆 zoom して実効 zoom を 1 (ネイティブ) に戻すと IME が正常化する。
-// ただし s<1 (4隅で縮小) のとき逆 zoom すると入力欄が巨大化してボタンを隠すので、
-// 逆 zoom は拡大時 (s>1) のみ適用する。縮小時は中身と一緒に小さくする。
-function applyShibaInputCounter() {
-  const qinput = document.getElementById('shibaQuickTitle');
-  if (!qinput) return;
-  qinput.style.zoom = shibaScaleVal > 1 ? (1 / shibaScaleVal) : '';
-  qinput.style.transform = 'none';
+  content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
 }
 // 後方互換: scale だけ変更 (crop は維持)
 function applyShibaScale(s) {
@@ -5352,7 +5367,7 @@ function applyShibaPanelScale(s) {
   shibaScaleVal = clampShibaScale(s);
   shibaCropX = 0; shibaCropY = 0;
   panel.style.width = (32 + SHIBA_W0 * shibaScaleVal) + 'px';
-  panel.style.height = (64 + shibaH0 * shibaScaleVal) + 'px';
+  panel.style.height = (shibaChromeH() + shibaH0 * shibaScaleVal) + 'px';
   panel.style.maxHeight = 'none';
   applyShibaTransform();
   return shibaScaleVal;
@@ -5373,21 +5388,22 @@ function saveShibaCrop() {
 // open 時: 中身の自然高さを実測 → scale を適用。辺で自由変形した窓サイズ/crop が
 // 保存されていればそれを復元する (4辺の自由レイアウトを次回も維持)。
 function restoreShibaPanelScale() {
+  measureShibaBarH();   // 先に固定バー高さを実測 → body 下インセット確定
   measureShibaH0();
   const panel = document.getElementById('shibaSheet');
   shibaScaleVal = clampShibaScale(getShibaScale());
   shibaCropX = 0; shibaCropY = 0;
   let w = 32 + SHIBA_W0 * shibaScaleVal;
-  let h = 64 + shibaH0 * shibaScaleVal;
+  let h = shibaChromeH() + shibaH0 * shibaScaleVal;
   let sz = null, cr = null;
   try { sz = JSON.parse(localStorage.getItem(SHIBA_PANEL_SIZE_KEY) || 'null'); } catch (e) {}
   try { cr = JSON.parse(localStorage.getItem(SHIBA_PANEL_CROP_KEY) || 'null'); } catch (e) {}
   // 窓は中身より大きくしない (無駄な空白を作らない)
-  const capW = 32 + SHIBA_W0 * shibaScaleVal, capH = 64 + shibaH0 * shibaScaleVal;
+  const capW = 32 + SHIBA_W0 * shibaScaleVal, capH = shibaChromeH() + shibaH0 * shibaScaleVal;
   const maxW = Math.min(capW, window.innerWidth - 16), maxH = Math.min(capH, window.innerHeight - 16);
   if (sz && typeof sz.w === 'number' && typeof sz.h === 'number') {
     w = Math.max(SHIBA_PANEL_MIN_W, Math.min(maxW, sz.w));
-    h = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, sz.h));
+    h = Math.max(shibaMinH(), Math.min(maxH, sz.h));
   }
   if (cr && typeof cr.x === 'number' && typeof cr.y === 'number') {
     shibaCropX = cr.x; shibaCropY = cr.y;
@@ -5620,8 +5636,8 @@ function closeShibaPanel() {
       // === 4隅: 覗き窓(中身)を等倍スケール。レイアウト/フレーミングを完全維持 ===
       // 覗き窓(body)を係数 k で拡縮し、中身スケール s・クロップも同じ k 倍にする。
       // body・visW/H・crop が全て同率で変わるので、見えている割合(フレーミング)が一切ずれない。
-      // 窓(panel)= body + 固定chrome(横32/縦64) なので窓の外寸比だけ僅かに変わるが、中身は完全等倍。
-      const baseBodyW = baseW - 32, baseBodyH = baseH - 64;
+      // 窓(panel)= body + chrome(横32/縦 shibaChromeH=64+バー) なので外寸比だけ僅かに変わるが中身は完全等倍。
+      const baseBodyW = baseW - 32, baseBodyH = Math.max(1, baseH - shibaChromeH());
       let dxAdj = dx, dyAdj = dy;
       if (mode === 'bl' || mode === 'tl') dxAdj = -dx;
       if (mode === 'tr' || mode === 'tl') dyAdj = -dy;
@@ -5630,10 +5646,10 @@ function closeShibaPanel() {
       let k = 1 + p;
       // panel が画面内 & 最小サイズに収まるよう k をクランプ
       const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
-      const kMin = Math.max((SHIBA_PANEL_MIN_W - 32) / baseBodyW, (SHIBA_PANEL_MIN_H - 64) / baseBodyH);
-      const kMax = Math.min((maxW - 32) / baseBodyW, (maxH - 64) / baseBodyH);
+      const kMin = Math.max((SHIBA_PANEL_MIN_W - 32) / baseBodyW, 0);
+      const kMax = Math.min((maxW - 32) / baseBodyW, (maxH - shibaChromeH()) / baseBodyH);
       k = Math.max(kMin, Math.min(kMax, k));
-      const newW = baseBodyW * k + 32, newH = baseBodyH * k + 64;
+      const newW = baseBodyW * k + 32, newH = baseBodyH * k + shibaChromeH();
       shibaScaleVal = baseScale * k;
       shibaCropX = baseCropX * k;
       shibaCropY = baseCropY * k;
@@ -5649,7 +5665,7 @@ function closeShibaPanel() {
       // === 4辺: scale 固定。窓の幅/高さ/位置を自由に変え、中身をクロップ/露出 ===
       // 窓は中身より大きくしない (capW/capH)。= 下や右に無駄な空白を作らない。
       const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
-      const capW = 32 + visW, capH = 64 + visH;
+      const capW = 32 + visW, capH = shibaChromeH() + visH;
       let newW = baseW, newH = baseH, newLeft = baseLeft, newTop = baseTop;
       shibaCropX = baseCropX; shibaCropY = baseCropY;
       if (mode === 'x') {
@@ -5659,7 +5675,7 @@ function closeShibaPanel() {
       } else if (mode === 'y') {
         // 下辺: 高さだけ変更 (中身高さまで)
         const maxH = Math.min(capH, window.innerHeight - baseTop - 8);
-        newH = Math.max(SHIBA_PANEL_MIN_H, Math.min(maxH, baseH + dy));
+        newH = Math.max(shibaMinH(), Math.min(maxH, baseH + dy));
       } else if (mode === 'l') {
         // 左辺: 左端を動かす (右端固定)。隠れた分だけ中身を左へクロップ
         const minLeft = Math.max(8, baseLeft + baseW - capW);  // 幅が capW を超えない
@@ -5670,7 +5686,7 @@ function closeShibaPanel() {
       } else if (mode === 't') {
         // 上辺: 上端を動かす (下端固定)。隠れた分だけ中身を上へクロップ (犬を隠す)
         const minTop = Math.max(8, baseTop + baseH - capH);    // 高さが capH を超えない
-        const maxTop = baseTop + baseH - SHIBA_PANEL_MIN_H;
+        const maxTop = baseTop + baseH - shibaMinH();
         newTop = Math.max(minTop, Math.min(maxTop, baseTop + dy));
         newH = baseH + (baseTop - newTop);
         shibaCropY = baseCropY + (newTop - baseTop);
@@ -5725,7 +5741,7 @@ function closeShibaPanel() {
   function recalcMax() {
     const pr = panel.getBoundingClientRect();
     maxX = Math.max(0, SHIBA_W0 * shibaScaleVal - (pr.width - 32));
-    maxY = Math.max(0, shibaH0 * shibaScaleVal - (pr.height - 64));
+    maxY = Math.max(0, shibaH0 * shibaScaleVal - (pr.height - shibaChromeH()));
   }
   function clampCrop() {
     shibaCropX = shibaCropX < 0 ? 0 : (shibaCropX > maxX ? maxX : shibaCropX);
@@ -5735,9 +5751,8 @@ function closeShibaPanel() {
   function render() {
     rafId = 0;
     const content = getShibaContent();
-    if (content) content.style.transform = shibaScaleVal > 0
-      ? 'translate(' + (-shibaCropX / shibaScaleVal) + 'px,' + (-shibaCropY / shibaScaleVal) + 'px)'
-      : 'none';
+    if (content) content.style.transform =
+      'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
   }
   function schedule() { if (!rafId) rafId = requestAnimationFrame(render); }
   let saveTimer = 0;
