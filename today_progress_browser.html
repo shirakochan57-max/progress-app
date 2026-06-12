@@ -1464,11 +1464,6 @@ body.shiba-sleeping .shiba-emoji::after {
   font-family: inherit;
   color: var(--text);
   box-sizing: border-box;
-  /* iOS PWA で変換候補ハイライトを出すための試行: 入力欄を独立描画レイヤー化
-     (視覚上は不変。効かない場合は本ブロックを削除して元に戻す) */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  isolation: isolate;
 }
 /* === 底部 6 アイコンボタン (＋ / ✔ / 🔄 / 🤖 / 🌙 / ✕) === */
 .sheet-actions.shiba-bottom-actions {
