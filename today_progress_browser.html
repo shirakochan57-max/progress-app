@@ -5245,20 +5245,30 @@ function clampShibaScale(s) {
   const b = shibaScaleBounds();
   return Math.max(b.sMin, Math.min(b.sMax, s));
 }
-function applyShibaTransform() {
+// bodyWArg/bodyHArg を渡すと getBoundingClientRect を読まない (リサイズ中のレイアウト再計算回避)。
+// live=true で translate3d (GPU移動) を使う。静止時 (引数なし) は 2D translate で crisp。
+function applyShibaTransform(bodyWArg, bodyHArg, live) {
   const content = getShibaContent();
   if (!content) return;
-  const panel = document.getElementById('shibaSheet');
   const visW = SHIBA_W0 * shibaScaleVal, visH = shibaH0 * shibaScaleVal;
-  const pr = panel.getBoundingClientRect();
-  const bodyW = Math.max(0, pr.width - 32);   // 覗き窓の幅
-  const bodyH = Math.max(0, pr.height - 64);  // 覗き窓の高さ
+  let bodyW, bodyH;
+  if (bodyWArg != null) {
+    bodyW = Math.max(0, bodyWArg);
+    bodyH = Math.max(0, bodyHArg);
+  } else {
+    const pr = document.getElementById('shibaSheet').getBoundingClientRect();
+    bodyW = Math.max(0, pr.width - 32);   // 覗き窓の幅
+    bodyH = Math.max(0, pr.height - 64);  // 覗き窓の高さ
+  }
   // 中身の下端/右端が覗き窓の外に出ない範囲に制限 = 下や右に無駄な空白を作らない
   shibaCropX = Math.max(0, Math.min(shibaCropX, Math.max(0, visW - bodyW)));
   shibaCropY = Math.max(0, Math.min(shibaCropY, Math.max(0, visH - bodyH)));
   content.style.height = shibaH0 + 'px';
   content.style.transformOrigin = 'top left';
-  content.style.transform = 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px) scale(' + shibaScaleVal + ')';
+  const mv = live
+    ? 'translate3d(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px,0)'
+    : 'translate(' + (-shibaCropX) + 'px,' + (-shibaCropY) + 'px)';
+  content.style.transform = mv + ' scale(' + shibaScaleVal + ')';
 }
 function applyShibaScale(s) {
   shibaScaleVal = clampShibaScale(s);
@@ -5401,6 +5411,12 @@ function closeShibaPanel() {
   const panel = document.getElementById('shibaSheet');
   let dragging = false;
   let startX = 0, startY = 0, baseLeft = 0, baseTop = 0;
+  let pendLeft = 0, pendTop = 0, dragRaf = 0;
+  function flushDrag() {
+    dragRaf = 0;
+    panel.style.left = pendLeft + 'px';
+    panel.style.top = pendTop + 'px';
+  }
   function isDragHandle(target) {
     if (!target) return false;
     if (target.closest('input, button, select, textarea, a')) return false;
@@ -5414,6 +5430,7 @@ function closeShibaPanel() {
     const r = panel.getBoundingClientRect();
     baseLeft = r.left;
     baseTop = r.top;
+    pendLeft = baseLeft; pendTop = baseTop;  // 移動なし(タップ)で位置が飛ばないよう初期化
     panel.style.left = baseLeft + 'px';
     panel.style.top = baseTop + 'px';
     panel.style.right = 'auto';
@@ -5429,15 +5446,17 @@ function closeShibaPanel() {
   function onMove(e) {
     if (!dragging) return;
     const pt = e.touches ? e.touches[0] : e;
-    const dx = pt.clientX - startX;
-    const dy = pt.clientY - startY;
-    panel.style.left = (baseLeft + dx) + 'px';
-    panel.style.top = (baseTop + dy) + 'px';
+    pendLeft = baseLeft + (pt.clientX - startX);
+    pendTop = baseTop + (pt.clientY - startY);
+    // 1フレーム1回だけ left/top を書く (連続 move を間引いて軽く)
+    if (!dragRaf) dragRaf = requestAnimationFrame(flushDrag);
     e.preventDefault();
   }
   function onUp(e) {
     if (!dragging) return;
     dragging = false;
+    if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
+    flushDrag();
     panel.classList.remove('dragging');
     clampShibaPanelToViewport();
     saveShibaPanelPos();
@@ -5492,6 +5511,8 @@ function closeShibaPanel() {
     resizing = handle;
     mode = handle.dataset.resizeMode || 'br';
     panel.classList.add('resizing');
+    // リサイズ中は中身をGPUレイヤー化して軽くする (onUp で解除)
+    { const c = getShibaContent(); if (c) c.style.willChange = 'transform'; }
     const r = panel.getBoundingClientRect();
     baseW = r.width;
     baseH = r.height;
@@ -5549,7 +5570,7 @@ function closeShibaPanel() {
       panel.style.height = newH + 'px';
       panel.style.left = newLeft + 'px';
       panel.style.top = newTop + 'px';
-      applyShibaTransform();
+      applyShibaTransform(newW - 32, newH - 64, true);  // rect読まず GPU 移動で軽く
     } else {
       // === 4辺: scale 固定。窓の幅/高さ/位置を自由に変え、中身をクロップ/露出 ===
       // 窓は中身より大きくしない (capW/capH)。= 下や右に無駄な空白を作らない。
@@ -5580,7 +5601,7 @@ function closeShibaPanel() {
       panel.style.height = newH + 'px';
       panel.style.left = newLeft + 'px';
       panel.style.top = newTop + 'px';
-      applyShibaTransform();
+      applyShibaTransform(newW - 32, newH - 64, true);  // scale 不変、crop を反映 (rect読まず GPU)
     }
     e.preventDefault();
   }
@@ -5589,6 +5610,10 @@ function closeShibaPanel() {
     const handle = resizing;
     resizing = null;
     panel.classList.remove('resizing');
+    // GPUレイヤー指定を解除し、2D transform に戻して crisp に
+    const c = getShibaContent();
+    if (c) c.style.willChange = '';
+    applyShibaTransform();
     // 4隅・4辺とも、現在の窓サイズ/クロップ/スケールをそのまま保存
     saveShibaPanelPos();
     saveShibaPanelSize();
@@ -5676,14 +5701,43 @@ function closeShibaPanel() {
   }
   body.addEventListener('wheel', onWheel, { passive: false });
 
-  // --- タッチスワイプ (iPhone/iPad) ---
+  // --- タッチスワイプ (iPhone/iPad): 慣性 + 端のラバーバンドで iOS らしい手触りに ---
   let active = false, swiped = false, sx = 0, sy = 0, cx0 = 0, cy0 = 0;
+  let vx = 0, vy = 0, animId = 0;
+  // 範囲外は抵抗をかけて少しだけ引っ張れる (ラバーバンド)
+  function rubber(v, max) {
+    if (v < 0)   return v * 0.32;
+    if (v > max) return max + (v - max) * 0.32;
+    return v;
+  }
+  function stopInertia() { if (animId) { cancelAnimationFrame(animId); animId = 0; } }
+  // 慣性 (フリックの惰性) + 端からの戻し (バネ)
+  function inertiaStep() {
+    shibaCropX += vx; shibaCropY += vy;
+    vx *= 0.94; vy *= 0.94;
+    if (shibaCropX < 0)         { shibaCropX += (0 - shibaCropX) * 0.28;    vx *= 0.5; }
+    else if (shibaCropX > maxX) { shibaCropX += (maxX - shibaCropX) * 0.28; vx *= 0.5; }
+    if (shibaCropY < 0)         { shibaCropY += (0 - shibaCropY) * 0.28;    vy *= 0.5; }
+    else if (shibaCropY > maxY) { shibaCropY += (maxY - shibaCropY) * 0.28; vy *= 0.5; }
+    markScrolling();
+    render();
+    const inX = shibaCropX >= -0.5 && shibaCropX <= maxX + 0.5;
+    const inY = shibaCropY >= -0.5 && shibaCropY <= maxY + 0.5;
+    if (Math.abs(vx) < 0.2 && Math.abs(vy) < 0.2 && inX && inY) {
+      shibaCropX = Math.max(0, Math.min(maxX, shibaCropX));
+      shibaCropY = Math.max(0, Math.min(maxY, shibaCropY));
+      render(); saveShibaCrop(); animId = 0; return;
+    }
+    animId = requestAnimationFrame(inertiaStep);
+  }
   function tStart(e) {
     if (!ready()) return;
+    stopInertia();   // 走っている慣性を止めて掴み直す
     recalcMax();
     if (maxX <= 0 && maxY <= 0) return;
     const t = e.touches ? e.touches[0] : e;
-    active = true; swiped = false; sx = t.clientX; sy = t.clientY; cx0 = shibaCropX; cy0 = shibaCropY;
+    active = true; swiped = false; vx = 0; vy = 0;
+    sx = t.clientX; sy = t.clientY; cx0 = shibaCropX; cy0 = shibaCropY;
     markScrolling();  // 触れた時点でGPUレイヤー化しておく (初動のカクつき防止)
   }
   function tMove(e) {
@@ -5693,9 +5747,11 @@ function closeShibaPanel() {
     if (!swiped && (Math.abs(dx) + Math.abs(dy)) < 6) return;  // タップ閾値
     swiped = true;
     markScrolling();
-    shibaCropX = cx0 - dx;
-    shibaCropY = cy0 - dy;
-    clampCrop();
+    const prevX = shibaCropX, prevY = shibaCropY;
+    shibaCropX = rubber(cx0 - dx, maxX);  // 端を越えたら抵抗付きで少し追従
+    shibaCropY = rubber(cy0 - dy, maxY);
+    vx = shibaCropX - prevX;  // フレーム毎の速度 (慣性に使う)
+    vy = shibaCropY - prevY;
     schedule();
     if (e.cancelable) e.preventDefault();
   }
@@ -5703,7 +5759,7 @@ function closeShibaPanel() {
     if (!active) return;
     active = false;
     if (swiped) {
-      saveShibaCrop();
+      inertiaStep();  // 慣性 + 端の戻しを開始 (終了時に保存)
       // スワイプ直後の click を 1 回だけ抑制 (ボタン誤爆防止)
       const supp = ev => { ev.stopPropagation(); ev.preventDefault(); };
       body.addEventListener('click', supp, true);
