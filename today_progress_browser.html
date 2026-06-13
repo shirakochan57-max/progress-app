@@ -2059,7 +2059,7 @@ body.shiba-sleeping .shiba-emoji::after {
   <h3 class="shiba-header-row">
     <span class="shiba-header-name">エクル</span>
     <span class="shiba-header-lv">⭐ Lv.<span id="shibaLevel">0</span></span>
-    <span class="shiba-header-next muted">次まで <span id="shibaToNext">100</span> pt</span>
+    <span class="shiba-header-next muted">完了まで <span id="shibaToNext">100</span> %</span>
     <span id="shibaCoins" style="display:none;">0</span>
     <span id="shibaTotalDone" style="display:none;">0</span>
   </h3>
@@ -2213,10 +2213,10 @@ async function gasCall(action, payload) {
         applyDailyEcurleDescriptionToBars(payload.description, evId);
       }
     }
-    // 「今日」を list した時だけ反映 (前日等を list しても今日のメーターを汚さない)
+    // 「表示中の日」を list した時だけ反映 (別の日を list してもメーターを汚さない)
     if (action === 'list' && data && Array.isArray(data.events) &&
         typeof applyDailyEcurleDescriptionToBars === 'function' &&
-        payload && payload.date === ymdLocalKey()) {
+        payload && payload.date === ecurleDay()) {
       const ev = data.events.find(e => isDailyEcurleTitle && isDailyEcurleTitle(e && e.summary));
       if (ev) {
         let s = null;
@@ -2722,10 +2722,24 @@ function applyDailyEcurleFromEventsCache() {
   if (!Array.isArray(eventsCache)) return;
   let s = null;
   try { s = loadShiba(); } catch (e) {}
-  if (s && s._dailyDirty) return;
+  if (s && s._dailyDirty) return;  // 未送信のローカル入力があるなら触らない
   const ev = eventsCache.find(e => isDailyEcurleTitle(e && e.summary));
-  if (!ev) return;
-  applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
+  if (ev) {
+    applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
+    return;
+  }
+  // 表示中の日に「毎日エクル」が無ければメーターを 0 にリセット (前日の値の残留を防ぐ)
+  if (!s) return;
+  const day = ecurleDay();
+  if (s.dailyTotals && s.dailyTotals.date === day &&
+      !s.dailyTotals.food && !s.dailyTotals.walk && !s.dailyTotals.poop &&
+      !s.dailyTotals.brush && !s.dailyTotals.tooth) return;  // 既に0なら何もしない
+  s.dailyTotals = { date: day, food: 0, walk: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
+  applyDailyTotalsToBars(s);
+  saveShiba(s);
+  if (typeof applyShibaState === 'function') applyShibaState(s);
+  const sheet = document.getElementById('shibaSheet');
+  if (sheet && sheet.classList.contains('open') && typeof renderShiba === 'function') renderShiba();
 }
 
 // ============= Drag & drop reorder =============
@@ -4537,14 +4551,14 @@ function getShibaMoodShort(s) {
 function updateShibaMiniBars(s) {
   const c = document.getElementById('shibaMiniBars');
   if (c) {
-    const papa = s.papa || 0;
+    const papaPct = ecurleCompletion(s) * 100;  // ⭐完了メーター = 5メーターの平均
     const bars = {
       food:  { v: s.food  || 0, max: ECURLE_MAX.food },
       walk:  { v: s.walk  || 0, max: ECURLE_MAX.walk },
       poop:  { v: s.poop  || 0, max: ECURLE_MAX.poop },
       brush: { v: s.brush || 0, max: ECURLE_MAX.brush },
       tooth: { v: s.tooth || 0, max: ECURLE_MAX.tooth },
-      papa:  { v: papa % 100,    max: 100 }
+      papa:  { v: papaPct,       max: 100 }
     };
     Object.keys(bars).forEach(key => {
       const el = c.querySelector(`[data-bar="${key}"]`);
@@ -4579,7 +4593,7 @@ const SHIBA_KEY = 'shiba_state_v1';
 // === エクル: バーの最大値 (積立式、日付変わりでリセット) ===
 const ECURLE_MAX = { food: 3, walk: 5, poop: 2, brush: 2, tooth: 2 };
 const DEFAULT_SHIBA = {
-  food: 0, walk: 0, sleep: 0, poop: 0, brush: 0, tooth: 0, papa: 0, lastFedAt: 0,
+  food: 0, walk: 0, sleep: 0, poop: 0, brush: 0, tooth: 0, papa: 0, level: 0, lastFedAt: 0,
   coins: 0, totalDone: 0,
   hunger: 60, happy: 60, stamina: 60, comfort: 60,
   hasPoop: false, hasPee: false, urge: 0, comfortBeforeDirt: null,
@@ -4696,9 +4710,32 @@ function isEcurleOnlyInput(title) {
     .replace(/[\s,、.。･・]/g, '');
   return t.length === 0;
 }
+// 完了メーター = 5メーターの平均充填率 (0..1)
+function ecurleCompletion(s) {
+  return (
+    Math.min(1, (s.food  || 0) / ECURLE_MAX.food) +
+    Math.min(1, (s.walk  || 0) / ECURLE_MAX.walk) +
+    Math.min(1, (s.poop  || 0) / ECURLE_MAX.poop) +
+    Math.min(1, (s.brush || 0) / ECURLE_MAX.brush) +
+    Math.min(1, (s.tooth || 0) / ECURLE_MAX.tooth)
+  ) / 5;
+}
+// その日の5メーターが全部最大に達したら レベル+1 (その日1回だけ、翌日へ引き継ぎ)
+function maybeLevelUp(s) {
+  const dt = s.dailyTotals;
+  if (!dt) return;
+  const full = (s.food || 0) >= ECURLE_MAX.food && (s.walk || 0) >= ECURLE_MAX.walk &&
+               (s.poop || 0) >= ECURLE_MAX.poop && (s.brush || 0) >= ECURLE_MAX.brush &&
+               (s.tooth || 0) >= ECURLE_MAX.tooth;
+  if (!full) return;
+  dt.leveled = true;
+  // その日(date)が既に加算済みなら二重加算しない (日付ごとに永続化)
+  if (!s.leveledDays) s.leveledDays = {};
+  if (s.leveledDays[dt.date]) return;
+  s.leveledDays[dt.date] = true;
+  s.level = (s.level || 0) + 1;
+}
 function applyTaskToEcurle(s, title) {
-  s.papa = (s.papa || 0) + 5;
-  s.totalPoints = s.papa;
   const r = parseTaskForEcurle(title);
   const t = ensureDailyTotals(s);
   let changed = false;
@@ -4718,6 +4755,7 @@ function applyTaskToEcurle(s, title) {
   if (r.tooth > 0) { s.tooth = Math.min(ECURLE_MAX.tooth, Math.round(((s.tooth || 0) + r.tooth) * 10) / 10); t.tooth = Math.round(((t.tooth || 0) + r.tooth) * 10) / 10; changed = true; }
   s.totalDone = (s.totalDone || 0) + 1;
   if (changed) s._dailyDirty = true;
+  maybeLevelUp(s);  // 5メーター全部最大なら レベル+1 (その日1回)
 }
 // === 毎日エクル: Googleカレンダー記録 ===
 function ymdLocalKey(d) {
@@ -4732,11 +4770,18 @@ function addDaysYmd(ymd, n) {
   const dt = new Date(y, m - 1, d + n);
   return ymdLocalKey(dt);
 }
+// エクルの対象日 = 「いま表示している日(currentDate)」。これにより記録・メーター・入力が
+// 表示中の日に対して行われる (前日を見ている時は前日に反映)。
+function ecurleDay() {
+  try { if (typeof currentDate !== 'undefined' && currentDate) return fmtDate(currentDate); } catch (e) {}
+  return ymdLocalKey();
+}
 function ensureDailyTotals(s) {
-  const today = ymdLocalKey();
-  if (!s.dailyTotals || s.dailyTotals.date !== today) {
-    s.dailyTotals = { date: today, food: 0, walk: 0, poop: 0, brush: 0, tooth: 0, eventId: null };
+  const day = ecurleDay();
+  if (!s.dailyTotals || s.dailyTotals.date !== day) {
+    s.dailyTotals = { date: day, food: 0, walk: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
   }
+  if (s.dailyTotals.leveled === undefined) s.dailyTotals.leveled = false;
   return s.dailyTotals;
 }
 function formatEcurleNum(v) {
@@ -4839,10 +4884,11 @@ function scheduleDailyEcurleSync(delay) {
 // 「毎日エクル」の description テキストを即座にメーターへ反映 (GAS往復不要)
 function applyDailyEcurleDescriptionToBars(desc, eventIdHint) {
   const parsed = parseDailyEcurleDescription(desc);
-  const today = ymdLocalKey();
+  const day = ecurleDay();
   const s = loadShiba();
-  const prevId = (s.dailyTotals && s.dailyTotals.date === today) ? s.dailyTotals.eventId : null;
-  s.dailyTotals = Object.assign({ date: today, eventId: eventIdHint || prevId || null }, parsed);
+  const prevId = (s.dailyTotals && s.dailyTotals.date === day) ? s.dailyTotals.eventId : null;
+  const prevLeveled = (s.dailyTotals && s.dailyTotals.date === day) ? !!s.dailyTotals.leveled : false;
+  s.dailyTotals = Object.assign({ date: day, eventId: eventIdHint || prevId || null, leveled: prevLeveled }, parsed);
   applyDailyTotalsToBars(s);
   s._dailyDirty = false;
   saveShiba(s);
@@ -4857,15 +4903,16 @@ function isDailyEcurleTitle(title) {
 async function pullDailyEcurleFromCalendar() {
   const url = (typeof getGasUrl === 'function') ? getGasUrl() : '';
   if (!url) return false;
-  const today = ymdLocalKey();
+  const day = ecurleDay();
   try {
-    const data = await gasCall('list', { date: today });
+    const data = await gasCall('list', { date: day });
     // 完了済み(✔️ 毎日エクル)も拾う
     const ev = (data.events || []).find(e => isDailyEcurleTitle(e && e.summary));
     if (!ev) return false;
     const parsed = parseDailyEcurleDescription(ev.description || '');
     const s = loadShiba();
-    s.dailyTotals = Object.assign({ date: today, eventId: ev.id }, parsed);
+    const prevLeveled = (s.dailyTotals && s.dailyTotals.date === day) ? !!s.dailyTotals.leveled : false;
+    s.dailyTotals = Object.assign({ date: day, eventId: ev.id, leveled: prevLeveled }, parsed);
     applyDailyTotalsToBars(s);
     s._dailyDirty = false;
     saveShiba(s);
@@ -4917,6 +4964,8 @@ function tickShiba(s) {
   if (s.brush == null) s.brush = 0;
   if (s.tooth == null) s.tooth = 0;
   if (s.papa == null) s.papa = s.totalPoints || 0;
+  // 旧 papa 基準レベルから新 level へ移行 (既存ユーザの進捗を引き継ぐ)
+  if (s.level == null) s.level = levelFromPapa(s.papa || 0);
   if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
   if (s.lastWalkResetDay == null) s.lastWalkResetDay = '';
   // 旧スケール (0-100) で保存されたデータをマイグレーション
@@ -4928,17 +4977,10 @@ function tickShiba(s) {
   if (s.stamina == null) s.stamina = 60;
   if (s.comfort == null) s.comfort = 60;
   if (s.comfortBeforeDirt === undefined) s.comfortBeforeDirt = null;
-  // 日付が変わったらリセット (パパ以外)
-  const todayKey = new Date(now).toDateString();
-  if (s.lastWalkResetDay && s.lastWalkResetDay !== todayKey) {
-    s.food = 0;
-    s.walk = 0;
-    s.poop = 0;
-    s.brush = 0;
-    s.tooth = 0;
-    s.dailyTotals = null;
-  }
-  s.lastWalkResetDay = todayKey;
+  // メーターは「表示中の日(currentDate)」の記録を反映する方式に変更したため、
+  // ここでの日付固定リセットは廃止 (日替わり/日付移動時は
+  //  applyDailyEcurleFromEventsCache / pullDailyEcurleFromCalendar が表示日の値を反映)。
+  s.lastWalkResetDay = new Date(now).toDateString();
   // 自動おやすみ: 30分操作なし
   const inactiveMin = (now - (s.lastActivityAt || now)) / 60000;
   if (!s.sleepMode && inactiveMin >= 30) {
@@ -4982,10 +5024,11 @@ function renderShiba() {
   applyShibaState(s);
   updateShibaSleepBtn(!!s.sleepMode);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
-  const papa = s.papa || 0;
-  const lv = levelFromPapa(papa);
+  // レベル表示 (完了式: その日の5メーター全部最大ごとに +1、翌日へ引き継ぎ)
+  const lv = s.level || 0;
+  const completion = ecurleCompletion(s);  // 0..1
   document.getElementById('shibaLevel').textContent = lv;
-  document.getElementById('shibaToNext').textContent = papaToNextLevel(papa);
+  document.getElementById('shibaToNext').textContent = Math.round((1 - completion) * 100);
   const houses = Math.floor(lv / 100);
   const puppies = lv % 100;
   let puppyHtml = '';
@@ -5011,7 +5054,7 @@ function renderShiba() {
   applyFill('poopFill',  poop,  ECURLE_MAX.poop);
   applyFill('brushFill', brush, ECURLE_MAX.brush);
   applyFill('toothFill', tooth, ECURLE_MAX.tooth);
-  applyFill('papaFill',  papa % 100, 100);
+  applyFill('papaFill',  completion * 100, 100);  // 完了メーター = 5メーターの平均
 }
 function shibaAction(action) {
   const s = tickShiba(loadShiba());
