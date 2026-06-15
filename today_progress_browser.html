@@ -2728,12 +2728,12 @@ function applyDailyEcurleFromEventsCache() {
     applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
     return;
   }
-  // 表示中の日に「毎日エクル」が無ければメーターを 0 にリセット (前日の値の残留を防ぐ)
-  if (!s) return;
+  // event が無い場合: 「表示日が変わって前日の値が残っている時」だけ 0 にリセットする。
+  // 同じ日なら触らない (入力→同期→再取得の途中でイベントが一時的にキャッシュに無いだけの
+  // ケースで 0 に落とさない = ちらつき/記録との齟齬を防ぐ)。
+  if (!s || !s.dailyTotals) return;
   const day = ecurleDay();
-  if (s.dailyTotals && s.dailyTotals.date === day &&
-      !s.dailyTotals.food && !s.dailyTotals.walk && !s.dailyTotals.exercise && !s.dailyTotals.poop &&
-      !s.dailyTotals.brush && !s.dailyTotals.tooth) return;  // 既に0なら何もしない
+  if (s.dailyTotals.date === day) return;  // 同じ日 → 触らない
   s.dailyTotals = { date: day, food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
   applyDailyTotalsToBars(s);
   saveShiba(s);
