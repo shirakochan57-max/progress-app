@@ -2732,9 +2732,9 @@ function applyDailyEcurleFromEventsCache() {
   if (!s) return;
   const day = ecurleDay();
   if (s.dailyTotals && s.dailyTotals.date === day &&
-      !s.dailyTotals.food && !s.dailyTotals.walk && !s.dailyTotals.poop &&
+      !s.dailyTotals.food && !s.dailyTotals.walk && !s.dailyTotals.exercise && !s.dailyTotals.poop &&
       !s.dailyTotals.brush && !s.dailyTotals.tooth) return;  // 既に0なら何もしない
-  s.dailyTotals = { date: day, food: 0, walk: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
+  s.dailyTotals = { date: day, food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
   applyDailyTotalsToBars(s);
   saveShiba(s);
   if (typeof applyShibaState === 'function') applyShibaState(s);
@@ -4664,7 +4664,7 @@ function normalizeEcurleText(s) {
 function parseTaskForEcurle(title) {
   const t = normalizeEcurleText(title || '');
   // 各項目は数値。「キーワード N」で N、数値なしは 1。おやつ等は 0.5。
-  const r = { food: 0, walk: 0, poop: 0, brush: 0, tooth: 0 };
+  const r = { food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0 };
   // ごはん N 杯 (ごはん2 = 2杯)。おやつ/間食/ごほうび は 0.5。
   const mealMatch = t.match(/(?:ご飯|ごはん|御飯|朝食|昼食|夕食)\s*(\d+(?:\.\d+)?)?/);
   if (mealMatch) {
@@ -4672,10 +4672,14 @@ function parseTaskForEcurle(title) {
   } else if (/おやつ|間食|ごほうび/.test(t)) {
     r.food = 0.5;
   }
-  // 散歩 N km (散歩1.6 = 1.6km、数値なしは 1km)。運動/遊びも散歩1kmとしてカウント。
-  const walkMatch = t.match(/(?:散歩|さんぽ|運動|うんどう|遊び|あそび)\s*(\d+(?:\.\d+)?)/);
+  // 散歩 N km (散歩1.6 = 1.6km、数値なしは 1km、0.01単位)
+  const walkMatch = t.match(/(?:散歩|さんぽ)\s*(\d+(?:\.\d+)?)/);
   if (walkMatch) r.walk = parseFloat(walkMatch[1]);
-  else if (/散歩|さんぽ|運動|うんどう|遊び|あそび/.test(t)) r.walk = 1;
+  else if (/散歩|さんぽ/.test(t)) r.walk = 1;
+  // 運動/遊び N回 (1回 = 15分、散歩メーター +1。数値なしは 1回)。記録は散歩と分離。
+  const exMatch = t.match(/(?:運動|うんどう|遊び|あそび)\s*(\d+(?:\.\d+)?)/);
+  if (exMatch) r.exercise = parseFloat(exMatch[1]);
+  else if (/運動|うんどう|遊び|あそび/.test(t)) r.exercise = 1;
   // うんこ N 回 (うんこ2 = 2回、数値なしは 1回)
   const poopMatch = t.match(/(?:うんこ|うんち|ウンコ|ウンチ)\s*(\d+(?:\.\d+)?)/);
   if (poopMatch) r.poop = parseFloat(poopMatch[1]);
@@ -4697,7 +4701,7 @@ function isEcurleOnlyInput(title) {
   let t = normalizeEcurleText(title || '').trim();
   if (!t) return false;
   const r = parseTaskForEcurle(title);
-  const matched = r.food > 0 || r.walk > 0 || r.poop > 0 || r.brush > 0 || r.tooth > 0;
+  const matched = r.food > 0 || r.walk > 0 || r.exercise > 0 || r.poop > 0 || r.brush > 0 || r.tooth > 0;
   if (!matched) return false;
   t = t
     .replace(/(?:ご飯|ごはん|御飯|朝食|昼食|夕食)\s*\d*(?:\.\d+)?/g, '')
@@ -4706,7 +4710,7 @@ function isEcurleOnlyInput(title) {
     .replace(/(?:うんこ|うんち|ウンコ|ウンチ)\s*\d*(?:\.\d+)?/g, '')
     .replace(/(?:ブラッシング|ぶらしんぐ|ブラシ)\s*\d*(?:\.\d+)?/g, '')
     .replace(/(?:歯磨き|歯みがき|はみがき|歯ブラシ)\s*\d*(?:\.\d+)?/g, '')
-    .replace(/杯|回/g, '')
+    .replace(/杯|回|分/g, '')
     .replace(/[\s,、.。･・]/g, '');
   return t.length === 0;
 }
@@ -4746,9 +4750,16 @@ function applyTaskToEcurle(s, title) {
     changed = true;
   }
   if (r.walk > 0) {
-    s.walk = Math.min(ECURLE_MAX.walk, Math.round(((s.walk || 0) + r.walk) * 10) / 10);
-    t.walk = Math.round(((t.walk || 0) + r.walk) * 10) / 10;
+    t.walk = Math.round(((t.walk || 0) + r.walk) * 100) / 100;  // 散歩km (0.01単位、記録は上限なし)
     changed = true;
+  }
+  if (r.exercise > 0) {
+    t.exercise = (t.exercise || 0) + r.exercise * 15;  // 運動 分 (1回=15分、記録は散歩と分離)
+    changed = true;
+  }
+  if (r.walk > 0 || r.exercise > 0) {
+    // 散歩メーター = 散歩km + 運動回数(15分=1メモリ)。最大値で頭打ち・0.01単位。
+    s.walk = Math.min(ECURLE_MAX.walk, Math.round(((t.walk || 0) + (t.exercise || 0) / 15) * 100) / 100);
   }
   if (r.poop > 0)  { s.poop  = Math.min(ECURLE_MAX.poop,  Math.round(((s.poop  || 0) + r.poop)  * 10) / 10); t.poop  = Math.round(((t.poop  || 0) + r.poop)  * 10) / 10; changed = true; }
   if (r.brush > 0) { s.brush = Math.min(ECURLE_MAX.brush, Math.round(((s.brush || 0) + r.brush) * 10) / 10); t.brush = Math.round(((t.brush || 0) + r.brush) * 10) / 10; changed = true; }
@@ -4779,20 +4790,22 @@ function ecurleDay() {
 function ensureDailyTotals(s) {
   const day = ecurleDay();
   if (!s.dailyTotals || s.dailyTotals.date !== day) {
-    s.dailyTotals = { date: day, food: 0, walk: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
+    s.dailyTotals = { date: day, food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
   }
   if (s.dailyTotals.leveled === undefined) s.dailyTotals.leveled = false;
+  if (s.dailyTotals.exercise === undefined) s.dailyTotals.exercise = 0;
   return s.dailyTotals;
 }
 function formatEcurleNum(v) {
-  v = v || 0;
-  if (Math.abs(v - Math.round(v)) < 0.05) return String(Math.round(v));
-  return (Math.round(v * 10) / 10).toString();
+  v = Math.round((v || 0) * 100) / 100;  // 0.01単位
+  if (v === Math.round(v)) return String(Math.round(v));
+  return String(v);
 }
 function buildDailyEcurleDescription(t) {
   return [
     '食事 ' + formatEcurleNum(t.food) + '杯',
     '散歩 ' + formatEcurleNum(t.walk) + 'km',
+    '運動 ' + formatEcurleNum(t.exercise) + '分',
     'うんち ' + formatEcurleNum(t.poop) + '回',
     'ブラッシング ' + formatEcurleNum(t.brush) + '回',
     '歯磨き ' + formatEcurleNum(t.tooth) + '回'
@@ -4800,13 +4813,14 @@ function buildDailyEcurleDescription(t) {
 }
 // 「食事 1.5杯」「散歩 7km」等を解析して dailyTotals に詰める
 function parseDailyEcurleDescription(desc) {
-  const out = { food: 0, walk: 0, poop: 0, brush: 0, tooth: 0 };
+  const out = { food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0 };
   if (!desc) return out;
   const lines = normalizeEcurleText(desc).split(/\r?\n/);
   for (const line of lines) {
     let m;
     if ((m = line.match(/食事\s*([0-9]+(?:\.[0-9]+)?)/))) out.food = parseFloat(m[1]);
     else if ((m = line.match(/散歩\s*([0-9]+(?:\.[0-9]+)?)/))) out.walk = parseFloat(m[1]);
+    else if ((m = line.match(/運動\s*([0-9]+(?:\.[0-9]+)?)/))) out.exercise = parseFloat(m[1]);
     else if ((m = line.match(/うん(?:ち|こ)\s*([0-9]+(?:\.[0-9]+)?)/))) out.poop = parseFloat(m[1]);
     else if ((m = line.match(/ブラ[ッシ]+ング\s*([0-9]+(?:\.[0-9]+)?)/))) out.brush = parseFloat(m[1]);
     else if ((m = line.match(/歯磨き\s*([0-9]+(?:\.[0-9]+)?)/))) out.tooth = parseFloat(m[1]);
@@ -4818,7 +4832,8 @@ function applyDailyTotalsToBars(s) {
   const t = s.dailyTotals;
   if (!t) return;
   s.food  = Math.min(ECURLE_MAX.food,  Math.round((t.food  || 0) * 10) / 10);
-  s.walk  = Math.min(ECURLE_MAX.walk,  Math.round((t.walk  || 0) * 10) / 10);
+  // 散歩メーター = 散歩km + 運動回数(15分=1)、0.01単位
+  s.walk  = Math.min(ECURLE_MAX.walk,  Math.round(((t.walk || 0) + (t.exercise || 0) / 15) * 100) / 100);
   s.poop  = Math.min(ECURLE_MAX.poop,  t.poop  || 0);
   s.brush = Math.min(ECURLE_MAX.brush, t.brush || 0);
   s.tooth = Math.min(ECURLE_MAX.tooth, t.tooth || 0);
