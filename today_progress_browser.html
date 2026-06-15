@@ -4877,14 +4877,24 @@ async function syncDailyEcurleToCalendar() {
       });
       eventId = res && res.id;
     }
+    // eventId は保存。_dailyDirty(上書き禁止) は refresh 完了後に外す。
+    // (refresh が途中で古いキャッシュを表示する間、その古い値でメーターが上書きされて
+    //  「一瞬減る」のを防ぐ)。
     const s2 = loadShiba();
     if (s2.dailyTotals && s2.dailyTotals.date === t.date) {
       s2.dailyTotals.eventId = eventId;
-      s2._dailyDirty = false;
       saveShiba(s2);
     }
     if (typeof refresh === 'function') {
       try { await refresh(); } catch (e) {}
+    }
+    // refresh 完了後に上書き禁止を解除。ただし同期中に新たな入力で記録が変わっていれば
+    // 解除しない (その分は次の同期に任せる = 取りこぼし防止)。
+    const s3 = loadShiba();
+    if (s3.dailyTotals && s3.dailyTotals.date === t.date &&
+        buildDailyEcurleDescription(s3.dailyTotals) === desc) {
+      s3._dailyDirty = false;
+      saveShiba(s3);
     }
   } catch (err) {
     console.warn('syncDailyEcurleToCalendar failed', err);
