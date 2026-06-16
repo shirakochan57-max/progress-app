@@ -6061,6 +6061,15 @@ document.querySelectorAll('.shiba-btn').forEach(btn => {
   btn.addEventListener('click', () => shibaAction(btn.dataset.action));
 });
 // 簡易タスク登録 (シートを閉じずに連続登録可能、markDone=true で完了扱い)
+// 登録後のフォーカス制御: 詳細パネルが開いていて他の予定カードを開いていない時は
+// フォーカスを保って連続入力できるようにする。それ以外は従来どおり外す。
+function keepShibaQuickFocus(input) {
+  const panel = document.getElementById('shibaSheet');
+  const panelOpen = panel && panel.classList.contains('shiba-panel') && panel.classList.contains('open');
+  const otherCardOpen = !!document.querySelector('.card.expanded');
+  if (panelOpen && !otherCardOpen) input.focus();
+  else input.blur();
+}
 async function quickAddFromShiba(markDone) {
   if (!getGasUrl()) { showToast('GAS URL 未設定'); return; }
   const input = document.getElementById('shibaQuickTitle');
@@ -6071,7 +6080,7 @@ async function quickAddFromShiba(markDone) {
     ecurleOnTaskCreated(titleRaw);
     showToast('毎日エクルに記録しました');
     input.value = '';
-    input.blur();
+    keepShibaQuickFocus(input);
     return;
   }
   const title = markDone ? ('✔️ ' + titleRaw) : titleRaw;
@@ -6100,7 +6109,7 @@ async function quickAddFromShiba(markDone) {
     // エクル: タスク入力 → papa+5、タイトルにご飯/散歩あれば該当バー更新
     ecurleOnTaskCreated(title);
     input.value = '';
-    input.blur();
+    keepShibaQuickFocus(input);
   } catch (e) {
     showToast('登録失敗: ' + (e.message || e));
   } finally {
