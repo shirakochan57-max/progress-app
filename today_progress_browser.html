@@ -6218,18 +6218,27 @@ shibaPushRemote = async function (state) {
   await _origPush(state);
   updateShibaSyncStatus('送信OK ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
 };
+// 手動同期ボタン: 基本は「取得(pull)」。最後に入力したデバイスのデータを取り込む。
+// このデバイスの方が新しく入力している (modifiedAt が厳密に新しい) 場合だけ送信する。
+// → 入力していないデバイスで押しても、自分の古い/初期状態でリモートを上書きしない。
 document.getElementById('shibaSyncNow').addEventListener('click', async () => {
   if (!getGasUrl()) { showToast('GAS URL を設定してください'); openSheet('settings'); return; }
   const remote = await shibaPullRemote();
   const local = loadShiba();
-  if (remote && (remote.modifiedAt || 0) > (local.modifiedAt || 0)) {
-    shibaApplyIfNewer(remote);
-    renderShiba();
-    showToast('リモートから取得しました');
-  } else {
+  if (!remote) {
     await shibaPushRemote(local);
     _shibaLastPushedModifiedAt = local.modifiedAt || 0;
-    showToast('リモートへ送信しました');
+    showToast('リモートへ送信しました（初回）');
+    return;
+  }
+  if ((local.modifiedAt || 0) > (remote.modifiedAt || 0)) {
+    await shibaPushRemote(local);
+    _shibaLastPushedModifiedAt = local.modifiedAt || 0;
+    showToast('このデバイスが最新のため送信しました');
+  } else {
+    shibaApplyIfNewer(remote);
+    renderShiba();
+    showToast('最新の状態を取得しました');
   }
 });
 
