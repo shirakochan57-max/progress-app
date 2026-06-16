@@ -4989,8 +4989,9 @@ function tickShiba(s) {
   if (s.brush == null) s.brush = 0;
   if (s.tooth == null) s.tooth = 0;
   if (s.papa == null) s.papa = s.totalPoints || 0;
-  // 旧 papa 基準レベルから新 level へ移行 (既存ユーザの進捗を引き継ぐ)
-  if (s.level == null) s.level = levelFromPapa(s.papa || 0);
+  // 旧 papa 基準レベルを引き継ぐ。DEFAULT_SHIBA に level:0 があり == null では拾えないため、
+  // level は減らない前提で max を取る (初回だけ papa 由来のレベルへ底上げ・以降は冪等)。
+  s.level = Math.max(s.level || 0, levelFromPapa(s.papa || 0));
   if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
   if (s.lastWalkResetDay == null) s.lastWalkResetDay = '';
   // 旧スケール (0-100) で保存されたデータをマイグレーション
