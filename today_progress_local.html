@@ -627,6 +627,11 @@ html, body {
 }
 .memo-save-btn:active { background: transparent; color: var(--text); }
 .memo-input { min-height: 220px; }
+.memo-checklist { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 6px; }
+.memo-check-row { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; line-height: 1.4; }
+.memo-check-row input[type="checkbox"] { width: 18px; height: 18px; margin: 1px 0 0; flex: 0 0 auto; cursor: pointer; }
+.memo-check-text { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.memo-check-text.done { text-decoration: line-through; color: var(--text-muted, #999); }
 
 textarea {
   font-size: 16px;
@@ -3120,8 +3125,44 @@ function renderCard(ev) {
   memoSec.appendChild(memo);
   body.appendChild(memoSec);
 
-  // === メモのチェックボックス (Googleカレンダーには ⬜/☑ のテキストで保存) ===
+  // === メモのチェックボックス ===
+  // 表示は「タップで切り替わる本物のチェックボックス」。保存は Googleカレンダー向けに ⬜/☑ のテキスト。
   const CB_OFF = '⬜ ', CB_ON = '☑ ';
+  // memo の ⬜/☑ 行を native checkbox として描画 (textarea の上)。タップで text の ⬜⇔☑ を切替。
+  const checklistEl = document.createElement('div');
+  checklistEl.className = 'memo-checklist';
+  memoSec.insertBefore(checklistEl, memo);
+  function renderChecklist() {
+    checklistEl.innerHTML = '';
+    const lines = memo.value.split('\n');
+    lines.forEach((line, idx) => {
+      const on = line.startsWith(CB_ON), off = line.startsWith(CB_OFF);
+      if (!on && !off) return;
+      const row = document.createElement('label');
+      row.className = 'memo-check-row';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = on;
+      box.addEventListener('click', e => e.stopPropagation());
+      box.addEventListener('change', () => {
+        const ls = memo.value.split('\n');
+        const cur = ls[idx] || '';
+        if (cur.startsWith(CB_OFF)) ls[idx] = CB_ON + cur.slice(CB_OFF.length);
+        else if (cur.startsWith(CB_ON)) ls[idx] = CB_OFF + cur.slice(CB_ON.length);
+        memo.value = ls.join('\n');
+        renderChecklist();
+      });
+      const span = document.createElement('span');
+      span.className = 'memo-check-text' + (on ? ' done' : '');
+      span.textContent = line.slice((on ? CB_ON : CB_OFF).length);
+      row.appendChild(box);
+      row.appendChild(span);
+      checklistEl.appendChild(row);
+    });
+    checklistEl.style.display = checklistEl.children.length ? '' : 'none';
+  }
+  memo.addEventListener('input', renderChecklist);
+  // ☑ボタン: カーソル行をチェックボックス行にする / 既にチェック行なら ⬜⇔☑ 切替
   function toggleMemoCheckbox() {
     const v = memo.value;
     const pos = memo.selectionStart;
@@ -3136,7 +3177,9 @@ function renderCard(ev) {
     const np = Math.max(ls, pos + delta);
     memo.focus();
     memo.setSelectionRange(np, np);
+    renderChecklist();
   }
+  // チェック行で Enter → 改行 + 新しい未チェック項目 (空項目で Enter ならリスト終了)
   memo.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;
     const v = memo.value, pos = memo.selectionStart;
@@ -3147,17 +3190,17 @@ function renderCard(ev) {
     if (!marker) return;  // チェック行でなければ通常の改行
     e.preventDefault();
     if (line.slice(marker.length).trim() === '') {
-      // 空のチェック項目で Enter → マーカーを消して通常行に (リスト終了)
       memo.value = v.slice(0, ls) + v.slice(le);
       memo.setSelectionRange(ls, ls);
     } else {
-      // 改行と同時に新しい未チェック項目を追加
       const ins = '\n' + CB_OFF;
       memo.value = v.slice(0, pos) + ins + v.slice(pos);
       const np = pos + ins.length;
       memo.setSelectionRange(np, np);
     }
+    renderChecklist();
   });
+  renderChecklist();
 
   // 分解セクション (初期非表示)。timeRow(終日チェック)直下に置き、操作距離を短くする。
   const splitSec = document.createElement('div');
