@@ -629,10 +629,10 @@ html, body {
 .memo-input { min-height: 220px; }
 .memo-editor { display: flex; flex-direction: column; gap: 2px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); padding: 6px 8px; min-height: 160px; }
 .memo-editor:focus-within { border-color: var(--ink); }
-.memo-row { display: flex; align-items: center; gap: 8px; }
-.memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; cursor: pointer; }
-.memo-row-input { flex: 1; min-width: 0; border: none; background: transparent; font: inherit; font-size: 15px; padding: 5px 2px; color: var(--text); }
-.memo-row-input:focus { outline: none; }
+.memo-row { display: flex; align-items: flex-start; gap: 8px; }
+.memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
+.memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memo-row-input:focus { outline: none; border: none; }
 .memo-row-input.done { text-decoration: line-through; color: var(--text-muted, #999); }
 
 textarea {
@@ -3137,17 +3137,24 @@ function renderCard(ev) {
   memoSec.appendChild(editorEl);
   let focusedRow = null;
 
+  function autosize(ta) {
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
   function syncMaster() {
     const lines = [];
     editorEl.querySelectorAll('.memo-row').forEach(row => {
       const inp = row.querySelector('.memo-row-input');
-      const t = inp ? inp.value : '';
+      const parts = (inp ? inp.value : '').split('\n');
+      let prefix = '';
       if (row.dataset.check === '1') {
         const box = row.querySelector('input[type="checkbox"]');
-        lines.push((box && box.checked ? CB_ON : CB_OFF) + t);
-      } else {
-        lines.push(t);
+        prefix = (box && box.checked) ? CB_ON : CB_OFF;
       }
+      lines.push(prefix + (parts[0] || ''));
+      // 同じ項目内の改行(Shift+Enter)は tab 始まりの継続行として保存
+      for (let i = 1; i < parts.length; i++) lines.push('\t' + parts[i]);
     });
     memo.value = lines.join('\n');
   }
@@ -3155,8 +3162,8 @@ function renderCard(ev) {
     const row = document.createElement('div');
     row.className = 'memo-row';
     row.dataset.check = isCheck ? '1' : '0';
-    const inp = document.createElement('input');
-    inp.type = 'text';
+    const inp = document.createElement('textarea');
+    inp.rows = 1;
     inp.lang = 'ja';
     inp.setAttribute('autocomplete', 'off');
     inp.className = 'memo-row-input' + (isCheck && checked ? ' done' : '');
@@ -3169,16 +3176,16 @@ function renderCard(ev) {
       box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); });
       row.appendChild(box);
     }
-    inp.addEventListener('focus', () => { focusedRow = row; });
-    inp.addEventListener('input', syncMaster);
+    inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
+    inp.addEventListener('input', () => { autosize(inp); syncMaster(); });
     inp.addEventListener('keydown', (e) => {
+      // Enter → 同じ種類の新しい行 / Shift+Enter は項目内で改行(1チェックボックスのまま)
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
-        // Enter → 同じ種類の行を下に追加
         e.preventDefault();
         const nr = makeRow(row.dataset.check === '1', false, '');
         editorEl.insertBefore(nr, row.nextSibling);
         syncMaster();
-        const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus();
+        const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus(); autosize(ni);
       } else if (e.key === 'Backspace' && inp.value === '' && inp.selectionStart === 0) {
         // 空行で Backspace → 行を削除 (最後の1行は残す)
         if (editorEl.querySelectorAll('.memo-row').length <= 1) return;
@@ -3186,10 +3193,11 @@ function renderCard(ev) {
         const prev = row.previousElementSibling;
         row.remove();
         syncMaster();
-        if (prev) { const pi = prev.querySelector('.memo-row-input'); if (pi) { focusedRow = prev; pi.focus(); pi.setSelectionRange(pi.value.length, pi.value.length); } }
+        if (prev) { const pi = prev.querySelector('.memo-row-input'); if (pi) { focusedRow = prev; pi.focus(); pi.setSelectionRange(pi.value.length, pi.value.length); autosize(pi); } }
       }
     });
     row.appendChild(inp);
+    requestAnimationFrame(() => autosize(inp));
     return row;
   }
   // ☑ボタン: フォーカス中の行を チェック⇄通常 に切替 (無ければ新規チェック行を追加)
@@ -3209,14 +3217,20 @@ function renderCard(ev) {
     syncMaster();
     const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus(); ni.setSelectionRange(ni.value.length, ni.value.length);
   }
-  // 初期描画: description の各行を行エディタに展開 (⬜/☑ 始まりはチェック行)
+  // 初期描画: description を解析。⬜/☑ 始まり=チェック行、tab 始まり=直前項目の継続行(項目内改行)。
   (function initMemoUI() {
-    const lines = (ev.description || '').split('\n');
-    lines.forEach(line => {
+    const blocks = [];
+    (ev.description || '').split('\n').forEach(line => {
       const on = line.startsWith(CB_ON), off = line.startsWith(CB_OFF);
-      if (on || off) editorEl.appendChild(makeRow(true, on, line.slice((on ? CB_ON : CB_OFF).length)));
-      else editorEl.appendChild(makeRow(false, false, line));
+      if (on || off) {
+        blocks.push({ check: true, checked: on, text: line.slice((on ? CB_ON : CB_OFF).length) });
+      } else if (line.startsWith('\t') && blocks.length) {
+        blocks[blocks.length - 1].text += '\n' + line.slice(1);
+      } else {
+        blocks.push({ check: false, checked: false, text: line });
+      }
     });
+    blocks.forEach(b => editorEl.appendChild(makeRow(b.check, b.checked, b.text)));
     if (!editorEl.querySelector('.memo-row')) editorEl.appendChild(makeRow(false, false, ''));
     syncMaster();
   })();
@@ -3337,11 +3351,11 @@ function renderCard(ev) {
   // 折りたたみ中: カード内どこタップでも展開 (他カードは自動折りたたみ=アコーディオン)
   // 展開中: 時刻ピルタップで折りたたみ (他のUI操作は通常通り)
   function resizeTextareaOf(el) {
-    const ti = el && el.querySelector('.title-input');
-    if (!ti) return;
+    if (!el) return;
+    const ti = el.querySelector('.title-input');
     requestAnimationFrame(() => {
-      ti.style.height = 'auto';
-      ti.style.height = ti.scrollHeight + 'px';
+      if (ti) { ti.style.height = 'auto'; ti.style.height = ti.scrollHeight + 'px'; }
+      el.querySelectorAll('.memo-row-input').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
     });
   }
   // 折りたたみ中: 時刻ピル or タイトル文字の描画範囲だけで展開する
