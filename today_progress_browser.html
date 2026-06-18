@@ -626,13 +626,13 @@ html, body {
 }
 .memo-save-btn:active { background: transparent; color: var(--text); }
 .memo-input { min-height: 220px; }
-.memo-checklist { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 6px; }
-.memo-check-row { display: flex; align-items: center; gap: 8px; line-height: 1.4; }
-.memo-check-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; cursor: pointer; }
-.memo-item-input { flex: 1; border: none; background: transparent; font: inherit; font-size: 14px; padding: 4px 2px; color: var(--text); }
-.memo-item-input:focus { outline: none; border-bottom: 1px solid var(--ink, #888); }
-.memo-item-input.done { text-decoration: line-through; color: var(--text-muted, #999); }
-.memo-free-input { min-height: 90px; }
+.memo-editor { display: flex; flex-direction: column; gap: 2px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); padding: 6px 8px; min-height: 160px; }
+.memo-editor:focus-within { border-color: var(--ink); }
+.memo-row { display: flex; align-items: center; gap: 8px; }
+.memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; cursor: pointer; }
+.memo-row-input { flex: 1; min-width: 0; border: none; background: transparent; font: inherit; font-size: 15px; padding: 5px 2px; color: var(--text); }
+.memo-row-input:focus { outline: none; }
+.memo-row-input.done { text-decoration: line-through; color: var(--text-muted, #999); }
 
 textarea {
   font-size: 16px;
@@ -3094,88 +3094,98 @@ function renderCard(ev) {
   memoSec.appendChild(memo);
   body.appendChild(memoSec);
 
-  // === メモUI ===
-  // チェック項目は「タップで切替わる本物のチェックボックス + 編集できるテキスト」で1箇所だけ表示。
-  // 自由メモは下のテキスト欄。保存(Googleカレンダー)は ⬜/☑ を含むテキストに変換して memo(隠し)へ集約。
+  // === メモUI: 1つのフィールドで「通常メモ行」と「チェックボックス行」を混在 ===
+  // 各行は input。行頭の ☑ ボタンで現在行を チェック⇄通常 に切替。
+  // 保存(Googleカレンダー)はチェック行を ⬜/☑ 付きテキストに変換し memo(隠し)へ集約。
   const CB_OFF = '⬜ ', CB_ON = '☑ ';
-  const checklistEl = document.createElement('div');
-  checklistEl.className = 'memo-checklist';
-  const freeText = document.createElement('textarea');
-  freeText.className = 'memo-input memo-free-input';
-  freeText.placeholder = 'メモ（自由記入）…';
-  memoSec.appendChild(checklistEl);
-  memoSec.appendChild(freeText);
+  const editorEl = document.createElement('div');
+  editorEl.className = 'memo-editor';
+  memoSec.appendChild(editorEl);
+  let focusedRow = null;
 
-  function updateChecklistVisibility() {
-    checklistEl.style.display = checklistEl.children.length ? '' : 'none';
-  }
   function syncMaster() {
-    const checkLines = [];
-    checklistEl.querySelectorAll('.memo-check-row').forEach(row => {
-      const box = row.querySelector('input[type="checkbox"]');
-      const inp = row.querySelector('.memo-item-input');
-      checkLines.push((box.checked ? CB_ON : CB_OFF) + (inp ? inp.value : ''));
+    const lines = [];
+    editorEl.querySelectorAll('.memo-row').forEach(row => {
+      const inp = row.querySelector('.memo-row-input');
+      const t = inp ? inp.value : '';
+      if (row.dataset.check === '1') {
+        const box = row.querySelector('input[type="checkbox"]');
+        lines.push((box && box.checked ? CB_ON : CB_OFF) + t);
+      } else {
+        lines.push(t);
+      }
     });
-    const free = freeText.value;
-    memo.value = checkLines.join('\n') + (free ? (checkLines.length ? '\n' : '') + free : '');
+    memo.value = lines.join('\n');
   }
-  function makeRow(checked, text) {
+  function makeRow(isCheck, checked, text) {
     const row = document.createElement('div');
-    row.className = 'memo-check-row';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.checked = checked;
+    row.className = 'memo-row';
+    row.dataset.check = isCheck ? '1' : '0';
     const inp = document.createElement('input');
     inp.type = 'text';
-    inp.className = 'memo-item-input' + (checked ? ' done' : '');
+    inp.lang = 'ja';
+    inp.setAttribute('autocomplete', 'off');
+    inp.className = 'memo-row-input' + (isCheck && checked ? ' done' : '');
     inp.value = text;
-    inp.placeholder = '項目';
-    box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); });
+    inp.placeholder = isCheck ? '項目' : 'メモ…';
+    if (isCheck) {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = checked;
+      box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); });
+      row.appendChild(box);
+    }
+    inp.addEventListener('focus', () => { focusedRow = row; });
     inp.addEventListener('input', syncMaster);
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
-        // Enter → 次のチェック項目を追加
+        // Enter → 同じ種類の行を下に追加
         e.preventDefault();
-        const nr = makeRow(false, '');
-        checklistEl.insertBefore(nr, row.nextSibling);
+        const nr = makeRow(row.dataset.check === '1', false, '');
+        editorEl.insertBefore(nr, row.nextSibling);
         syncMaster();
-        nr.querySelector('.memo-item-input').focus();
+        const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus();
       } else if (e.key === 'Backspace' && inp.value === '' && inp.selectionStart === 0) {
-        // 空項目で Backspace → 項目を削除
+        // 空行で Backspace → 行を削除 (最後の1行は残す)
+        if (editorEl.querySelectorAll('.memo-row').length <= 1) return;
         e.preventDefault();
         const prev = row.previousElementSibling;
         row.remove();
-        updateChecklistVisibility();
         syncMaster();
-        if (prev) { const pi = prev.querySelector('.memo-item-input'); if (pi) { pi.focus(); pi.setSelectionRange(pi.value.length, pi.value.length); } }
+        if (prev) { const pi = prev.querySelector('.memo-row-input'); if (pi) { focusedRow = prev; pi.focus(); pi.setSelectionRange(pi.value.length, pi.value.length); } }
       }
     });
-    row.appendChild(box);
     row.appendChild(inp);
     return row;
   }
-  // ☑ボタン: 新しいチェック項目を追加してフォーカス
+  // ☑ボタン: フォーカス中の行を チェック⇄通常 に切替 (無ければ新規チェック行を追加)
   function addChecklistItem() {
-    const row = makeRow(false, '');
-    checklistEl.appendChild(row);
-    updateChecklistVisibility();
+    const target = (focusedRow && editorEl.contains(focusedRow)) ? focusedRow : null;
+    if (!target) {
+      const r = makeRow(true, false, '');
+      editorEl.appendChild(r);
+      syncMaster();
+      const ri = r.querySelector('.memo-row-input'); focusedRow = r; ri.focus();
+      return;
+    }
+    const curInp = target.querySelector('.memo-row-input');
+    const wasCheck = target.dataset.check === '1';
+    const nr = makeRow(!wasCheck, false, curInp.value);
+    editorEl.replaceChild(nr, target);
     syncMaster();
-    row.querySelector('.memo-item-input').focus();
+    const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus(); ni.setSelectionRange(ni.value.length, ni.value.length);
   }
-  // 初期描画: description を「チェック行」と「自由メモ」に振り分ける
+  // 初期描画: description の各行を行エディタに展開 (⬜/☑ 始まりはチェック行)
   (function initMemoUI() {
     const lines = (ev.description || '').split('\n');
-    const free = [];
     lines.forEach(line => {
       const on = line.startsWith(CB_ON), off = line.startsWith(CB_OFF);
-      if (on || off) checklistEl.appendChild(makeRow(on, line.slice((on ? CB_ON : CB_OFF).length)));
-      else free.push(line);
+      if (on || off) editorEl.appendChild(makeRow(true, on, line.slice((on ? CB_ON : CB_OFF).length)));
+      else editorEl.appendChild(makeRow(false, false, line));
     });
-    freeText.value = free.join('\n');
-    updateChecklistVisibility();
+    if (!editorEl.querySelector('.memo-row')) editorEl.appendChild(makeRow(false, false, ''));
     syncMaster();
   })();
-  freeText.addEventListener('input', syncMaster);
 
   // 分解セクション (初期非表示)。timeRow(終日チェック)直下に置き、操作距離を短くする。
   const splitSec = document.createElement('div');
