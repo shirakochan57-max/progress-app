@@ -2955,6 +2955,14 @@ function renderCard(ev) {
   splitBtn.addEventListener('click', e => { e.stopPropagation(); onSplitClick(); });
   head.appendChild(splitBtn);
 
+  // ☑ メモにチェックボックスを挿入/切替 (toggleMemoCheckbox は memo 定義後に宣言・hoist される)
+  const checkBtn = document.createElement('button');
+  checkBtn.className = 'pill-btn check-pill';
+  checkBtn.textContent = '☑';
+  checkBtn.title = 'メモにチェックボックスを挿入/切替';
+  checkBtn.addEventListener('click', e => { e.stopPropagation(); toggleMemoCheckbox(); });
+  head.appendChild(checkBtn);
+
   // 📷 写真添付ボタン (ローカル保存。新規タスク作成の写真機能と同じ仕様)
   const photoBtn = document.createElement('button');
   photoBtn.className = 'pill-btn photo-pill';
@@ -3077,6 +3085,45 @@ function renderCard(ev) {
   memoSec.appendChild(memoLblRow);
   memoSec.appendChild(memo);
   body.appendChild(memoSec);
+
+  // === メモのチェックボックス (Googleカレンダーには ⬜/☑ のテキストで保存) ===
+  const CB_OFF = '⬜ ', CB_ON = '☑ ';
+  function toggleMemoCheckbox() {
+    const v = memo.value;
+    const pos = memo.selectionStart;
+    const ls = v.lastIndexOf('\n', pos - 1) + 1;
+    let le = v.indexOf('\n', pos); if (le < 0) le = v.length;
+    const line = v.slice(ls, le);
+    let newLine, delta;
+    if (line.startsWith(CB_OFF)) { newLine = CB_ON + line.slice(CB_OFF.length); delta = 0; }
+    else if (line.startsWith(CB_ON)) { newLine = CB_OFF + line.slice(CB_ON.length); delta = 0; }
+    else { newLine = CB_OFF + line; delta = CB_OFF.length; }
+    memo.value = v.slice(0, ls) + newLine + v.slice(le);
+    const np = Math.max(ls, pos + delta);
+    memo.focus();
+    memo.setSelectionRange(np, np);
+  }
+  memo.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+    const v = memo.value, pos = memo.selectionStart;
+    const ls = v.lastIndexOf('\n', pos - 1) + 1;
+    let le = v.indexOf('\n', pos); if (le < 0) le = v.length;
+    const line = v.slice(ls, le);
+    const marker = line.startsWith(CB_ON) ? CB_ON : (line.startsWith(CB_OFF) ? CB_OFF : null);
+    if (!marker) return;  // チェック行でなければ通常の改行
+    e.preventDefault();
+    if (line.slice(marker.length).trim() === '') {
+      // 空のチェック項目で Enter → マーカーを消して通常行に (リスト終了)
+      memo.value = v.slice(0, ls) + v.slice(le);
+      memo.setSelectionRange(ls, ls);
+    } else {
+      // 改行と同時に新しい未チェック項目を追加
+      const ins = '\n' + CB_OFF;
+      memo.value = v.slice(0, pos) + ins + v.slice(pos);
+      const np = pos + ins.length;
+      memo.setSelectionRange(np, np);
+    }
+  });
 
   // 分解セクション (初期非表示)。timeRow(終日チェック)直下に置き、操作距離を短くする。
   const splitSec = document.createElement('div');
@@ -3538,6 +3585,15 @@ async function saveCardEvent(card, ev, btn) {
 }
 
 async function toggleDone(ev, btn) {
+  // 完了/戻すを押した時、入力途中のタイトル・メモも取り込む
+  // (保存ボタンを押さずに完了してもテキストが消えないように)
+  const _cardEl = btn.closest('.card');
+  if (_cardEl) {
+    const _ti = _cardEl.querySelector('[data-field="title"]');
+    const _me = _cardEl.querySelector('.memo-input');
+    if (_me) ev.description = _me.value;
+    if (_ti && _ti.value.trim()) ev.summary = (isDone(ev) ? '✔️ ' : '') + _ti.value.trim();
+  }
   const newDone = !isDone(ev);
   const newTitle = newDone ? '✔️ ' + plainTitle(ev) : plainTitle(ev);
   btn.disabled = true;
@@ -3563,7 +3619,8 @@ async function toggleDone(ev, btn) {
           eventId: ev.id,
           allDay: true,
           startTime: newStartKey + 'T00:00:00',
-          endTime: endKey + 'T00:00:00'
+          endTime: endKey + 'T00:00:00',
+          description: ev.description
         });
         const cardEl = document.querySelector(`.card[data-event-id="${ev.id}"]`);
         if (cardEl) cardEl.remove();
@@ -3588,7 +3645,7 @@ async function toggleDone(ev, btn) {
     if (cardEl) cardEl.classList.remove('expanded');
     renderEvents();
     btn.disabled = false;
-    gasCall('update', { eventId: ev.id, summary: newTitle }).catch(err => {
+    gasCall('update', { eventId: ev.id, summary: newTitle, description: ev.description }).catch(err => {
       console.error('toggleDone sync error', err);
       ev.summary = oldTitle;
       persistCache();
