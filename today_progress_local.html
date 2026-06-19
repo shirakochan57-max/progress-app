@@ -3060,6 +3060,7 @@ function renderCard(ev) {
   collapseBtn.title = '閉じる';
   collapseBtn.addEventListener('click', e => {
     e.stopPropagation();
+    autoSaveCardEl(card);
     card.classList.remove('expanded');
     resizeTextareaOf(card);
   });
@@ -3385,6 +3386,7 @@ function renderCard(ev) {
       document.body.classList.add('card-on-top');
       if (e.target.closest('.time-pill')) {
         e.stopPropagation();
+        autoSaveCardEl(card);
         card.classList.remove('expanded');
         resizeTextareaOf(card);
       }
@@ -3394,7 +3396,7 @@ function renderCard(ev) {
     const inTimePill = !!e.target.closest('.time-pill');
     if (!inTimePill && !isClickOnTitleText(card, e)) return;
     document.querySelectorAll('.card.expanded').forEach(c => {
-      if (c !== card) { c.classList.remove('expanded'); resizeTextareaOf(c); }
+      if (c !== card) { autoSaveCardEl(c); c.classList.remove('expanded'); resizeTextareaOf(c); }
     });
     card.classList.add('expanded');
     // 展開時は予定詳細を豆柴パネルより前面に
@@ -3412,6 +3414,7 @@ document.addEventListener('click', (e) => {
   // シート/バックドロップ/ライトボックス内のクリックは無視 (編集中の可能性)
   if (e.target.closest('.sheet, .sheet-backdrop, .photo-lightbox, .roulette-overlay')) return;
   document.querySelectorAll('.card.expanded').forEach(c => {
+    autoSaveCardEl(c);
     c.classList.remove('expanded');
     const ti = c.querySelector('.title-input');
     if (ti) requestAnimationFrame(() => {
@@ -3617,22 +3620,55 @@ async function refresh() {
   }
 }
 
-async function saveCardEvent(card, ev, btn) {
+// 編集中カードを離れる時の自動保存。変更がある時だけ静かに保存し、
+// トースト/ポイント/再描画などの副作用は出さない (保存・完了を押さなくてもテキストを失わない)
+function autoSaveCardEl(card) {
+  try {
+    if (!card || !card.dataset || !card.dataset.eventId) return;
+    if (!card.classList.contains('expanded')) return; // 展開(編集)中のみ対象
+    const ev = eventsCache.find(e => e.id === card.dataset.eventId);
+    if (!ev) return;
+    const titleInput = card.querySelector('[data-field="title"]');
+    const memo = card.querySelector('[data-field="description"]');
+    if (!titleInput || !memo) return; // 編集可能カードでない
+    const allDayCb = card.querySelector('[data-field="allDay"]');
+    const startInput = card.querySelector('[data-field="start"]');
+    const endInput = card.querySelector('[data-field="end"]');
+    const newTitlePlain = titleInput.value.trim();
+    const titleChanged = newTitlePlain.length > 0 && newTitlePlain !== plainTitle(ev);
+    const descChanged = (memo.value || '') !== (ev.description || '');
+    let allDayChanged = false, timeChanged = false;
+    if (allDayCb) allDayChanged = (!!allDayCb.checked) !== isAllDay(ev);
+    if (allDayCb && !allDayCb.checked && startInput && endInput) {
+      const curS = formatTime(getStartISO(ev)) || '';
+      const curE = formatTime(getEndISO(ev)) || '';
+      timeChanged = (startInput.value !== curS) || (endInput.value !== curE);
+    }
+    if (!titleChanged && !descChanged && !allDayChanged && !timeChanged) return; // 変更なし→何もしない
+    saveCardEvent(card, ev, null, { auto: true });
+  } catch (e) { console.error('autoSaveCardEl error', e); }
+}
+
+async function saveCardEvent(card, ev, btn, opts) {
+  opts = opts || {};
   const eventId = ev.id;
   const titleInput = card.querySelector('[data-field="title"]');
   const allDayCb = card.querySelector('[data-field="allDay"]');
   const startInput = card.querySelector('[data-field="start"]');
   const endInput = card.querySelector('[data-field="end"]');
   const memo = card.querySelector('[data-field="description"]');
-  const newTitle = (isDone(ev) ? '✔️ ' : '') + titleInput.value.trim();
+  // 自動保存(離脱時)でタイトルが空の時は既存タイトルを保持し、誤って消さない
+  const _rawTitle = titleInput.value.trim();
+  const _basePlain = (opts.auto && !_rawTitle) ? plainTitle(ev) : _rawTitle;
+  const newTitle = (isDone(ev) ? '✔️ ' : '') + _basePlain;
   // 折りたたみ表示用 div も同期
   const titleDisplay = card.querySelector('.title-display');
-  if (titleDisplay) titleDisplay.textContent = titleInput.value.trim();
+  if (titleDisplay) titleDisplay.textContent = _basePlain;
   const wasAllDay = isAllDay(ev);
   const nowAllDay = allDayCb.checked;
   const dateKey = (card.dataset.date || fmtDate(currentDate)).split('T')[0];
   const dateObj = parseDateKey(dateKey);
-  const orig = btn.textContent;
+  const orig = btn ? btn.textContent : '';
 
   // === 即時UI反映 ===
   ev.summary = newTitle;
@@ -3654,11 +3690,13 @@ async function saveCardEvent(card, ev, btn) {
   card.classList.toggle('allday', nowAllDay);
 
   persistCache();
-  // 保存後はカードを自動で折りたたんでから並び替え
-  card.classList.remove('expanded');
-  renderEvents();
-  showToast('保存しました');
-  shibaEarnPoints(3, '保存'); // 豆柴ポイント
+  if (!opts.auto) {
+    // 保存後はカードを自動で折りたたんでから並び替え
+    card.classList.remove('expanded');
+    renderEvents();
+    showToast('保存しました');
+    shibaEarnPoints(3, '保存'); // 豆柴ポイント
+  }
   // 「毎日エクル」の編集 → メーターも即時反映 (GAS同期完了を待たない)
   if (isDailyEcurleTitle(newTitle)) {
     applyDailyEcurleDescriptionToBars(memo.value, eventId);
