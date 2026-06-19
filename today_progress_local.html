@@ -5266,7 +5266,10 @@ function tickShiba(s) {
   if (s.papa == null) s.papa = s.totalPoints || 0;
   // 旧 papa 基準レベルを引き継ぐ。DEFAULT_SHIBA に level:0 があり == null では拾えないため、
   // level は減らない前提で max を取る (初回だけ papa 由来のレベルへ底上げ・以降は冪等)。
-  s.level = Math.max(s.level || 0, levelFromPapa(s.papa || 0));
+  // leveledDays(レベルアップした日付の記録)が残っていれば、その件数からも底上げ。
+  // 同期等で level 数値が 0 に潰れても、日付台帳が残っていれば過去の最高レベルを復元できる。
+  // (件数は実際のレベルを超えないため復元方向のみ＝過剰加算しない)
+  s.level = Math.max(s.level || 0, levelFromPapa(s.papa || 0), Object.keys(s.leveledDays || {}).length);
   if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
   if (s.lastWalkResetDay == null) s.lastWalkResetDay = '';
   // 旧スケール (0-100) で保存されたデータをマイグレーション: 新最大値より大きければ 0 に
@@ -6470,12 +6473,23 @@ function shibaApplyIfNewer(remote) {
   if (!remote) return false;
   const local = loadShiba();
   if ((remote.modifiedAt || 0) > (local.modifiedAt || 0)) {
-    try { localStorage.setItem(SHIBA_KEY, JSON.stringify(remote)); } catch (e) {}
-    _shibaLastPushedModifiedAt = remote.modifiedAt || 0; // 採用済み = push 不要
-    setShibaEmoji('shibaCard', remote.hasPoop ? '💩' : '🐕');
-    applyShibaState(remote);
+    // レベルは減らさない: level は大きい方、leveledDays は和集合をマージしてから採用。
+    // 同期で level:0 の古い/初期リモートに「丸ごと上書き」されてレベルが初期化されるのを防ぐ。
+    const merged = { ...remote };
+    merged.level = Math.max(local.level || 0, remote.level || 0);
+    merged.leveledDays = { ...(remote.leveledDays || {}), ...(local.leveledDays || {}) };
+    // ローカルの方が高かった (= 救済した) 場合は、その分を他デバイスへも伝播させる
+    const localDays = local.leveledDays || {}, remoteDays = remote.leveledDays || {};
+    const rescued = (merged.level > (remote.level || 0)) ||
+      Object.keys(localDays).some(d => !remoteDays[d]);
+    if (rescued) merged.modifiedAt = Date.now();
+    try { localStorage.setItem(SHIBA_KEY, JSON.stringify(merged)); } catch (e) {}
+    _shibaLastPushedModifiedAt = rescued ? 0 : (remote.modifiedAt || 0);
+    setShibaEmoji('shibaCard', merged.hasPoop ? '💩' : '🐕');
+    applyShibaState(merged);
     const sheet = document.getElementById('shibaSheet');
     if (sheet && sheet.classList.contains('open')) renderShiba();
+    if (rescued) shibaPushDebounced();
     return true;
   }
   return false;
