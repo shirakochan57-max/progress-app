@@ -3319,7 +3319,7 @@ function renderCard(ev) {
     });
     memo.value = lines.join('\n');
   }
-  // 完了(☑)行の表示/非表示。完了から5分経過した行だけ隠す(完了直後に消えると寂しいので猶予)。
+  // 完了(☑)行の表示/非表示。親/子/孫いずれも、それ単独で完了→5分経過で個別に非表示。
   function applyHideDone() {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     const eid = (card && card.dataset.eventId) || ev.id;
