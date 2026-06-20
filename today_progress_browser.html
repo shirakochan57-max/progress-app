@@ -638,7 +638,13 @@ html, body {
 .memo-input { min-height: 220px; }
 .memo-editor { display: flex; flex-direction: column; gap: 2px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); padding: 6px 8px; min-height: 160px; }
 .memo-editor:focus-within { border-color: var(--ink); }
-.memo-row { display: flex; align-items: flex-start; gap: 8px; }
+.memo-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.memo-row[data-depth="1"] { padding-left: 22px; }
+.memo-row[data-depth="2"] { padding-left: 44px; }
+.row-tools { flex: 0 0 100%; display: none; gap: 6px; flex-wrap: wrap; padding: 6px 0 2px 26px; }
+.memo-row:focus-within .row-tools { display: flex; }
+.row-tools .rt-btn { font-size: 12px; line-height: 1; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.row-tools .rt-btn:active { background: var(--border); }
 .memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
 .memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-row-input:focus { outline: none; border: none; }
@@ -2983,7 +2989,7 @@ function updateSoonRowUI(row) {
     const now = Date.now();
     if (now >= entry.deadline) { completeSoonRow(card, row, eventId, id); return; }
     if (btn) btn.style.display = 'none';
-    if (!chip) { chip = document.createElement('span'); chip.className = 'soon-timer'; row.appendChild(chip); }
+    if (!chip) { chip = document.createElement('span'); chip.className = 'soon-timer'; const inp0 = row.querySelector('.memo-row-input'); if (inp0) inp0.insertAdjacentElement('afterend', chip); else row.appendChild(chip); }
     const rem = entry.deadline - now, mm = Math.floor(rem / 60000), ss = Math.floor((rem % 60000) / 1000);
     chip.textContent = mm + ':' + String(ss).padStart(2, '0');
   } else { if (id) row._soonId = null; if (chip) chip.remove(); if (btn) btn.style.display = ''; }
@@ -3235,21 +3241,25 @@ function renderCard(ev) {
     editorEl.querySelectorAll('.memo-row').forEach(row => {
       const inp = row.querySelector('.memo-row-input');
       const parts = (inp ? inp.value : '').split('\n');
-      let prefix = '';
+      let prefix = '', indent = '';
       if (row.dataset.check === '1') {
+        const d = parseInt(row.dataset.depth || '0', 10) || 0;
+        indent = '  '.repeat(d); // 階層は半角スペース2個/段で表現 (継続行のタブとは別系統)
         const box = row.querySelector('input[type="checkbox"]');
         prefix = (box && box.checked) ? CB_ON : CB_OFF;
       }
-      lines.push(prefix + (parts[0] || ''));
+      lines.push(indent + prefix + (parts[0] || ''));
       // 同じ項目内の改行(Shift+Enter)は tab 始まりの継続行として保存
       for (let i = 1; i < parts.length; i++) lines.push('\t' + parts[i]);
     });
     memo.value = lines.join('\n');
   }
-  function makeRow(isCheck, checked, text) {
+  function makeRow(isCheck, checked, text, depth) {
+    depth = Math.max(0, Math.min(2, depth || 0));
     const row = document.createElement('div');
     row.className = 'memo-row';
     row.dataset.check = isCheck ? '1' : '0';
+    row.dataset.depth = String(depth);
     row._soonId = null; // すぐやるタイマーの行ごとID (テキスト一致では区別しない)
     const inp = document.createElement('textarea');
     inp.rows = 1;
@@ -3258,25 +3268,34 @@ function renderCard(ev) {
     inp.className = 'memo-row-input' + (isCheck && checked ? ' done' : '');
     inp.value = text;
     inp.placeholder = isCheck ? '項目' : 'メモ…';
+    // 階層操作 (チェック行のみ)。→で一段ネスト(上の行=親より1段まで)、←で一段戻す。3階層(0-2)。
+    function setRowDepth(d) { row.dataset.depth = String(Math.max(0, Math.min(2, d))); syncMaster(); }
+    function doIndent() {
+      if (row.dataset.check !== '1') return;
+      const cur = parseInt(row.dataset.depth || '0', 10) || 0;
+      const prev = row.previousElementSibling;
+      const prevDepth = (prev && prev.classList && prev.classList.contains('memo-row')) ? (parseInt(prev.dataset.depth || '0', 10) || 0) : -1;
+      const nd = Math.min(cur + 1, Math.min(2, prevDepth + 1));
+      if (nd > cur) setRowDepth(nd);
+    }
+    function doOutdent() {
+      if (row.dataset.check !== '1') return;
+      const cur = parseInt(row.dataset.depth || '0', 10) || 0;
+      if (cur > 0) setRowDepth(cur - 1);
+    }
+    function toggleRowType() {
+      const wasCheck = row.dataset.check === '1';
+      const nr = makeRow(!wasCheck, false, inp.value, 0);
+      editorEl.replaceChild(nr, row);
+      syncMaster();
+      const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus(); ni.setSelectionRange(ni.value.length, ni.value.length);
+    }
     if (isCheck) {
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.checked = checked;
       box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); updateSoonRowUI(row); });
       row.appendChild(box);
-      // すぐやるボタン (チェックボックスの右横)。押すと2分後に自動チェック。
-      const soonBtn = document.createElement('button');
-      soonBtn.type = 'button';
-      soonBtn.className = 'soon-btn';
-      soonBtn.textContent = 'すぐやる';
-      soonBtn.title = '2分後に自動でチェック';
-      soonBtn.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const card = row.closest('.card[data-event-id]'); if (!card) return;
-        if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) cancelSoonTimer(card, row);
-        else startSoonTimer(card, row);
-      });
-      row.appendChild(soonBtn);
     }
     inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
     inp.addEventListener('input', () => {
@@ -3294,6 +3313,12 @@ function renderCard(ev) {
       updateSoonRowUI(row);
     });
     inp.addEventListener('keydown', (e) => {
+      // Tab / Shift+Tab → 一段ネスト / 一段戻す (チェック行のみ)
+      if (e.key === 'Tab' && row.dataset.check === '1') {
+        e.preventDefault();
+        if (e.shiftKey) doOutdent(); else doIndent();
+        return;
+      }
       // Ctrl/Cmd+Enter → この行の「すぐやる」をトグル起動 (チェック行のみ、カーソルは同じ行に残す)
       // Ctrl と Cmd の両方を受け付け、英字キーを使わないので配列(JIS/US)・OS非依存。
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing && e.keyCode !== 229) {
@@ -3311,7 +3336,7 @@ function renderCard(ev) {
       // Enter → 同じ種類の新しい行 / Shift+Enter は項目内で改行(1チェックボックスのまま)
       if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
-        const nr = makeRow(row.dataset.check === '1', false, '');
+        const nr = makeRow(row.dataset.check === '1', false, '', parseInt(row.dataset.depth || '0', 10) || 0);
         // カーソルが行頭(選択なし)かつ既存テキストありなら、現在行の「上」に空行を挿入し
         // 現在行を1行下へずらす(カーソルは新しい空行へ)。それ以外は従来どおり「下」に新規行。
         const atLineStart = inp.selectionStart === 0 && inp.selectionEnd === 0 && inp.value.length > 0;
@@ -3329,6 +3354,36 @@ function renderCard(ev) {
       }
     });
     row.appendChild(inp);
+    // 行内ツールバー (フォーカス中の行だけ表示) = ②改善: カーソル位置で操作、上までスクロール不要
+    const tools = document.createElement('div');
+    tools.className = 'row-tools';
+    const mkBtn = (label, title, handler) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rt-btn'; b.textContent = label; if (title) b.title = title;
+      b.addEventListener('mousedown', (e) => e.preventDefault()); // クリックでフォーカスを奪わない(ツールバーを閉じない)
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); inp.focus(); });
+      return b;
+    };
+    tools.appendChild(mkBtn(isCheck ? 'チェック解除' : 'チェック化', 'チェックボックスに/から切替', toggleRowType));
+    if (isCheck) {
+      tools.appendChild(mkBtn('→', '一段ネスト', doIndent));
+      tools.appendChild(mkBtn('←', '一段戻す', doOutdent));
+      const soonBtn = document.createElement('button');
+      soonBtn.type = 'button';
+      soonBtn.className = 'soon-btn rt-soon';
+      soonBtn.textContent = 'すぐやる';
+      soonBtn.title = '2分後に自動でチェック';
+      soonBtn.addEventListener('mousedown', (e) => e.preventDefault());
+      soonBtn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const card = row.closest('.card[data-event-id]'); if (!card) return;
+        if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) cancelSoonTimer(card, row);
+        else startSoonTimer(card, row);
+        inp.focus();
+      });
+      tools.appendChild(soonBtn);
+    }
+    row.appendChild(tools);
     requestAnimationFrame(() => autosize(inp));
     return row;
   }
@@ -3353,17 +3408,22 @@ function renderCard(ev) {
   (function initMemoUI() {
     const blocks = [];
     (ev.description || '').split('\n').forEach(line => {
-      const on = line.startsWith(CB_ON), off = line.startsWith(CB_OFF);
-      if (on || off) {
-        blocks.push({ check: true, checked: on, text: line.slice((on ? CB_ON : CB_OFF).length) });
-      } else if (line.startsWith('\t') && blocks.length) {
-        blocks[blocks.length - 1].text += '\n' + line.slice(1);
+      if (line.startsWith('\t') && blocks.length) {
+        blocks[blocks.length - 1].text += '\n' + line.slice(1); // 項目内改行(継続行)
+        return;
+      }
+      const lead = line.match(/^( *)(⬜ |☑ )/); // 先頭スペース(階層)＋チェックマーカー
+      if (lead) {
+        const depth = Math.min(2, Math.floor(lead[1].length / 2));
+        const checked = line.slice(lead[1].length).startsWith(CB_ON);
+        const text = line.slice(lead[1].length + (checked ? CB_ON.length : CB_OFF.length));
+        blocks.push({ check: true, checked, depth, text });
       } else {
-        blocks.push({ check: false, checked: false, text: line });
+        blocks.push({ check: false, checked: false, depth: 0, text: line });
       }
     });
-    blocks.forEach(b => editorEl.appendChild(makeRow(b.check, b.checked, b.text)));
-    if (!editorEl.querySelector('.memo-row')) editorEl.appendChild(makeRow(false, false, ''));
+    blocks.forEach(b => editorEl.appendChild(makeRow(b.check, b.checked, b.text, b.depth)));
+    if (!editorEl.querySelector('.memo-row')) editorEl.appendChild(makeRow(false, false, '', 0));
     syncMaster();
     // すぐやるタイマー: 保存分を text と位置で行へ再バインドし初期反映 (期限超過は完了)
     rebindSoonTimers(editorEl, ev.id);
