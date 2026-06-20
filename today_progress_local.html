@@ -3324,17 +3324,28 @@ function renderCard(ev) {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     const eid = (card && card.dataset.eventId) || ev.id;
     const now = Date.now();
-    let soonest = Infinity;
+    let soonest = Infinity, unhid = false;
     editorEl.querySelectorAll('.memo-row[data-check="1"]').forEach(r => {
+      const wasHidden = r.style.display === 'none';
       const box = r.querySelector('input[type="checkbox"]');
       const checked = box && box.checked;
-      if (!hideDone || !checked) { r.style.display = ''; return; }
       const ri = r.querySelector('.memo-row-input');
-      const ts = getDoneAt(eid, ri ? ri.value : '');
-      if (!ts) { r.style.display = 'none'; return; } // 記録なし(過去/外部完了)→即非表示
-      const remain = DONE_HIDE_DELAY - (now - ts);
-      if (remain <= 0) { r.style.display = 'none'; }
-      else { r.style.display = ''; if (remain < soonest) soonest = remain; }
+      let show = true;
+      if (hideDone && checked) {
+        const ts = getDoneAt(eid, ri ? ri.value : '');
+        if (!ts) show = false; // 記録なし(過去/外部完了)→即非表示
+        else { const remain = DONE_HIDE_DELAY - (now - ts); if (remain <= 0) show = false; else if (remain < soonest) soonest = remain; }
+      }
+      r.style.display = show ? '' : 'none';
+      if (show && wasHidden) unhid = true;
+    });
+    // 非表示→表示に戻した行は display:none 中に高さが測れず0のまま=文字が見えなくなるため、表示中行を再autosize
+    if (unhid) requestAnimationFrame(() => {
+      editorEl.querySelectorAll('.memo-row').forEach(r => {
+        if (r.style.display === 'none') return;
+        const ti = r.querySelector('.memo-row-input');
+        if (ti) autosize(ti);
+      });
     });
     if (soonest !== Infinity) hideTimer = setTimeout(applyHideDone, soonest + 50); // 5分到来で自動的に隠す
   }
