@@ -3338,6 +3338,52 @@ function renderCard(ev) {
     });
     if (soonest !== Infinity) hideTimer = setTimeout(applyHideDone, soonest + 50); // 5分到来で自動的に隠す
   }
+  // 親子チェックの連動: 下=子孫へ伝播 / 上=親を「直下の子が全部チェックか」で再計算 (孫まで再帰)
+  function rowDepthOf(r) { return parseInt(r.dataset.depth || '0', 10) || 0; }
+  function setBoxChecked(r, val) {
+    const box = r.querySelector('input[type="checkbox"]');
+    if (!box || box.checked === val) return false;
+    box.checked = val;
+    const ri = r.querySelector('.memo-row-input');
+    if (ri) ri.classList.toggle('done', val);
+    const eid = (card && card.dataset.eventId) || ev.id;
+    if (ri) { if (val) { if (!getDoneAt(eid, ri.value)) setDoneAt(eid, ri.value, Date.now()); } else { clearDoneAt(eid, ri.value); } }
+    return true;
+  }
+  function recomputeAncestors(rows, i) {
+    let depth = rowDepthOf(rows[i]), idx = i;
+    while (depth > 0) {
+      let p = -1;
+      for (let k = idx - 1; k >= 0; k--) { if (rowDepthOf(rows[k]) < depth) { p = k; break; } }
+      if (p < 0 || rows[p].dataset.check !== '1') break;
+      const pd = rowDepthOf(rows[p]);
+      let allChecked = true, hasChild = false;
+      for (let j = p + 1; j < rows.length; j++) {
+        const dj = rowDepthOf(rows[j]);
+        if (dj <= pd) break;
+        if (dj === pd + 1 && rows[j].dataset.check === '1') {
+          hasChild = true;
+          const cb = rows[j].querySelector('input[type="checkbox"]');
+          if (!cb || !cb.checked) { allChecked = false; break; }
+        }
+      }
+      if (hasChild) setBoxChecked(rows[p], allChecked);
+      idx = p; depth = pd;
+    }
+  }
+  function cascadeFrom(row) {
+    const rows = [...editorEl.querySelectorAll('.memo-row')];
+    const i = rows.indexOf(row);
+    if (i < 0) return;
+    const di = rowDepthOf(row);
+    const box = row.querySelector('input[type="checkbox"]');
+    const target = !!(box && box.checked);
+    for (let j = i + 1; j < rows.length; j++) { // 下: 子孫すべてを同じ状態に
+      if (rowDepthOf(rows[j]) <= di) break;
+      if (rows[j].dataset.check === '1') setBoxChecked(rows[j], target);
+    }
+    recomputeAncestors(rows, i); // 上: 親→祖先を再計算
+  }
   function makeRow(isCheck, checked, text, depth) {
     depth = Math.max(0, Math.min(2, depth || 0));
     const row = document.createElement('div');
@@ -3382,6 +3428,7 @@ function renderCard(ev) {
         inp.classList.toggle('done', box.checked);
         const c = row.closest('.card[data-event-id]');
         if (c) { const eid = c.dataset.eventId; if (box.checked) { if (!getDoneAt(eid, inp.value)) setDoneAt(eid, inp.value, Date.now()); } else { clearDoneAt(eid, inp.value); } }
+        cascadeFrom(row); // 親子・孫の完了連動
         syncMaster(); updateSoonRowUI(row); applyHideDone();
       });
       row.appendChild(box);
