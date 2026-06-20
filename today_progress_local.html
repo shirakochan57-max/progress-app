@@ -639,10 +639,10 @@ html, body {
 .memo-input { min-height: 220px; }
 .memo-editor { display: flex; flex-direction: column; gap: 2px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); padding: 6px 8px; min-height: 160px; }
 .memo-editor:focus-within { border-color: var(--ink); }
-.memo-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.memo-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; position: relative; }
 .memo-row[data-depth="1"] { padding-left: 22px; }
 .memo-row[data-depth="2"] { padding-left: 44px; }
-.row-tools { flex: 0 0 100%; display: none; gap: 6px; flex-wrap: wrap; padding: 6px 0 2px 26px; }
+.row-tools { position: absolute; top: 100%; left: 26px; z-index: 30; margin-top: 2px; display: none; gap: 6px; flex-wrap: wrap; padding: 5px 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
 .memo-row:focus-within .row-tools { display: flex; }
 .row-tools .rt-btn { font-size: 12px; line-height: 1; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .row-tools .rt-btn:active { background: var(--border); }
