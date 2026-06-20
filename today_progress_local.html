@@ -3056,6 +3056,15 @@ function rebindSoonTimers(editorEl, eventId) {
 // 全表示行を毎秒更新 (カウントダウン進行 + 期限到来で自動チェック)
 setInterval(() => { document.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI); }, 1000);
 
+// ===== 完了(☑)行の「5分後に非表示」用 完了時刻記録 =====
+const DONE_HIDE_DELAY = 5 * 60 * 1000;
+const DONE_AT_KEY = 'done_at_v1';
+function loadDoneAt() { try { return JSON.parse(localStorage.getItem(DONE_AT_KEY) || '{}'); } catch (e) { return {}; } }
+function saveDoneAt(o) { try { localStorage.setItem(DONE_AT_KEY, JSON.stringify(o)); } catch (e) {} }
+function getDoneAt(eventId, text) { const m = loadDoneAt()[eventId]; return (m && m[text]) ? m[text] : 0; }
+function setDoneAt(eventId, text, ts) { const o = loadDoneAt(); (o[eventId] = o[eventId] || {})[text] = ts; saveDoneAt(o); }
+function clearDoneAt(eventId, text) { const o = loadDoneAt(); if (o[eventId]) { delete o[eventId][text]; if (!Object.keys(o[eventId]).length) delete o[eventId]; saveDoneAt(o); } }
+
 function renderCard(ev) {
   const card = document.createElement('div');
   card.className = 'card' + (isDone(ev) ? ' done' : '') + (isAllDay(ev) ? ' allday' : '');
@@ -3242,12 +3251,13 @@ function renderCard(ev) {
   applyAllDay();
   // 完了(☑)の行を隠す トグル (終日の右)。カード内のチェック済み行を非表示にして整理。
   let hideDone = false;
+  let hideTimer = null;
   try { hideDone = localStorage.getItem('hide_done_' + ev.id) === '1'; } catch (e) {}
   const hideDoneBtn = document.createElement('button');
   hideDoneBtn.type = 'button';
   hideDoneBtn.className = 'hide-done-btn' + (hideDone ? ' on' : '');
   hideDoneBtn.textContent = hideDone ? '☑を表示' : '☑を隠す';
-  hideDoneBtn.title = '完了した☑の行を非表示にして整理';
+  hideDoneBtn.title = '完了した☑の行を完了5分後に非表示にして整理';
   hideDoneBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     hideDone = !hideDone;
@@ -3309,12 +3319,24 @@ function renderCard(ev) {
     });
     memo.value = lines.join('\n');
   }
-  // 完了(☑)行の表示/非表示を現在の hideDone 状態に合わせる
+  // 完了(☑)行の表示/非表示。完了から5分経過した行だけ隠す(完了直後に消えると寂しいので猶予)。
   function applyHideDone() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    const eid = (card && card.dataset.eventId) || ev.id;
+    const now = Date.now();
+    let soonest = Infinity;
     editorEl.querySelectorAll('.memo-row[data-check="1"]').forEach(r => {
       const box = r.querySelector('input[type="checkbox"]');
-      r.style.display = (hideDone && box && box.checked) ? 'none' : '';
+      const checked = box && box.checked;
+      if (!hideDone || !checked) { r.style.display = ''; return; }
+      const ri = r.querySelector('.memo-row-input');
+      const ts = getDoneAt(eid, ri ? ri.value : '');
+      if (!ts) { r.style.display = 'none'; return; } // 記録なし(過去/外部完了)→即非表示
+      const remain = DONE_HIDE_DELAY - (now - ts);
+      if (remain <= 0) { r.style.display = 'none'; }
+      else { r.style.display = ''; if (remain < soonest) soonest = remain; }
     });
+    if (soonest !== Infinity) hideTimer = setTimeout(applyHideDone, soonest + 50); // 5分到来で自動的に隠す
   }
   function makeRow(isCheck, checked, text, depth) {
     depth = Math.max(0, Math.min(2, depth || 0));
@@ -3356,7 +3378,12 @@ function renderCard(ev) {
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.checked = checked;
-      box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); updateSoonRowUI(row); applyHideDone(); });
+      box.addEventListener('change', () => {
+        inp.classList.toggle('done', box.checked);
+        const c = row.closest('.card[data-event-id]');
+        if (c) { const eid = c.dataset.eventId; if (box.checked) { if (!getDoneAt(eid, inp.value)) setDoneAt(eid, inp.value, Date.now()); } else { clearDoneAt(eid, inp.value); } }
+        syncMaster(); updateSoonRowUI(row); applyHideDone();
+      });
       row.appendChild(box);
     }
     inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
