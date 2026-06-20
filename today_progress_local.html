@@ -648,6 +648,8 @@ html, body {
 .row-tools .rt-btn:active { background: var(--border); }
 /* iPad/PC など広い画面では右端に行き過ぎるので、内容寄り(左基準)に配置 */
 @media (min-width: 700px) { .row-tools { right: auto; left: 170px; } }
+.hide-done-btn { margin-left: auto; flex: 0 0 auto; font-size: 12px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.hide-done-btn.on { background: var(--ink); color: var(--inverted); }
 .memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
 .memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-row-input:focus { outline: none; border: none; }
@@ -3238,6 +3240,23 @@ function renderCard(ev) {
   }
   allDayCb.addEventListener('change', applyAllDay);
   applyAllDay();
+  // 完了(☑)の行を隠す トグル (終日の右)。カード内のチェック済み行を非表示にして整理。
+  let hideDone = false;
+  try { hideDone = localStorage.getItem('hide_done_' + ev.id) === '1'; } catch (e) {}
+  const hideDoneBtn = document.createElement('button');
+  hideDoneBtn.type = 'button';
+  hideDoneBtn.className = 'hide-done-btn' + (hideDone ? ' on' : '');
+  hideDoneBtn.textContent = hideDone ? '☑を表示' : '☑を隠す';
+  hideDoneBtn.title = '完了した☑の行を非表示にして整理';
+  hideDoneBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideDone = !hideDone;
+    hideDoneBtn.classList.toggle('on', hideDone);
+    hideDoneBtn.textContent = hideDone ? '☑を表示' : '☑を隠す';
+    try { localStorage.setItem('hide_done_' + ev.id, hideDone ? '1' : '0'); } catch (e2) {}
+    applyHideDone();
+  });
+  timeRow.appendChild(hideDoneBtn);
   body.appendChild(timeRow);
 
   const memoSec = document.createElement('div');
@@ -3290,6 +3309,13 @@ function renderCard(ev) {
     });
     memo.value = lines.join('\n');
   }
+  // 完了(☑)行の表示/非表示を現在の hideDone 状態に合わせる
+  function applyHideDone() {
+    editorEl.querySelectorAll('.memo-row[data-check="1"]').forEach(r => {
+      const box = r.querySelector('input[type="checkbox"]');
+      r.style.display = (hideDone && box && box.checked) ? 'none' : '';
+    });
+  }
   function makeRow(isCheck, checked, text, depth) {
     depth = Math.max(0, Math.min(2, depth || 0));
     const row = document.createElement('div');
@@ -3330,7 +3356,7 @@ function renderCard(ev) {
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.checked = checked;
-      box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); updateSoonRowUI(row); });
+      box.addEventListener('change', () => { inp.classList.toggle('done', box.checked); syncMaster(); updateSoonRowUI(row); applyHideDone(); });
       row.appendChild(box);
     }
     inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
@@ -3475,6 +3501,7 @@ function renderCard(ev) {
     // すぐやるタイマー: 保存分を text と位置で行へ再バインドし初期反映 (期限超過は完了)
     rebindSoonTimers(editorEl, ev.id);
     editorEl.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI);
+    applyHideDone();
   })();
 
   // 分解セクション (初期非表示)。timeRow(終日チェック)直下に置き、操作距離を短くする。
