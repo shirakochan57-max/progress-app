@@ -152,6 +152,16 @@ html, body {
 .action-card.roulette-card { --accent: var(--ink); --accent-text: var(--text); }
 .action-card.photo-card    { --accent: var(--ink); --accent-text: var(--text); }
 .action-card:active { opacity: 0.6; }
+.action-card.count-card { --accent: var(--ink); --accent-text: var(--text); }
+.count-overlay { position: fixed; inset: 0; z-index: 9999; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
+.count-overlay.show { display: flex; }
+.count-confetti { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+.count-box { position: relative; z-index: 2; background: var(--surface); border: 2px solid var(--ink); border-radius: 20px; padding: 26px 40px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.3); animation: countPop .35s cubic-bezier(.2,1.3,.4,1); }
+.count-label { font-size: 14px; color: var(--text-muted, #999); letter-spacing: .08em; }
+.count-num { font-size: 64px; font-weight: 800; line-height: 1.05; color: var(--ink); }
+.count-goal { font-size: 18px; color: var(--text-muted, #999); }
+.count-msg { margin-top: 12px; font-size: 16px; font-weight: 700; color: var(--text); }
+@keyframes countPop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 .card-photos {
   margin-top: 6px;
@@ -1897,6 +1907,10 @@ body.shiba-sleeping .shiba-emoji::after {
       <div class="action-icon">🎲</div>
       <div class="action-label">ルーレット（終日の中から次の1つを決める）</div>
     </div>
+    <div class="action-card count-card" id="countCard">
+      <div class="action-icon">💯</div>
+      <div class="action-label">本日の完了数（タップで表示）</div>
+    </div>
   </div>
 
   <!-- 豆柴ちゃん (右下フローティングアイコン、タップで開く) -->
@@ -1916,6 +1930,15 @@ body.shiba-sleeping .shiba-emoji::after {
     <img id="photoLightboxImg" alt="">
   </div>
   <div id="rouletteBannerSlot"></div>
+  <div class="count-overlay" id="countOverlay" aria-hidden="true">
+    <canvas class="count-confetti" id="countConfetti"></canvas>
+    <div class="count-box">
+      <div class="count-label">本日の完了</div>
+      <div class="count-num" id="countNum">0</div>
+      <div class="count-goal">/ 100</div>
+      <div class="count-msg" id="countMsg"></div>
+    </div>
+  </div>
 
   <div class="cards" id="cards">
     <div class="status" id="cardsStatus">読み込み中…</div>
@@ -4314,6 +4337,77 @@ document.getElementById('photoLightbox').addEventListener('click', () => {
 });
 
 document.getElementById('rouletteCard').addEventListener('click', startRoulette);
+
+// ===== 本日の完了数カウンター + 100達成お祝い =====
+// 数え方: 表示中の日(eventsCache)の「完了タスク(✔️)」+「チェック済みチェックボックス(☑)」の合計。
+// 100到達(初回/再到達)で紙吹雪のお祝い(無音)。99以下に戻ると再びお祝い対象に戻る。タップ時にカウント。
+const COUNT_GOAL = 100;
+const COUNT_CELEBRATED_KEY = 'count_celebrated_v1';
+function loadCountCelebrated() { try { return JSON.parse(localStorage.getItem(COUNT_CELEBRATED_KEY) || '{}'); } catch (e) { return {}; } }
+function saveCountCelebrated(o) { try { localStorage.setItem(COUNT_CELEBRATED_KEY, JSON.stringify(o)); } catch (e) {} }
+function countTodayDone() {
+  let n = 0;
+  for (const ev of eventsCache) {
+    if (typeof isDailyEcurleTitle === 'function' && isDailyEcurleTitle(ev.summary || '')) continue; // エクル記録は除外
+    if (isDone(ev)) n++; // 完了タスク(✔️)
+    (ev.description || '').split('\n').forEach(line => { if (line.indexOf('☑') === 0) n++; }); // チェック済みチェックボックス(☑)
+  }
+  return n;
+}
+function runCountCelebration() {
+  const canvas = document.getElementById('countConfetti'); if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.width = Math.floor(window.innerWidth * dpr);
+  const H = canvas.height = Math.floor(window.innerHeight * dpr);
+  canvas.style.width = window.innerWidth + 'px'; canvas.style.height = window.innerHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  const colors = ['#e6194b', '#3cb44b', '#ffd700', '#4363d8', '#f58231', '#911eb4', '#1dd3b0', '#f032e6'];
+  const parts = [];
+  for (let i = 0; i < 170; i++) parts.push({
+    x: W / 2 + (Math.random() - 0.5) * W * 0.25,
+    y: H * 0.4 + (Math.random() - 0.5) * 40 * dpr,
+    vx: (Math.random() - 0.5) * 17 * dpr,
+    vy: (Math.random() * -13 - 4) * dpr,
+    g: (0.32 + Math.random() * 0.22) * dpr,
+    w: (5 + Math.random() * 8) * dpr, h: (8 + Math.random() * 12) * dpr,
+    rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.4,
+    color: colors[i % colors.length]
+  });
+  const start = performance.now(), DUR = 2800;
+  function frame(now) {
+    const t = now - start;
+    ctx.clearRect(0, 0, W, H);
+    for (const p of parts) {
+      p.vy += p.g; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.globalAlpha = Math.max(0, 1 - t / DUR);
+      ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (t < DUR) requestAnimationFrame(frame); else ctx.clearRect(0, 0, W, H);
+  }
+  requestAnimationFrame(frame);
+}
+function openCountPanel() {
+  const n = countTodayDone();
+  const dateKey = fmtDate(currentDate);
+  const flags = loadCountCelebrated();
+  if (n < COUNT_GOAL && flags[dateKey]) { delete flags[dateKey]; saveCountCelebrated(flags); } // 99以下に戻ったら再お祝い可
+  let celebrate = false;
+  if (n >= COUNT_GOAL && !flags[dateKey]) { celebrate = true; flags[dateKey] = true; saveCountCelebrated(flags); }
+  const numEl = document.getElementById('countNum'); if (numEl) numEl.textContent = n;
+  const msgEl = document.getElementById('countMsg');
+  if (msgEl) msgEl.textContent = celebrate ? '🎉 100達成おめでとう！ 🎉' : (n >= COUNT_GOAL ? '達成済み 🎉' : '目標まで あと ' + (COUNT_GOAL - n));
+  const ov = document.getElementById('countOverlay');
+  if (ov) { ov.classList.add('show'); ov.setAttribute('aria-hidden', 'false'); }
+  if (celebrate) runCountCelebration();
+}
+(function setupCountCard() {
+  const card = document.getElementById('countCard');
+  if (card) card.addEventListener('click', openCountPanel);
+  const ov = document.getElementById('countOverlay');
+  if (ov) ov.addEventListener('click', () => { ov.classList.remove('show'); ov.setAttribute('aria-hidden', 'true'); });
+})();
 document.getElementById('rescheduleBackdrop').addEventListener('click', () => closeSheet('reschedule'));
 document.getElementById('rescheduleCancel').addEventListener('click', () => closeSheet('reschedule'));
 document.getElementById('rescheduleDate').addEventListener('input', checkRescheduleValid);
