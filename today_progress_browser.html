@@ -645,6 +645,8 @@ html, body {
 .memo-row:focus-within .row-tools { display: flex; }
 .row-tools .rt-btn { font-size: 12px; line-height: 1; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .row-tools .rt-btn:active { background: var(--border); }
+/* iPad/PC など広い画面では右端に行き過ぎるので、内容寄り(左基準)に配置 */
+@media (min-width: 700px) { .row-tools { right: auto; left: 170px; } }
 .memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
 .memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-row-input:focus { outline: none; border: none; }
@@ -3364,10 +3366,10 @@ function renderCard(ev) {
       b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); inp.focus(); });
       return b;
     };
-    tools.appendChild(mkBtn(isCheck ? 'チェック解除' : 'チェック化', 'チェックボックスに/から切替', toggleRowType));
+    tools.appendChild(mkBtn(isCheck ? '✕' : '☑', isCheck ? 'チェックを解除（通常メモに）' : 'チェックボックスにする', toggleRowType));
     if (isCheck) {
-      tools.appendChild(mkBtn('→', '一段ネスト', doIndent));
       tools.appendChild(mkBtn('←', '一段戻す', doOutdent));
+      tools.appendChild(mkBtn('→', '一段ネスト', doIndent));
       const soonBtn = document.createElement('button');
       soonBtn.type = 'button';
       soonBtn.className = 'soon-btn rt-soon';
