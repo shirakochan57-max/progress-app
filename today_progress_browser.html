@@ -2897,21 +2897,41 @@ function applyCardOrder() {
 }
 
 // ===== すぐやる(2分)タイマー: チェックボックス行を2分後に自動チェック =====
-// 期限(deadline)を localStorage に保存し、カード/アプリを閉じても継続。期限が過ぎていれば次に表示した時に完了。
+// 行の同一性は「行ごとの一意ID(row._soonId)」で管理する(テキスト一致では区別しない=同一タイトルでも独立)。
+// 期限等は localStorage(soon_timers_v1) に { [eventId]: { [id]: {deadline, idx, text} } } で保存し、
+// カード/アプリを閉じても継続。再表示時に text と位置(idx)で行へ再バインドする。
 // カウントダウン文字は表示専用(カレンダーのメモ本文には保存しない)。完了=チェックのみ(通知なし)。
 const SOON_MS = 2 * 60 * 1000;
 const SOON_TIMERS_KEY = 'soon_timers_v1';
 function loadSoonTimers() { try { return JSON.parse(localStorage.getItem(SOON_TIMERS_KEY) || '{}'); } catch (e) { return {}; } }
 function saveSoonTimers(o) { try { localStorage.setItem(SOON_TIMERS_KEY, JSON.stringify(o)); } catch (e) {} }
-function getSoonDeadline(eventId, text) { const a = loadSoonTimers()[eventId]; return (a && a[text]) ? a[text] : 0; }
-function setSoonTimer(eventId, text, deadline) { const o = loadSoonTimers(); (o[eventId] = o[eventId] || {})[text] = deadline; saveSoonTimers(o); }
-function clearSoonTimer(eventId, text) { const o = loadSoonTimers(); if (o[eventId]) { delete o[eventId][text]; if (!Object.keys(o[eventId]).length) delete o[eventId]; saveSoonTimers(o); } }
+function genSoonId() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function getSoonEntry(eventId, id) { const m = loadSoonTimers()[eventId]; return (m && id && m[id]) ? m[id] : null; }
+function setSoonEntry(eventId, id, entry) { const o = loadSoonTimers(); (o[eventId] = o[eventId] || {})[id] = entry; saveSoonTimers(o); }
+function clearSoonEntry(eventId, id) { const o = loadSoonTimers(); if (o[eventId]) { delete o[eventId][id]; if (!Object.keys(o[eventId]).length) delete o[eventId]; saveSoonTimers(o); } }
 function migrateSoonTimers(tempId, realId) { const o = loadSoonTimers(); if (o[tempId]) { o[realId] = { ...(o[realId] || {}), ...o[tempId] }; delete o[tempId]; saveSoonTimers(o); } }
+// 行のチェック行内インデックス(同一エディタ内)
+function soonRowIdx(row) { const ed = row.closest('.memo-editor'); if (!ed) return 0; return [...ed.querySelectorAll('.memo-row[data-check="1"]')].indexOf(row); }
+// この行で「すぐやる」を開始(2分タイマー)。空行では開始しない。
+function startSoonTimer(card, row) {
+  const inp = row.querySelector('.memo-row-input');
+  if (!inp || !inp.value.length) return;
+  const eventId = card.dataset.eventId;
+  const id = genSoonId();
+  setSoonEntry(eventId, id, { deadline: Date.now() + SOON_MS, idx: soonRowIdx(row), text: inp.value });
+  row._soonId = id;
+  updateSoonRowUI(row);
+}
+function cancelSoonTimer(card, row) {
+  if (row._soonId) { clearSoonEntry(card.dataset.eventId, row._soonId); row._soonId = null; }
+  updateSoonRowUI(row);
+}
 // 2分経過: チェックボックスを完了にし、カレンダーへ保存 (表示中カードの行を操作)
-function completeSoonRow(card, row, eventId, text) {
+function completeSoonRow(card, row, eventId, id) {
   const box = row.querySelector('input[type="checkbox"]');
   if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); } // change→done付与+syncMaster
-  clearSoonTimer(eventId, text);
+  if (id) clearSoonEntry(eventId, id);
+  row._soonId = null;
   const chip = row.querySelector('.soon-timer'); if (chip) chip.remove();
   const btn = row.querySelector('.soon-btn'); if (btn) btn.style.display = 'none';
   const master = card.querySelector('.memo-input');
@@ -2925,26 +2945,47 @@ function completeSoonRow(card, row, eventId, text) {
     }
   }
 }
-// 1行のUI(ボタン/カウントダウン)を現在のタイマー状態に合わせる
+// 1行のUI(ボタン/カウントダウン)を現在のタイマー状態に合わせる (row._soonId が真実)
 function updateSoonRowUI(row) {
   if (!row || row.dataset.check !== '1') return;
   const card = row.closest('.card[data-event-id]'); if (!card) return;
   const eventId = card.dataset.eventId;
-  const inp = row.querySelector('.memo-row-input');
   const box = row.querySelector('input[type="checkbox"]');
   const btn = row.querySelector('.soon-btn');
   let chip = row.querySelector('.soon-timer');
-  const text = inp ? inp.value : '';
-  const deadline = getSoonDeadline(eventId, text);
-  if (box && box.checked) { if (deadline) clearSoonTimer(eventId, text); if (btn) btn.style.display = 'none'; if (chip) chip.remove(); return; }
-  if (deadline) {
+  const id = row._soonId || null;
+  const entry = id ? getSoonEntry(eventId, id) : null;
+  if (box && box.checked) { if (id) { clearSoonEntry(eventId, id); row._soonId = null; } if (btn) btn.style.display = 'none'; if (chip) chip.remove(); return; }
+  if (entry) {
     const now = Date.now();
-    if (now >= deadline) { completeSoonRow(card, row, eventId, text); return; }
+    if (now >= entry.deadline) { completeSoonRow(card, row, eventId, id); return; }
     if (btn) btn.style.display = 'none';
     if (!chip) { chip = document.createElement('span'); chip.className = 'soon-timer'; row.appendChild(chip); }
-    const rem = deadline - now, mm = Math.floor(rem / 60000), ss = Math.floor((rem % 60000) / 1000);
+    const rem = entry.deadline - now, mm = Math.floor(rem / 60000), ss = Math.floor((rem % 60000) / 1000);
     chip.textContent = mm + ':' + String(ss).padStart(2, '0');
-  } else { if (chip) chip.remove(); if (btn) btn.style.display = ''; }
+  } else { if (id) row._soonId = null; if (chip) chip.remove(); if (btn) btn.style.display = ''; }
+}
+// 保存済みタイマーを、再表示された行へ text と位置(idx)で再バインド (再描画/リロードをまたいで継続)
+function rebindSoonTimers(editorEl, eventId) {
+  const o = loadSoonTimers(); const m = o[eventId]; if (!m) return;
+  const rows = [...editorEl.querySelectorAll('.memo-row[data-check="1"]')];
+  const usedRows = new Set(); let changed = false;
+  Object.keys(m).sort((a, b) => (m[a].idx || 0) - (m[b].idx || 0)).forEach(id => {
+    const entry = m[id];
+    let best = null, bestDist = Infinity;
+    rows.forEach((r, i) => {
+      if (usedRows.has(r)) return;
+      const inp = r.querySelector('.memo-row-input');
+      const box = r.querySelector('input[type="checkbox"]');
+      if (!inp || (box && box.checked) || inp.value !== entry.text) return;
+      const d = Math.abs(i - (entry.idx || 0));
+      if (d < bestDist) { bestDist = d; best = r; }
+    });
+    if (best) { best._soonId = id; usedRows.add(best); }
+    else { delete m[id]; changed = true; } // 該当行が無い(削除/編集済み) → エントリ破棄
+  });
+  if (!Object.keys(m).length) delete o[eventId];
+  if (changed || !o[eventId]) saveSoonTimers(o);
 }
 // 全表示行を毎秒更新 (カウントダウン進行 + 期限到来で自動チェック)
 setInterval(() => { document.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI); }, 1000);
@@ -3186,7 +3227,7 @@ function renderCard(ev) {
     const row = document.createElement('div');
     row.className = 'memo-row';
     row.dataset.check = isCheck ? '1' : '0';
-    row._soonText = text; // すぐやるタイマーのキー(テキスト)追従用
+    row._soonId = null; // すぐやるタイマーの行ごとID (テキスト一致では区別しない)
     const inp = document.createElement('textarea');
     inp.rows = 1;
     inp.lang = 'ja';
@@ -3209,25 +3250,21 @@ function renderCard(ev) {
       soonBtn.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
         const card = row.closest('.card[data-event-id]'); if (!card) return;
-        setSoonTimer(card.dataset.eventId, inp.value, Date.now() + SOON_MS);
-        row._soonText = inp.value;
-        updateSoonRowUI(row);
+        if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) cancelSoonTimer(card, row);
+        else startSoonTimer(card, row);
       });
       row.appendChild(soonBtn);
     }
     inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
     inp.addEventListener('input', () => {
       autosize(inp);
-      // すぐやるタイマーのキー(テキスト)を編集に追従させる
-      if (row.dataset.check === '1') {
+      // すぐやるタイマーは行ごとID(row._soonId)で管理。編集に追従し、空にしたら解除(別タスク化)。
+      if (row.dataset.check === '1' && row._soonId) {
         const card = row.closest('.card[data-event-id]');
         if (card) {
-          const eventId = card.dataset.eventId, prev = row._soonText;
-          if (prev != null && prev !== inp.value) {
-            const dl = getSoonDeadline(eventId, prev);
-            if (dl) { clearSoonTimer(eventId, prev); setSoonTimer(eventId, inp.value, dl); }
-          }
-          row._soonText = inp.value;
+          const eventId = card.dataset.eventId;
+          if (inp.value.length === 0) { clearSoonEntry(eventId, row._soonId); row._soonId = null; }
+          else { const en = getSoonEntry(eventId, row._soonId); if (en) { en.text = inp.value; en.idx = soonRowIdx(row); setSoonEntry(eventId, row._soonId, en); } }
         }
       }
       syncMaster();
@@ -3242,10 +3279,8 @@ function renderCard(ev) {
           const box = row.querySelector('input[type="checkbox"]');
           const card = row.closest('.card[data-event-id]');
           if (card && !(box && box.checked)) {
-            const eventId = card.dataset.eventId;
-            if (getSoonDeadline(eventId, inp.value)) { clearSoonTimer(eventId, inp.value); } // 起動中→キャンセル
-            else { setSoonTimer(eventId, inp.value, Date.now() + SOON_MS); row._soonText = inp.value; }
-            updateSoonRowUI(row);
+            if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) completeSoonRow(card, row, card.dataset.eventId, row._soonId); // カウントダウン中→完了(チェック)
+            else startSoonTimer(card, row); // タイマー無し→カウントダウン開始(従来仕様・変更なし)
           }
         }
         return;
@@ -3307,7 +3342,8 @@ function renderCard(ev) {
     blocks.forEach(b => editorEl.appendChild(makeRow(b.check, b.checked, b.text)));
     if (!editorEl.querySelector('.memo-row')) editorEl.appendChild(makeRow(false, false, ''));
     syncMaster();
-    // すぐやるタイマーの初期反映 (期限が過ぎていれば完了、残っていればカウントダウン表示)
+    // すぐやるタイマー: 保存分を text と位置で行へ再バインドし初期反映 (期限超過は完了)
+    rebindSoonTimers(editorEl, ev.id);
     editorEl.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI);
   })();
 
