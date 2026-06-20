@@ -3238,7 +3238,10 @@ function renderCard(ev) {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         const nr = makeRow(row.dataset.check === '1', false, '');
-        editorEl.insertBefore(nr, row.nextSibling);
+        // カーソルが行頭(選択なし)かつ既存テキストありなら、現在行の「上」に空行を挿入し
+        // 現在行を1行下へずらす(カーソルは新しい空行へ)。それ以外は従来どおり「下」に新規行。
+        const atLineStart = inp.selectionStart === 0 && inp.selectionEnd === 0 && inp.value.length > 0;
+        editorEl.insertBefore(nr, atLineStart ? row : row.nextSibling);
         syncMaster();
         const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus(); autosize(ni);
       } else if (e.key === 'Backspace' && inp.value === '' && inp.selectionStart === 0) {
