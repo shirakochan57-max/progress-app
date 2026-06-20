@@ -3234,8 +3234,24 @@ function renderCard(ev) {
       updateSoonRowUI(row);
     });
     inp.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd+Enter → この行の「すぐやる」をトグル起動 (チェック行のみ、カーソルは同じ行に残す)
+      // Ctrl と Cmd の両方を受け付け、英字キーを使わないので配列(JIS/US)・OS非依存。
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing && e.keyCode !== 229) {
+        e.preventDefault();
+        if (row.dataset.check === '1') {
+          const box = row.querySelector('input[type="checkbox"]');
+          const card = row.closest('.card[data-event-id]');
+          if (card && !(box && box.checked)) {
+            const eventId = card.dataset.eventId;
+            if (getSoonDeadline(eventId, inp.value)) { clearSoonTimer(eventId, inp.value); } // 起動中→キャンセル
+            else { setSoonTimer(eventId, inp.value, Date.now() + SOON_MS); row._soonText = inp.value; }
+            updateSoonRowUI(row);
+          }
+        }
+        return;
+      }
       // Enter → 同じ種類の新しい行 / Shift+Enter は項目内で改行(1チェックボックスのまま)
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         const nr = makeRow(row.dataset.check === '1', false, '');
         // カーソルが行頭(選択なし)かつ既存テキストありなら、現在行の「上」に空行を挿入し
