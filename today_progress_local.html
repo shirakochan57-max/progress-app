@@ -642,20 +642,21 @@ html, body {
 .memo-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; position: relative; }
 .memo-row[data-depth="1"] { padding-left: 22px; }
 .memo-row[data-depth="2"] { padding-left: 44px; }
-.row-tools { position: absolute; top: 0; right: 6px; left: auto; z-index: 30; display: none; gap: 5px; flex-wrap: nowrap; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
+.row-tools { position: absolute; top: 100%; right: 6px; left: auto; z-index: 30; margin-top: 2px; display: none; gap: 5px; flex-wrap: nowrap; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
+.memo-row.tools-up .row-tools { top: auto; bottom: 100%; margin-top: 0; margin-bottom: 2px; }
 .memo-row:focus-within .row-tools { display: flex; }
 .row-tools .rt-btn { font-size: 12px; line-height: 1; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .row-tools .rt-btn:active { background: var(--border); }
 /* iPad/PC など広い画面では右端に行き過ぎるので、内容寄り(左基準)に配置 */
-/* 行内ツールバーは行の上(top:0)に重ねるため、画面幅別の位置調整は不要 */
+@media (min-width: 700px) { .row-tools { right: auto; left: 170px; } }
 .hide-done-btn { margin-left: auto; flex: 0 0 auto; font-size: 12px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .hide-done-btn.on { background: var(--ink); color: var(--inverted); }
 .memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
 .memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-row-input:focus { outline: none; border: none; }
 .memo-row-input.done { text-decoration: line-through; color: var(--text-muted, #999); }
-.soon-btn { flex: 0 0 auto; align-self: flex-start; width: 34px; min-width: 34px; height: 32px; margin-top: 2px; padding: 0; font-size: 10px; line-height: 1.1; text-align: center; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
-.soon-btn.running { font-size: 11px; font-variant-numeric: tabular-nums; }
+.soon-btn { flex: 0 0 auto; align-self: flex-start; width: 24px; min-width: 24px; height: 22px; margin-top: 3px; padding: 0; font-size: 7px; line-height: 1.1; text-align: center; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.soon-btn.running { font-size: 8px; font-variant-numeric: tabular-nums; }
 .soon-btn:active { background: var(--border); }
 .soon-timer { flex: 0 0 auto; align-self: flex-start; margin-top: 6px; font-size: 12px; color: var(--text-muted, #999); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -3462,7 +3463,13 @@ function renderCard(ev) {
       });
       row.appendChild(soonBtn);
     }
-    inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
+    inp.addEventListener('focus', () => {
+      focusedRow = row; autosize(inp);
+      // 行内ツールバーは既定で行の下に出すが、エディタ下端に近い行では上向きに反転して見切れを防ぐ
+      requestAnimationFrame(() => {
+        try { const rr = row.getBoundingClientRect(), er = editorEl.getBoundingClientRect(); row.classList.toggle('tools-up', (er.bottom - rr.bottom) < 48); } catch (e) {}
+      });
+    });
     inp.addEventListener('input', () => {
       autosize(inp);
       // すぐやるタイマーは行ごとID(row._soonId)で管理。編集に追従し、空にしたら解除(別タスク化)。
