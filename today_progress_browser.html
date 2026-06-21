@@ -3273,6 +3273,23 @@ function renderCard(ev) {
     ta.style.height = 'auto';
     ta.style.height = ta.scrollHeight + 'px';
   }
+  // 矢印キーで隣の行へ移動するためのヘルパー (非表示行はスキップ)
+  function memoRowSibling(r, dir) {
+    let n = dir === 'prev' ? r.previousElementSibling : r.nextElementSibling;
+    while (n && (!n.classList || !n.classList.contains('memo-row') || n.style.display === 'none')) {
+      n = dir === 'prev' ? n.previousElementSibling : n.nextElementSibling;
+    }
+    return n;
+  }
+  function memoGoto(targetRow, pos) {
+    const ti = targetRow.querySelector('.memo-row-input');
+    if (!ti) return;
+    focusedRow = targetRow;
+    ti.focus();
+    const p = Math.max(0, Math.min(pos, ti.value.length));
+    ti.setSelectionRange(p, p);
+    autosize(ti);
+  }
   function syncMaster() {
     const lines = [];
     editorEl.querySelectorAll('.memo-row').forEach(row => {
@@ -3451,6 +3468,28 @@ function renderCard(ev) {
       updateSoonRowUI(row);
     });
     inp.addEventListener('keydown', (e) => {
+      // 矢印キーで上下左右の別チェックボックス行へ自由に移動 (修飾キー・IME中は除く)
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+          && !e.shiftKey && !e.metaKey && !e.altKey && !e.ctrlKey && !e.isComposing && e.keyCode !== 229) {
+        const ss = inp.selectionStart, se = inp.selectionEnd;
+        if (ss === se) {
+          const before = inp.value.slice(0, ss), after = inp.value.slice(ss);
+          const col = ss - (before.lastIndexOf('\n') + 1);
+          if (e.key === 'ArrowUp' && before.indexOf('\n') === -1) {
+            const t = memoRowSibling(row, 'prev');
+            if (t) { e.preventDefault(); const tv = (t.querySelector('.memo-row-input') || {}).value || ''; const ls = tv.lastIndexOf('\n') + 1; memoGoto(t, ls + Math.min(col, tv.length - ls)); return; }
+          } else if (e.key === 'ArrowDown' && after.indexOf('\n') === -1) {
+            const t = memoRowSibling(row, 'next');
+            if (t) { e.preventDefault(); const tv = (t.querySelector('.memo-row-input') || {}).value || ''; const nl = tv.indexOf('\n'); const fl = nl === -1 ? tv.length : nl; memoGoto(t, Math.min(col, fl)); return; }
+          } else if (e.key === 'ArrowLeft' && ss === 0) {
+            const t = memoRowSibling(row, 'prev');
+            if (t) { e.preventDefault(); const tv = (t.querySelector('.memo-row-input') || {}).value || ''; memoGoto(t, tv.length); return; }
+          } else if (e.key === 'ArrowRight' && ss === inp.value.length) {
+            const t = memoRowSibling(row, 'next');
+            if (t) { e.preventDefault(); memoGoto(t, 0); return; }
+          }
+        }
+      }
       // Tab / Shift+Tab → 一段ネスト / 一段戻す (チェック行のみ)
       if (e.key === 'Tab' && row.dataset.check === '1') {
         e.preventDefault();
