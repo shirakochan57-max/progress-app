@@ -641,19 +641,20 @@ html, body {
 .memo-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; position: relative; }
 .memo-row[data-depth="1"] { padding-left: 22px; }
 .memo-row[data-depth="2"] { padding-left: 44px; }
-.row-tools { position: absolute; top: 100%; right: 6px; left: auto; z-index: 30; margin-top: 2px; display: none; gap: 5px; flex-wrap: nowrap; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
+.row-tools { position: absolute; top: 0; right: 6px; left: auto; z-index: 30; display: none; gap: 5px; flex-wrap: nowrap; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
 .memo-row:focus-within .row-tools { display: flex; }
 .row-tools .rt-btn { font-size: 12px; line-height: 1; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .row-tools .rt-btn:active { background: var(--border); }
 /* iPad/PC など広い画面では右端に行き過ぎるので、内容寄り(左基準)に配置 */
-@media (min-width: 700px) { .row-tools { right: auto; left: 170px; } }
+/* 行内ツールバーは行の上(top:0)に重ねるため、画面幅別の位置調整は不要 */
 .hide-done-btn { margin-left: auto; flex: 0 0 auto; font-size: 12px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .hide-done-btn.on { background: var(--ink); color: var(--inverted); }
 .memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
 .memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-row-input:focus { outline: none; border: none; }
 .memo-row-input.done { text-decoration: line-through; color: var(--text-muted, #999); }
-.soon-btn { flex: 0 0 auto; align-self: flex-start; margin-top: 4px; font-size: 11px; line-height: 1; padding: 3px 7px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.soon-btn { flex: 0 0 auto; align-self: flex-start; width: 34px; min-width: 34px; height: 32px; margin-top: 2px; padding: 0; font-size: 10px; line-height: 1.1; text-align: center; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.soon-btn.running { font-size: 11px; font-variant-numeric: tabular-nums; }
 .soon-btn:active { background: var(--border); }
 .soon-timer { flex: 0 0 auto; align-self: flex-start; margin-top: 6px; font-size: 12px; color: var(--text-muted, #999); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -2985,18 +2986,22 @@ function updateSoonRowUI(row) {
   const eventId = card.dataset.eventId;
   const box = row.querySelector('input[type="checkbox"]');
   const btn = row.querySelector('.soon-btn');
-  let chip = row.querySelector('.soon-timer');
+  if (!btn) return;
   const id = row._soonId || null;
   const entry = id ? getSoonEntry(eventId, id) : null;
-  if (box && box.checked) { if (id) { clearSoonEntry(eventId, id); row._soonId = null; } if (btn) btn.style.display = 'none'; if (chip) chip.remove(); return; }
+  if (box && box.checked) { if (id) { clearSoonEntry(eventId, id); row._soonId = null; } btn.style.display = 'none'; return; } // 完了済みは非表示
+  btn.style.display = '';
   if (entry) {
     const now = Date.now();
     if (now >= entry.deadline) { completeSoonRow(card, row, eventId, id); return; }
-    if (btn) btn.style.display = 'none';
-    if (!chip) { chip = document.createElement('span'); chip.className = 'soon-timer'; const inp0 = row.querySelector('.memo-row-input'); if (inp0) inp0.insertAdjacentElement('afterend', chip); else row.appendChild(chip); }
     const rem = entry.deadline - now, mm = Math.floor(rem / 60000), ss = Math.floor((rem % 60000) / 1000);
-    chip.textContent = mm + ':' + String(ss).padStart(2, '0');
-  } else { if (id) row._soonId = null; if (chip) chip.remove(); if (btn) btn.style.display = ''; }
+    btn.textContent = mm + ':' + String(ss).padStart(2, '0'); // 稼働中はボタン自体にカウントダウン
+    btn.classList.add('running');
+  } else {
+    if (id) row._soonId = null;
+    btn.innerHTML = 'すぐ<br>やる';
+    btn.classList.remove('running');
+  }
 }
 // 保存済みタイマーを、再表示された行へ text と位置(idx)で再バインド (再描画/リロードをまたいで継続)
 function rebindSoonTimers(editorEl, eventId) {
@@ -3409,6 +3414,19 @@ function renderCard(ev) {
         syncMaster(); updateSoonRowUI(row); applyHideDone();
       });
       row.appendChild(box);
+      // すぐやるボタン: チェックボックスのすぐ右隣に常時表示(やる気が出るように)。正方形・2行「すぐ/やる」、稼働中はカウントダウン表示。
+      const soonBtn = document.createElement('button');
+      soonBtn.type = 'button';
+      soonBtn.className = 'soon-btn';
+      soonBtn.innerHTML = 'すぐ<br>やる';
+      soonBtn.title = '2分後に自動でチェック (タップで開始/中止)';
+      soonBtn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const c2 = row.closest('.card[data-event-id]'); if (!c2) return;
+        if (row._soonId && getSoonEntry(c2.dataset.eventId, row._soonId)) cancelSoonTimer(c2, row);
+        else startSoonTimer(c2, row);
+      });
+      row.appendChild(soonBtn);
     }
     inp.addEventListener('focus', () => { focusedRow = row; autosize(inp); });
     inp.addEventListener('input', () => {
@@ -3492,20 +3510,6 @@ function renderCard(ev) {
     if (isCheck) {
       tools.appendChild(mkBtn('←', '一段戻す', doOutdent));
       tools.appendChild(mkBtn('→', '一段ネスト', doIndent));
-      const soonBtn = document.createElement('button');
-      soonBtn.type = 'button';
-      soonBtn.className = 'soon-btn rt-soon';
-      soonBtn.textContent = 'すぐやる';
-      soonBtn.title = '2分後に自動でチェック';
-      soonBtn.addEventListener('mousedown', (e) => e.preventDefault());
-      soonBtn.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const card = row.closest('.card[data-event-id]'); if (!card) return;
-        if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) cancelSoonTimer(card, row);
-        else startSoonTimer(card, row);
-        inp.focus();
-      });
-      tools.appendChild(soonBtn);
     }
     row.appendChild(tools);
     requestAnimationFrame(() => autosize(inp));
