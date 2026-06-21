@@ -651,13 +651,14 @@ html, body {
 @media (min-width: 700px) { .row-tools { right: auto; left: 170px; } }
 .hide-done-btn { margin-left: auto; flex: 0 0 auto; font-size: 12px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .hide-done-btn.on { background: var(--ink); color: var(--inverted); }
-.memo-row input[type="checkbox"] { width: 18px; height: 18px; margin: 6px 0 0; flex: 0 0 auto; cursor: pointer; }
+.memo-row input[type="checkbox"] { display: none; }
 .memo-row-input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; font: inherit; font-size: 15px; line-height: 1.4; padding: 5px 2px; margin: 0; color: var(--text); resize: none; overflow: hidden; min-height: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-row-input:focus { outline: none; border: none; }
 .memo-row-input.done { text-decoration: line-through; color: var(--text-muted, #999); }
 .soon-btn { flex: 0 0 auto; align-self: flex-start; width: 24px; min-width: 24px; height: 22px; margin-top: 3px; padding: 0; font-size: 7px; line-height: 1.1; text-align: center; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .soon-btn.running { font-size: 8px; font-variant-numeric: tabular-nums; background: #ffe6a7; border-color: #d9a441; color: #6b4e00; }
 .soon-btn:active { background: var(--border); }
+.soon-btn.checked { background: var(--ink); color: var(--inverted); border-color: var(--ink); font-size: 14px; }
 .soon-timer { flex: 0 0 auto; align-self: flex-start; margin-top: 6px; font-size: 12px; color: var(--text-muted, #999); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 textarea {
@@ -2997,11 +2998,9 @@ function cancelSoonTimer(card, row) {
 // 2分経過: チェックボックスを完了にし、カレンダーへ保存 (表示中カードの行を操作)
 function completeSoonRow(card, row, eventId, id) {
   const box = row.querySelector('input[type="checkbox"]');
-  if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); } // change→done付与+syncMaster
   if (id) clearSoonEntry(eventId, id);
   row._soonId = null;
-  const chip = row.querySelector('.soon-timer'); if (chip) chip.remove();
-  const btn = row.querySelector('.soon-btn'); if (btn) btn.style.display = 'none';
+  if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); } // change→done付与+cascade+sync+UI
   const master = card.querySelector('.memo-input');
   const ev = eventsCache.find(e => e.id === eventId);
   if (ev && master) {
@@ -3012,6 +3011,7 @@ function completeSoonRow(card, row, eventId, id) {
       applyDailyEcurleDescriptionToBars(ev.description, eventId);
     }
   }
+  updateSoonRowUI(row); // ボタンを☑表示に
 }
 // 1行のUI(ボタン/カウントダウン)を現在のタイマー状態に合わせる (row._soonId が真実)
 function updateSoonRowUI(row) {
@@ -3023,8 +3023,8 @@ function updateSoonRowUI(row) {
   if (!btn) return;
   const id = row._soonId || null;
   const entry = id ? getSoonEntry(eventId, id) : null;
-  if (box && box.checked) { if (id) { clearSoonEntry(eventId, id); row._soonId = null; } btn.style.display = 'none'; return; } // 完了済みは非表示
-  btn.style.display = '';
+  if (box && box.checked) { if (id) { clearSoonEntry(eventId, id); row._soonId = null; } btn.innerHTML = '☑'; btn.classList.remove('running'); btn.classList.add('checked'); return; } // 完了=☑表示
+  btn.style.display = ''; btn.classList.remove('checked');
   if (entry) {
     const now = Date.now();
     if (now >= entry.deadline) { completeSoonRow(card, row, eventId, id); return; }
@@ -3475,8 +3475,10 @@ function renderCard(ev) {
       soonBtn.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
         const c2 = row.closest('.card[data-event-id]'); if (!c2) return;
-        if (row._soonId && getSoonEntry(c2.dataset.eventId, row._soonId)) cancelSoonTimer(c2, row);
-        else startSoonTimer(c2, row);
+        const eid = c2.dataset.eventId;
+        if (box.checked) { box.checked = false; box.dispatchEvent(new Event('change')); } // ☑ → 解除
+        else if (row._soonId && getSoonEntry(eid, row._soonId)) completeSoonRow(c2, row, eid, row._soonId); // カウント中 → ☑
+        else startSoonTimer(c2, row); // すぐやる → カウント開始
       });
       row.appendChild(soonBtn);
     }
@@ -3509,10 +3511,10 @@ function renderCard(ev) {
         if (ss === se) {
           const before = inp.value.slice(0, ss), after = inp.value.slice(ss);
           const col = ss - (before.lastIndexOf('\n') + 1);
-          if (e.key === 'ArrowUp' && before.indexOf('\n') === -1) {
+          if (e.key === 'ArrowUp') {
             const t = memoRowSibling(row, 'prev');
             if (t) { e.preventDefault(); const tv = (t.querySelector('.memo-row-input') || {}).value || ''; const ls = tv.lastIndexOf('\n') + 1; memoGoto(t, ls + Math.min(col, tv.length - ls)); return; }
-          } else if (e.key === 'ArrowDown' && after.indexOf('\n') === -1) {
+          } else if (e.key === 'ArrowDown') {
             const t = memoRowSibling(row, 'next');
             if (t) { e.preventDefault(); const tv = (t.querySelector('.memo-row-input') || {}).value || ''; const nl = tv.indexOf('\n'); const fl = nl === -1 ? tv.length : nl; memoGoto(t, Math.min(col, fl)); return; }
           } else if (e.key === 'ArrowLeft' && ss === 0) {
