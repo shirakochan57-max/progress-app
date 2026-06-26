@@ -2986,12 +2986,12 @@ function applyCardOrder() {
   reorderSection(doneSec, data && data.done);
 }
 
-// ===== すぐやる(2分)タイマー: チェックボックス行を2分後に自動チェック =====
+// ===== すぐやる タイマー: チェックボックス行で経過時間をカウントアップ =====
 // 行の同一性は「行ごとの一意ID(row._soonId)」で管理する(テキスト一致では区別しない=同一タイトルでも独立)。
-// 期限等は localStorage(soon_timers_v1) に { [eventId]: { [id]: {deadline, idx, text} } } で保存し、
+// 開始時刻等は localStorage(soon_timers_v1) に { [eventId]: { [id]: {startedAt, idx, text} } } で保存し、
 // カード/アプリを閉じても継続。再表示時に text と位置(idx)で行へ再バインドする。
-// カウントダウン文字は表示専用(カレンダーのメモ本文には保存しない)。完了=チェックのみ(通知なし)。
-const SOON_MS = 2 * 60 * 1000;
+// 表示は 00:00 から増え続け、自動完了はしない。完了は「すぐやるボタン or Ctrl/Cmd+Enter」を押した時だけ(通知なし)。
+const SOON_MS = 2 * 60 * 1000; // 旧deadline形式(カウントダウン)データの後方互換にのみ使用
 const SOON_TIMERS_KEY = 'soon_timers_v1';
 function loadSoonTimers() { try { return JSON.parse(localStorage.getItem(SOON_TIMERS_KEY) || '{}'); } catch (e) { return {}; } }
 function saveSoonTimers(o) { try { localStorage.setItem(SOON_TIMERS_KEY, JSON.stringify(o)); } catch (e) {} }
@@ -3002,13 +3002,13 @@ function clearSoonEntry(eventId, id) { const o = loadSoonTimers(); if (o[eventId
 function migrateSoonTimers(tempId, realId) { const o = loadSoonTimers(); if (o[tempId]) { o[realId] = { ...(o[realId] || {}), ...o[tempId] }; delete o[tempId]; saveSoonTimers(o); } }
 // 行のチェック行内インデックス(同一エディタ内)
 function soonRowIdx(row) { const ed = row.closest('.memo-editor'); if (!ed) return 0; return [...ed.querySelectorAll('.memo-row[data-check="1"]')].indexOf(row); }
-// この行で「すぐやる」を開始(2分タイマー)。空行では開始しない。
+// この行で「すぐやる」を開始(経過時間のカウントアップ)。空行では開始しない。
 function startSoonTimer(card, row) {
   const inp = row.querySelector('.memo-row-input');
   if (!inp || !inp.value.length) return;
   const eventId = card.dataset.eventId;
   const id = genSoonId();
-  setSoonEntry(eventId, id, { deadline: Date.now() + SOON_MS, idx: soonRowIdx(row), text: inp.value });
+  setSoonEntry(eventId, id, { startedAt: Date.now(), idx: soonRowIdx(row), text: inp.value });
   row._soonId = id;
   updateSoonRowUI(row);
 }
@@ -3016,7 +3016,7 @@ function cancelSoonTimer(card, row) {
   if (row._soonId) { clearSoonEntry(card.dataset.eventId, row._soonId); row._soonId = null; }
   updateSoonRowUI(row);
 }
-// 2分経過: チェックボックスを完了にし、カレンダーへ保存 (表示中カードの行を操作)
+// 完了: チェックボックスをONにし、カレンダーへ保存 (表示中カードの行を操作)
 function completeSoonRow(card, row, eventId, id) {
   const box = row.querySelector('input[type="checkbox"]');
   if (id) clearSoonEntry(eventId, id);
@@ -3034,7 +3034,7 @@ function completeSoonRow(card, row, eventId, id) {
   }
   updateSoonRowUI(row); // ボタンを☑表示に
 }
-// 1行のUI(ボタン/カウントダウン)を現在のタイマー状態に合わせる (row._soonId が真実)
+// 1行のUI(ボタン/カウントアップ)を現在のタイマー状態に合わせる (row._soonId が真実)
 function updateSoonRowUI(row) {
   if (!row || row.dataset.check !== '1') return;
   const card = row.closest('.card[data-event-id]'); if (!card) return;
@@ -3047,10 +3047,10 @@ function updateSoonRowUI(row) {
   if (box && box.checked) { if (id) { clearSoonEntry(eventId, id); row._soonId = null; } btn.innerHTML = '☑'; btn.classList.remove('running'); btn.classList.add('checked'); return; } // 完了=☑表示
   btn.style.display = ''; btn.classList.remove('checked');
   if (entry) {
-    const now = Date.now();
-    if (now >= entry.deadline) { completeSoonRow(card, row, eventId, id); return; }
-    const rem = entry.deadline - now, mm = Math.floor(rem / 60000), ss = Math.floor((rem % 60000) / 1000);
-    btn.textContent = mm + ':' + String(ss).padStart(2, '0'); // 稼働中はボタン自体にカウントダウン
+    // カウントアップ: 開始からの経過秒を表示し、止まらない・自動完了しない(完了はボタン/Ctrl+Cmd+Enterのみ)。
+    const startedAt = entry.startedAt || (entry.deadline ? entry.deadline - SOON_MS : Date.now()); // 旧deadline形式の互換
+    const el = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    btn.textContent = fmtMMSS(el); // 稼働中はボタン自体にカウントアップ(1時間超で H:MM:SS)
     btn.classList.add('running');
   } else {
     if (id) row._soonId = null;
@@ -3080,7 +3080,7 @@ function rebindSoonTimers(editorEl, eventId) {
   if (!Object.keys(m).length) delete o[eventId];
   if (changed || !o[eventId]) saveSoonTimers(o);
 }
-// 全表示行を毎秒更新 (カウントダウン進行 + 期限到来で自動チェック)
+// 全表示行を毎秒更新 (カウントアップ進行。自動完了はしない)
 setInterval(() => { document.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI); }, 1000);
 
 // ① 時間ベースの自動保存(未保存フラグ方式): 入力で card._dirty を立て、5分ごとに「フラグが立った展開中カードだけ」保存。
@@ -3501,12 +3501,12 @@ function renderCard(ev) {
         scheduleAutoSave(); // ① チェック操作で自動保存
       });
       row.appendChild(box);
-      // すぐやるボタン: チェックボックスのすぐ右隣に常時表示(やる気が出るように)。正方形・2行「すぐ/やる」、稼働中はカウントダウン表示。
+      // すぐやるボタン: チェックボックスのすぐ右隣に常時表示(やる気が出るように)。正方形・2行「すぐ/やる」、稼働中はカウントアップ表示。
       const soonBtn = document.createElement('button');
       soonBtn.type = 'button';
       soonBtn.className = 'soon-btn';
       soonBtn.innerHTML = 'すぐ<br>やる';
-      soonBtn.title = '2分後に自動でチェック (タップで開始/中止)';
+      soonBtn.title = 'タップで計測開始 → 経過時間をカウントアップ。もう一度タップ(またはCtrl/Cmd+Enter)で完了';
       soonBtn.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
         const c2 = row.closest('.card[data-event-id]'); if (!c2) return;
@@ -3577,8 +3577,8 @@ function renderCard(ev) {
           const box = row.querySelector('input[type="checkbox"]');
           const card = row.closest('.card[data-event-id]');
           if (card && !(box && box.checked)) {
-            if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) completeSoonRow(card, row, card.dataset.eventId, row._soonId); // カウントダウン中→完了(チェック)
-            else startSoonTimer(card, row); // タイマー無し→カウントダウン開始(従来仕様・変更なし)
+            if (row._soonId && getSoonEntry(card.dataset.eventId, row._soonId)) completeSoonRow(card, row, card.dataset.eventId, row._soonId); // カウントアップ中→完了(チェック)
+            else startSoonTimer(card, row); // タイマー無し→カウントアップ開始
           }
         }
         return;
@@ -3673,7 +3673,7 @@ function renderCard(ev) {
     blocks.forEach(b => editorEl.appendChild(makeRow(b.check, b.checked, b.text, b.depth)));
     if (!editorEl.querySelector('.memo-row')) editorEl.appendChild(makeRow(false, false, '', 0));
     syncMaster();
-    // すぐやるタイマー: 保存分を text と位置で行へ再バインドし初期反映 (期限超過は完了)
+    // すぐやるタイマー: 保存分を text と位置で行へ再バインドし初期反映 (カウントアップ継続)
     rebindSoonTimers(editorEl, ev.id);
     editorEl.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI);
     applyHideDone();
@@ -5918,9 +5918,12 @@ const SHIBA_WALK_TIMER_KEY = 'shiba_walk_timer_v1';
 function loadWalkTimer() { try { return JSON.parse(localStorage.getItem(SHIBA_WALK_TIMER_KEY) || 'null'); } catch (e) { return null; } }
 function saveWalkTimer(o) { try { localStorage.setItem(SHIBA_WALK_TIMER_KEY, JSON.stringify(o)); } catch (e) {} }
 function clearWalkTimer() { try { localStorage.removeItem(SHIBA_WALK_TIMER_KEY); } catch (e) {} }
+// 経過時間の表示。1時間を超えたら時へ繰り上げて H:MM:SS、1時間未満は MM:SS。
 function fmtMMSS(totalSec) {
   totalSec = Math.max(0, Math.floor(totalSec));
-  const m = Math.floor(totalSec / 60), ss = totalSec % 60;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60), ss = totalSec % 60;
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
   return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
 }
 // タイマーの「土台」= 表示中の日の散歩合計(分)。これが唯一の真実で、記録・メーター・タイマー表示が連動する。
