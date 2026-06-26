@@ -509,6 +509,7 @@ html, body {
   padding: 6px 9px;
   font-size: 12px;
 }
+.card.expanded .card-head .pill-btn.save-pill,
 .card.expanded .card-head .pill-btn.delete-pill,
 .card.expanded .card-head .pill-btn.collapse-pill {
   min-width: 32px;
@@ -565,8 +566,8 @@ html, body {
   cursor: pointer;
 }
 .pill-btn:active { background: var(--ink); color: var(--inverted); }
-.pill-btn.save-pill   { background: var(--ink); color: var(--inverted); }
-.pill-btn.save-pill:active { background: transparent; color: var(--text); }
+.pill-btn.save-pill   { background: transparent; color: var(--text); min-width: 38px; padding: 6px 10px; font-size: 15px; }
+.pill-btn.save-pill:active { background: var(--ink); color: var(--inverted); }
 .pill-btn.done-pill   { background: transparent; color: var(--text); border-style: solid; }
 .pill-btn.undo-pill   {
   background: var(--surface-2); color: var(--text);
@@ -1798,6 +1799,7 @@ body.shiba-sleeping .shiba-emoji::after {
   font-size: 11px;
   min-height: 28px;
 }
+.day-column .card.expanded .card-head .pill-btn.save-pill,
 .day-column .card.expanded .card-head .pill-btn.delete-pill,
 .day-column .card.expanded .card-head .pill-btn.collapse-pill {
   min-width: 28px;
@@ -3029,6 +3031,17 @@ function rebindSoonTimers(editorEl, eventId) {
 // 全表示行を毎秒更新 (カウントダウン進行 + 期限到来で自動チェック)
 setInterval(() => { document.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI); }, 1000);
 
+// ① 時間ベースの自動保存(未保存フラグ方式): 入力で card._dirty を立て、5分ごとに「フラグが立った展開中カードだけ」保存。
+// autoSaveCardEl は変更がある時だけ保存するので、未編集ならGAS通信は発生しない(空振りでもフラグは降ろす)。
+const DIRTY_AUTOSAVE_MS = 5 * 60 * 1000;
+setInterval(() => {
+  document.querySelectorAll('.card.expanded[data-event-id]').forEach(card => {
+    if (!card._dirty) return;
+    card._dirty = false;
+    try { autoSaveCardEl(card); } catch (e) {}
+  });
+}, DIRTY_AUTOSAVE_MS);
+
 // ===== 完了(☑)行の「5分後に非表示」用 完了時刻記録 =====
 const DONE_HIDE_DELAY = 5 * 60 * 1000;
 const DONE_AT_KEY = 'done_at_v1';
@@ -3071,6 +3084,7 @@ function renderCard(ev) {
   titleInput.addEventListener('input', () => {
     autosizeTitle();
     titleDisplay.textContent = titleInput.value;
+    card._dirty = true; // ① 未保存フラグ(5分自動保存用)
   });
   requestAnimationFrame(autosizeTitle);
   // ※ titleInput と titleDisplay の append は head の後に行う (float の起点になるよう)
@@ -3086,7 +3100,8 @@ function renderCard(ev) {
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'pill-btn save-pill';
-  saveBtn.textContent = '保存';
+  saveBtn.textContent = '🔼';
+  saveBtn.title = '保存して閉じる';
   saveBtn.addEventListener('click', e => { e.stopPropagation(); saveCardEvent(card, ev, saveBtn); });
   head.appendChild(saveBtn);
 
@@ -3166,17 +3181,7 @@ function renderCard(ev) {
   delBtn.addEventListener('click', e => { e.stopPropagation(); deleteCardEvent(ev); });
   head.appendChild(delBtn);
 
-  const collapseBtn = document.createElement('button');
-  collapseBtn.className = 'pill-btn collapse-pill';
-  collapseBtn.textContent = '▲';
-  collapseBtn.title = '閉じる';
-  collapseBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    autoSaveCardEl(card);
-    card.classList.remove('expanded');
-    resizeTextareaOf(card);
-  });
-  head.appendChild(collapseBtn);
+  // ▲(閉じる)ボタンは廃止。保存ボタン(🔼)が保存+たたみを兼ねる。時刻ピル/カード外タップでも自動保存して閉じる。
 
   card.appendChild(head);
   // head の後に title を append: 折りたたみ多日表示で head を float left → title が回り込む
@@ -3220,6 +3225,10 @@ function renderCard(ev) {
     sep.style.display = v ? 'none' : '';
   }
   allDayCb.addEventListener('change', applyAllDay);
+  // ① 時刻/終日の変更も未保存フラグを立てる(5分自動保存用)
+  allDayCb.addEventListener('change', () => { card._dirty = true; });
+  startInput.addEventListener('change', () => { card._dirty = true; });
+  endInput.addEventListener('change', () => { card._dirty = true; });
   applyAllDay();
   // 完了(☑)の行を隠す トグル (終日の右)。カード内のチェック済み行を非表示にして整理。
   let hideDone = false;
@@ -3307,6 +3316,12 @@ function renderCard(ev) {
       for (let i = 1; i < parts.length; i++) lines.push('\t' + parts[i]);
     });
     memo.value = lines.join('\n');
+  }
+  // ① 操作系(チェック/すぐやる/Enterで行追加)の自動保存。デバウンスし、変更がある時だけ静かにカレンダー保存(トースト/再描画なし)。
+  let _autoSaveTimer = null;
+  function scheduleAutoSave() {
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => { _autoSaveTimer = null; try { autoSaveCardEl(card); } catch (e) {} }, 600);
   }
   // 完了(☑)行の表示/非表示。親/子/孫いずれも、それ単独で完了→5分経過で個別に非表示。
   function applyHideDone() {
@@ -3430,6 +3445,7 @@ function renderCard(ev) {
         if (c) { const eid = c.dataset.eventId; if (box.checked) { if (!getDoneAt(eid, inp.value)) setDoneAt(eid, inp.value, Date.now()); } else { clearDoneAt(eid, inp.value); } }
         cascadeFrom(row); // 親子・孫の完了連動
         syncMaster(); updateSoonRowUI(row); applyHideDone();
+        scheduleAutoSave(); // ① チェック操作で自動保存
       });
       row.appendChild(box);
       // すぐやるボタン: チェックボックスのすぐ右隣に常時表示(やる気が出るように)。正方形・2行「すぐ/やる」、稼働中はカウントダウン表示。
@@ -3445,6 +3461,7 @@ function renderCard(ev) {
         if (box.checked) { box.checked = false; box.dispatchEvent(new Event('change')); } // ☑ → 解除
         else if (row._soonId && getSoonEntry(eid, row._soonId)) completeSoonRow(c2, row, eid, row._soonId); // カウント中 → ☑
         else startSoonTimer(c2, row); // すぐやる → カウント開始
+        scheduleAutoSave(); // ① すぐやる操作で自動保存(入力中テキストも確定)
       });
       row.appendChild(soonBtn);
     }
@@ -3457,6 +3474,7 @@ function renderCard(ev) {
     });
     inp.addEventListener('input', () => {
       autosize(inp);
+      card._dirty = true; // ① 未保存フラグ(5分自動保存用)。card は renderCard スコープ(外側)を参照。
       // すぐやるタイマーは行ごとID(row._soonId)で管理。編集に追従し、空にしたら解除(別タスク化)。
       if (row.dataset.check === '1' && row._soonId) {
         const card = row.closest('.card[data-event-id]');
@@ -3533,6 +3551,7 @@ function renderCard(ev) {
           syncMaster();
           const ni = nr.querySelector('.memo-row-input'); focusedRow = nr; ni.focus(); ni.setSelectionRange(0, 0); autosize(ni);
         }
+        scheduleAutoSave(); // ① Enterで新規チェックボックス作成/分割した際に自動保存
       } else if (e.key === 'Backspace' && inp.value === '' && inp.selectionStart === 0) {
         // 空行で Backspace → 行を削除 (最後の1行は残す)
         if (editorEl.querySelectorAll('.memo-row').length <= 1) return;
@@ -4005,8 +4024,9 @@ function autoSaveCardEl(card) {
       const curE = formatTime(getEndISO(ev)) || '';
       timeChanged = (startInput.value !== curS) || (endInput.value !== curE);
     }
-    if (!titleChanged && !descChanged && !allDayChanged && !timeChanged) return; // 変更なし→何もしない
+    if (!titleChanged && !descChanged && !allDayChanged && !timeChanged) { card._dirty = false; return; } // 変更なし→何もしない(フラグは降ろす)
     saveCardEvent(card, ev, null, { auto: true });
+    card._dirty = false; // ① 保存したのでフラグを降ろす
   } catch (e) { console.error('autoSaveCardEl error', e); }
 }
 
@@ -4051,6 +4071,7 @@ async function saveCardEvent(card, ev, btn, opts) {
   card.classList.toggle('allday', nowAllDay);
 
   persistCache();
+  card._dirty = false; // ① 保存したので未保存フラグを降ろす
   if (!opts.auto) {
     card.classList.remove('expanded');
     renderEvents();
