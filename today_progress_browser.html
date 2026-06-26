@@ -2978,10 +2978,12 @@ function startSoonTimer(card, row) {
   setSoonEntry(eventId, id, { startedAt: Date.now(), idx: soonRowIdx(row), text: inp.value });
   row._soonId = id;
   updateSoonRowUI(row);
+  bumpShibaForSoonSync(); // 他デバイスへ開始を伝播
 }
 function cancelSoonTimer(card, row) {
   if (row._soonId) { clearSoonEntry(card.dataset.eventId, row._soonId); row._soonId = null; }
   updateSoonRowUI(row);
+  bumpShibaForSoonSync(); // 他デバイスへ解除を伝播
 }
 // 完了: チェックボックスをONにし、カレンダーへ保存 (表示中カードの行を操作)
 function completeSoonRow(card, row, eventId, id) {
@@ -3000,6 +3002,7 @@ function completeSoonRow(card, row, eventId, id) {
     }
   }
   updateSoonRowUI(row); // ボタンを☑表示に
+  bumpShibaForSoonSync(); // 他デバイスへ完了(タイマー解除)を伝播
 }
 // 1行のUI(ボタン/カウントアップ)を現在のタイマー状態に合わせる (row._soonId が真実)
 function updateSoonRowUI(row) {
@@ -3046,6 +3049,27 @@ function rebindSoonTimers(editorEl, eventId) {
   });
   if (!Object.keys(m).length) delete o[eventId];
   if (changed || !o[eventId]) saveSoonTimers(o);
+}
+// === すぐやるタイマーのデバイス間同期 (「豆柴データ」の同期JSONに相乗り) ===
+// 開始/停止/完了の時に豆柴の modifiedAt を更新して push。他デバイスは pull 時に soonTimers を取り込み、
+// startedAt は絶対時刻なので各デバイスで同じ経過時間を表示できる(反映はフォーカス時/約2分ごと)。
+function bumpShibaForSoonSync() {
+  try {
+    const s = loadShiba();
+    s.modifiedAt = Date.now();
+    saveShiba(s);
+    if (typeof shibaPushDebounced === 'function') shibaPushDebounced();
+  } catch (e) {}
+}
+// 取り込んだ soonTimers を、表示中カードの行へ再バインドして表示を更新する
+function rebindAllVisibleSoon() {
+  try {
+    document.querySelectorAll('.card.expanded[data-event-id] .memo-editor').forEach(ed => {
+      const card = ed.closest('.card[data-event-id]');
+      if (card) rebindSoonTimers(ed, card.dataset.eventId);
+    });
+    document.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI);
+  } catch (e) {}
 }
 // 全表示行を毎秒更新 (カウントアップ進行。自動完了はしない)
 setInterval(() => { document.querySelectorAll('.memo-row[data-check="1"]').forEach(updateSoonRowUI); }, 1000);
@@ -3499,7 +3523,7 @@ function renderCard(ev) {
         const card = row.closest('.card[data-event-id]');
         if (card) {
           const eventId = card.dataset.eventId;
-          if (inp.value.length === 0) { clearSoonEntry(eventId, row._soonId); row._soonId = null; }
+          if (inp.value.length === 0) { clearSoonEntry(eventId, row._soonId); row._soonId = null; bumpShibaForSoonSync(); }
           else { const en = getSoonEntry(eventId, row._soonId); if (en) { en.text = inp.value; en.idx = soonRowIdx(row); setSoonEntry(eventId, row._soonId, en); } }
         }
       }
@@ -6917,7 +6941,9 @@ async function shibaPushRemote(state) {
   if (!getGasUrl() || _shibaPushing) return;
   _shibaPushing = true;
   try {
-    const json = JSON.stringify(state);
+    // すぐやるタイマー(soon_timers_v1)も同期JSONに相乗りさせる(デバイス間でカウントアップを共有)
+    const payload = Object.assign({}, state, { soonTimers: loadSoonTimers() });
+    const json = JSON.stringify(payload);
     if (_shibaSyncEventId) {
       await gasCall('update', { eventId: _shibaSyncEventId, description: json });
     } else {
@@ -6967,7 +6993,15 @@ function shibaApplyIfNewer(remote) {
     const rescued = (merged.level > (remote.level || 0)) ||
       Object.keys(merged.leveledDays).some(d => leveledDayCount(merged.leveledDays[d]) > leveledDayCount(remoteDays[d]));
     if (rescued) merged.modifiedAt = Date.now();
+    // すぐやるタイマーは shiba 状態とは別キー(soon_timers_v1)に保存する。豆柴JSONからは取り出して反映し、
+    // SHIBA_KEY 側には残さない(二重持ち防止)。remote が新しい=このタイマー集合を採用(last-writer-wins)。
+    const incomingSoon = remote.soonTimers;
+    delete merged.soonTimers;
     try { localStorage.setItem(SHIBA_KEY, JSON.stringify(merged)); } catch (e) {}
+    if (incomingSoon && typeof incomingSoon === 'object') {
+      saveSoonTimers(incomingSoon);
+      rebindAllVisibleSoon(); // 表示中の行へ即反映 (他デバイスで開始したカウントアップが続く)
+    }
     _shibaLastPushedModifiedAt = rescued ? 0 : (remote.modifiedAt || 0);
     setShibaEmoji('shibaCard', merged.hasPoop ? '💩' : '🐕');
     applyShibaState(merged);
