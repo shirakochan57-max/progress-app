@@ -5923,6 +5923,14 @@ function fmtMMSS(totalSec) {
   const m = Math.floor(totalSec / 60), ss = totalSec % 60;
   return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
 }
+// タイマーの「土台」= 表示中の日の散歩合計(分)。これが唯一の真実で、記録・メーター・タイマー表示が連動する。
+// (毎日エクル記録を編集すると t.walk が変わり、メーターもこの値も同じ値に揃う)
+function currentWalkMinutes() {
+  const s = loadShiba();
+  const t = s.dailyTotals;
+  if (t && t.date === ecurleDay()) return t.walk || 0;
+  return 0;
+}
 // 散歩メーターへ「分」を加算 (停止時)。記録/同期/レベル判定も実行。
 function addWalkTimeMinutes(minutes) {
   if (!minutes || minutes <= 0) return;
@@ -5956,25 +5964,22 @@ function stopWalkTimer() {
 function toggleWalkTimer() {
   if (loadWalkTimer()) stopWalkTimer(); else startWalkTimer();
 }
-// 実行状態に合わせてボタン/経過表示を更新 (毎秒呼ばれる)
+// 実行状態に合わせてボタン/累計表示を更新 (毎秒呼ばれる)。
+// 表示 = その日の散歩合計(t.walk) + 実行中なら計測中の経過。停止しても0に戻らず合計を表示し、
+// 再開時はその合計の上に積み増す。記録編集で t.walk が変わると表示も即追従する。
 function updateWalkTimerUI() {
   const wrap = document.getElementById('shibaWalkTimer');
   const btn = document.getElementById('shibaWalkBtn');
   const el = document.getElementById('shibaWalkElapsed');
   if (!btn || !el) return;
+  const baseSec = Math.round(currentWalkMinutes() * 60); // その日の散歩合計(秒)
   const o = loadWalkTimer();
-  if (o && o.startedAt) {
-    const elapsedSec = Math.floor((Date.now() - o.startedAt) / 1000);
-    btn.textContent = '⏹ 停止';
-    btn.classList.add('running');
-    if (wrap) wrap.classList.add('running');
-    el.textContent = fmtMMSS(elapsedSec);
-  } else {
-    btn.textContent = '▶ 散歩';
-    btn.classList.remove('running');
-    if (wrap) wrap.classList.remove('running');
-    el.textContent = '00:00';
-  }
+  const running = !!(o && o.startedAt);
+  const liveSec = running ? Math.floor((Date.now() - o.startedAt) / 1000) : 0;
+  btn.textContent = running ? '⏹ 停止' : '▶ 散歩';
+  btn.classList.toggle('running', running);
+  if (wrap) wrap.classList.toggle('running', running);
+  el.textContent = fmtMMSS(baseSec + liveSec); // 合計(＋計測中) を表示
 }
 // 毎秒、散歩タイマー表示を更新 (パネルを開いている間だけ実描画コスト)
 setInterval(updateWalkTimerUI, 1000);
