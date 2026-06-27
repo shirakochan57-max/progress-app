@@ -4068,6 +4068,9 @@ function autoSaveCardEl(card) {
     if (!card.classList.contains('expanded')) return; // 展開(編集)中のみ対象
     const ev = eventsCache.find(e => e.id === card.dataset.eventId);
     if (!ev) return;
+    // 「毎日エクル」は値の管理を散歩タイマー/エクル入力(dailyTotals)が担う。カードの古いメモを自動保存で
+    // 逆流させると、タイマーで増えた散歩時間を巻き戻してしまうため、自動保存の対象から除外する。
+    if (typeof isDailyEcurleTitle === 'function' && isDailyEcurleTitle(ev.summary)) { card._dirty = false; return; }
     const titleInput = card.querySelector('[data-field="title"]');
     const memo = card.querySelector('[data-field="description"]');
     if (!titleInput || !memo) return; // 編集可能カードでない
@@ -4105,6 +4108,17 @@ async function saveCardEvent(card, ev, btn, opts) {
   // 折りたたみ表示用 div も同期
   const titleDisplay = card.querySelector('.title-display');
   if (titleDisplay) titleDisplay.textContent = _basePlain;
+  // 「毎日エクル」を保存する時は、カードのメモ(古い可能性あり)で散歩等を巻き戻さないよう、
+  // 現在の dailyTotals と「大きい方」でマージし、整合した記述に作り直してから保存する(同日内は減らさない)。
+  if (typeof isDailyEcurleTitle === 'function' && isDailyEcurleTitle(newTitle) && memo) {
+    try {
+      const parsedMemo = parseDailyEcurleDescription(memo.value || '');
+      const sCur = loadShiba();
+      const curT = (sCur.dailyTotals && sCur.dailyTotals.date === ecurleDay()) ? sCur.dailyTotals : null;
+      mergeDailyCountersMax(parsedMemo, curT);
+      memo.value = buildDailyEcurleDescription(parsedMemo);
+    } catch (e) {}
+  }
   const wasAllDay = isAllDay(ev);
   const nowAllDay = allDayCb.checked;
   const dateKey = (card.dataset.date || fmtDate(currentDate)).split('T')[0];
