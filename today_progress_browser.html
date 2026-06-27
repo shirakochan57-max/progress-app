@@ -2288,8 +2288,8 @@ async function gasCall(action, payload) {
       if (ev) {
         let s = null;
         try { s = loadShiba(); } catch (e) {}
-        if (!s || !s._dailyDirty) {
-          applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
+        if (!dailyOverwriteBlocked(s)) {
+          applyDailyEcurleFromPull(ev.description || '', ev.id); // 背景取り込み=減らさない
         }
       }
     }
@@ -2790,10 +2790,10 @@ function applyDailyEcurleFromEventsCache() {
   if (!Array.isArray(eventsCache)) return;
   let s = null;
   try { s = loadShiba(); } catch (e) {}
-  if (s && s._dailyDirty) return;  // 未送信のローカル入力があるなら触らない
+  if (dailyOverwriteBlocked(s)) return;  // 未送信 or 直近ローカル書き込み中は触らない(巻き戻し防止)
   const ev = eventsCache.find(e => isDailyEcurleTitle(e && e.summary));
   if (ev) {
-    applyDailyEcurleDescriptionToBars(ev.description || '', ev.id);
+    applyDailyEcurleFromPull(ev.description || '', ev.id); // 背景取り込み=減らさない
     return;
   }
   // event が無い場合: 「表示日が変わって前日の値が残っている時」だけ 0 にリセットする。
@@ -5282,7 +5282,8 @@ function updateShibaMiniBars(s) {
     const papaPct = ecurleCompletion(s) * 100;  // ⭐完了メーター = 5メーターの平均
     const bars = {
       food:  { v: s.food  || 0, max: ECURLE_MAX.food },
-      walk:  { v: s.walk  || 0, max: ECURLE_MAX.walk },
+      walk:  { v: Math.floor(s.walk || 0), max: ECURLE_MAX.walk }, // 散歩は1分刻み(切り捨て)で反映
+
       poop:  { v: s.poop  || 0, max: ECURLE_MAX.poop },
       brush: { v: s.brush || 0, max: ECURLE_MAX.brush },
       tooth: { v: s.tooth || 0, max: ECURLE_MAX.tooth },
@@ -5519,7 +5520,7 @@ function applyTaskToEcurle(s, title) {
   if (r.brush > 0) { s.brush = Math.min(ECURLE_MAX.brush, Math.round(((s.brush || 0) + r.brush) * 10) / 10); t.brush = Math.round(((t.brush || 0) + r.brush) * 10) / 10; changed = true; }
   if (r.tooth > 0) { s.tooth = Math.min(ECURLE_MAX.tooth, Math.round(((s.tooth || 0) + r.tooth) * 10) / 10); t.tooth = Math.round(((t.tooth || 0) + r.tooth) * 10) / 10; changed = true; }
   s.totalDone = (s.totalDone || 0) + 1;
-  if (changed) s._dailyDirty = true;
+  if (changed) { s._dailyDirty = true; markDailyLocalWrite(); }
   maybeLevelUp(s);  // 5メーター全部最大なら レベル+1 (その日1回)
 }
 // === 毎日エクル: Googleカレンダー記録 ===
@@ -5667,7 +5668,9 @@ function scheduleDailyEcurleSync(delay) {
   if (_dailyEcurleSyncTimer) clearTimeout(_dailyEcurleSyncTimer);
   _dailyEcurleSyncTimer = setTimeout(syncDailyEcurleToCalendar, delay != null ? delay : 400);
 }
-// 「毎日エクル」の description テキストを即座にメーターへ反映 (GAS往復不要)
+// 「毎日エクル」の description テキストを即座にメーターへ反映 (GAS往復不要)。
+// これは「ユーザーがその場で編集/完了した」直接反映パス。指定値をそのまま採用する(減らす編集も可)。
+// ← 直近ローカル書き込みとして記録し、直後の背景pullが古い記録で巻き戻すのを防ぐ。
 function applyDailyEcurleDescriptionToBars(desc, eventIdHint) {
   const parsed = parseDailyEcurleDescription(desc);
   const day = ecurleDay();
@@ -5677,6 +5680,35 @@ function applyDailyEcurleDescriptionToBars(desc, eventIdHint) {
   s.dailyTotals = Object.assign({ date: day, eventId: eventIdHint || prevId || null, leveled: prevLeveled }, parsed);
   applyDailyTotalsToBars(s);
   s._dailyDirty = false;
+  markDailyLocalWrite(); // ユーザー編集 → 直近ローカル書き込みとして保護
+  saveShiba(s);
+  if (typeof applyShibaState === 'function') applyShibaState(s);
+  const sheet = document.getElementById('shibaSheet');
+  if (sheet && sheet.classList.contains('open') && typeof renderShiba === 'function') renderShiba();
+}
+// 背景pull(カレンダー取り込み)用: 同じ日のカウンタは「大きい方」を採用し、絶対に減らさない。
+// Googleの結果整合性で古い記録を読んでも、散歩などの累積値が巻き戻らない(=タイマーが減らない)。
+// 日付が変わった時(date不一致)は累積をマージせず、取り込んだ値で素直に開始する(日替わりリセットは効く)。
+function mergeDailyCountersMax(parsed, cur) {
+  if (!cur) return parsed;
+  parsed.food     = Math.max(parsed.food     || 0, cur.food     || 0);
+  parsed.walk     = Math.max(parsed.walk     || 0, cur.walk     || 0);
+  parsed.exercise = Math.max(parsed.exercise || 0, cur.exercise || 0);
+  parsed.poop     = Math.max(parsed.poop     || 0, cur.poop     || 0);
+  parsed.brush    = Math.max(parsed.brush    || 0, cur.brush    || 0);
+  parsed.tooth    = Math.max(parsed.tooth    || 0, cur.tooth    || 0);
+  return parsed;
+}
+function applyDailyEcurleFromPull(desc, eventIdHint) {
+  const parsed = parseDailyEcurleDescription(desc);
+  const day = ecurleDay();
+  const s = loadShiba();
+  const cur = (s.dailyTotals && s.dailyTotals.date === day) ? s.dailyTotals : null;
+  mergeDailyCountersMax(parsed, cur); // 同日内は減らさない(大きい方)
+  const prevId = cur ? cur.eventId : null;
+  const prevLeveled = cur ? !!cur.leveled : false;
+  s.dailyTotals = Object.assign({ date: day, eventId: eventIdHint || prevId || null, leveled: prevLeveled }, parsed);
+  applyDailyTotalsToBars(s);
   saveShiba(s);
   if (typeof applyShibaState === 'function') applyShibaState(s);
   const sheet = document.getElementById('shibaSheet');
@@ -5695,18 +5727,11 @@ async function pullDailyEcurleFromCalendar() {
     // 完了済み(✔️ 毎日エクル)も拾う
     const ev = (data.events || []).find(e => isDailyEcurleTitle(e && e.summary));
     if (!ev) return false;
-    const parsed = parseDailyEcurleDescription(ev.description || '');
     const s = loadShiba();
-    const prevLeveled = (s.dailyTotals && s.dailyTotals.date === day) ? !!s.dailyTotals.leveled : false;
-    s.dailyTotals = Object.assign({ date: day, eventId: ev.id, leveled: prevLeveled }, parsed);
-    applyDailyTotalsToBars(s);
-    s._dailyDirty = false;
-    saveShiba(s);
-    if (typeof applyShibaState === 'function') applyShibaState(s);
-    if (typeof renderShiba === 'function') {
-      const sheet = document.getElementById('shibaSheet');
-      if (sheet && sheet.classList.contains('open')) renderShiba();
-    }
+    // 未送信のローカル入力 or 直近ローカル書き込み(60秒以内)がある時は、古いカレンダー記録で上書きしない。
+    // ← これが無いと「散歩46分→停止→再開で42分に減る」(整合前の古い記録で巻き戻る)不具合が起きる。
+    if (dailyOverwriteBlocked(s)) return false;
+    applyDailyEcurleFromPull(ev.description || '', ev.id); // 背景取り込み=同日カウントは減らさない
     return true;
   } catch (e) {
     console.warn('pullDailyEcurleFromCalendar failed', e);
@@ -5738,6 +5763,21 @@ function loadShiba() {
 }
 function saveShiba(s) {
   try { localStorage.setItem(SHIBA_KEY, JSON.stringify(s)); } catch (e) {}
+}
+// === 毎日エクルの「直近ローカル書き込み」ガード ===
+// Googleカレンダーは書き込み直後の読み取りで古い値を返すことがある(結果整合性)。
+// _dailyDirty 解除後の数十秒、古い記録で dailyTotals を巻き戻さないよう、最後のローカル書き込みから
+// 一定時間はカレンダー取り込みをブロックする。← 散歩タイマー停止後に値が減る不具合の根本対処。
+const DAILY_LOCAL_WRITE_KEY = 'daily_local_write_at_v1';
+const DAILY_LOCAL_GUARD_MS = 60000; // 60秒(カレンダーの整合待ち。これを超えれば外部編集も取り込む)
+function markDailyLocalWrite() { try { localStorage.setItem(DAILY_LOCAL_WRITE_KEY, String(Date.now())); } catch (e) {} }
+function loadDailyLocalWriteAt() { try { return Number(localStorage.getItem(DAILY_LOCAL_WRITE_KEY)) || 0; } catch (e) { return 0; } }
+// カレンダー記録で dailyTotals を上書きしてよいか。未送信(_dailyDirty)中、または直近ローカル書き込みから
+// DAILY_LOCAL_GUARD_MS 以内ならブロック(=巻き戻さない)。
+function dailyOverwriteBlocked(s) {
+  if (s && s._dailyDirty) return true;
+  const w = loadDailyLocalWriteAt();
+  return !!(w && (Date.now() - w) < DAILY_LOCAL_GUARD_MS);
 }
 // 時間経過: 4 バー (満腹/気持ち/体力/快適) を相関減衰
 // 積立式、減衰なし、日付変わりでリセット (パパ以外)
@@ -5841,7 +5881,8 @@ function renderShiba() {
   const brush = s.brush || 0;
   const tooth = s.tooth || 0;
   applyFill('foodFill',  food,  ECURLE_MAX.food);
-  applyFill('walkFill',  walk,  ECURLE_MAX.walk);
+  applyFill('walkFill',  Math.floor(walk), ECURLE_MAX.walk); // 散歩メーターは1分刻み(切り捨て)
+
   applyFill('poopFill',  poop,  ECURLE_MAX.poop);
   applyFill('brushFill', brush, ECURLE_MAX.brush);
   applyFill('toothFill', tooth, ECURLE_MAX.tooth);
@@ -5870,6 +5911,24 @@ function currentWalkMinutes() {
   if (t && t.date === ecurleDay()) return t.walk || 0;
   return 0;
 }
+// 散歩メーター用の合計分(散歩+運動)。実行中は計測中の経過(extraSec)も加える。最大90分。
+function currentWalkMeterMinutes(extraSec) {
+  const s = loadShiba();
+  const t = (s.dailyTotals && s.dailyTotals.date === ecurleDay()) ? s.dailyTotals : null;
+  const walkMin = (t ? (t.walk || 0) : 0) + ((extraSec || 0) / 60);
+  const exMin = t ? (t.exercise || 0) : 0;
+  return Math.min(ECURLE_MAX.walk, walkMin + exMin);
+}
+// 散歩メーターのグラフを「1分刻み」で反映 (詳細パネルの walkFill と フローティングのミニ散歩バー)。
+// 切り捨て(floor)なので、計測が1分進むごとに1メモリ分だけ上がる。
+function applyWalkMeterFill(meterMin) {
+  const m = Math.max(0, Math.min(ECURLE_MAX.walk, Math.floor(meterMin || 0))); // 1分刻み
+  const pct = (m / ECURLE_MAX.walk) * 100;
+  const el = document.getElementById('walkFill');
+  if (el) el.style.height = pct + '%';
+  const mini = document.querySelector('#shibaMiniBars [data-bar="walk"] .fill');
+  if (mini) mini.style.height = pct + '%';
+}
 // 散歩メーターへ「分」を加算 (停止時)。記録/同期/レベル判定も実行。
 function addWalkTimeMinutes(minutes) {
   if (!minutes || minutes <= 0) return;
@@ -5878,6 +5937,7 @@ function addWalkTimeMinutes(minutes) {
   t.walk = Math.round(((t.walk || 0) + minutes) * 1000) / 1000;
   s.walk = Math.min(ECURLE_MAX.walk, Math.round(((t.walk || 0) + (t.exercise || 0)) * 100) / 100);
   s._dailyDirty = true;
+  markDailyLocalWrite(); // 直近ローカル書き込み時刻を記録(古い記録で巻き戻さないため)
   ecurleOnUserActivity(s);
   maybeLevelUp(s);
   saveShiba(s);
@@ -5919,6 +5979,7 @@ function updateWalkTimerUI() {
   btn.classList.toggle('running', running);
   if (wrap) wrap.classList.toggle('running', running);
   el.textContent = fmtMMSS(baseSec + liveSec); // 合計(＋計測中) を表示
+  applyWalkMeterFill(currentWalkMeterMinutes(running ? liveSec : 0)); // 散歩メーターも1分刻みで(実行中はライブ)反映
 }
 // 毎秒、散歩タイマー表示を更新 (パネルを開いている間だけ実描画コスト)
 setInterval(updateWalkTimerUI, 1000);
@@ -7011,6 +7072,13 @@ function shibaApplyIfNewer(remote) {
     const rescued = (merged.level > (remote.level || 0)) ||
       Object.keys(merged.leveledDays).some(d => leveledDayCount(merged.leveledDays[d]) > leveledDayCount(remoteDays[d]));
     if (rescued) merged.modifiedAt = Date.now();
+    // 同じ日の累積(散歩など)は、リモート採用で減らさない(大きい方を残す)。
+    // ← 他デバイスの少し古い dailyTotals を取り込んでも、今日の散歩時間等が巻き戻らないようにする。
+    if (merged.dailyTotals && local.dailyTotals &&
+        merged.dailyTotals.date === local.dailyTotals.date) {
+      mergeDailyCountersMax(merged.dailyTotals, local.dailyTotals);
+      try { applyDailyTotalsToBars(merged); } catch (e) {}
+    }
     // すぐやるタイマーは別キー(soon_timers_v1)で reconcileRemoteSoonTimers が独立に管理する。
     // ここでは豆柴状態に混ぜず取り除くだけ(modifiedAt の last-writer-wins でタイマーを巻き込まないため)。
     delete merged.soonTimers; delete merged.soonTimersAt;
