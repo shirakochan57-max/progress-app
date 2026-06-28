@@ -4159,17 +4159,9 @@ async function saveCardEvent(card, ev, btn, opts) {
   // 折りたたみ表示用 div も同期
   const titleDisplay = card.querySelector('.title-display');
   if (titleDisplay) titleDisplay.textContent = _basePlain;
-  // 「毎日エクル」を保存する時は、カードのメモ(古い可能性あり)で散歩等を巻き戻さないよう、
-  // 現在の dailyTotals と「大きい方」でマージし、整合した記述に作り直してから保存する(同日内は減らさない)。
-  if (typeof isDailyEcurleTitle === 'function' && isDailyEcurleTitle(newTitle) && memo) {
-    try {
-      const parsedMemo = parseDailyEcurleDescription(memo.value || '');
-      const sCur = loadShiba();
-      const curT = (sCur.dailyTotals && sCur.dailyTotals.date === ecurleDay()) ? sCur.dailyTotals : null;
-      mergeDailyCountersMax(parsedMemo, curT);
-      memo.value = buildDailyEcurleDescription(parsedMemo);
-    } catch (e) {}
-  }
+  // 「毎日エクル」の手動保存(🔼)はユーザーが見て編集した値を「正」とする(減らす修正も即反映)。
+  // 自動保存からは毎日エクルを除外済みなので、古いメモで勝手に上書きされる心配はない。
+  // → ここでマージ等はせず、memo.value をそのまま保存し、下の applyDailyEcurleDescriptionToBars で即メーター反映する。
   const wasAllDay = isAllDay(ev);
   const nowAllDay = allDayCb.checked;
   const dateKey = (card.dataset.date || fmtDate(currentDate)).split('T')[0];
@@ -5816,9 +5808,7 @@ function applyDailyEcurleDescriptionToBars(desc, eventIdHint) {
   const sheet = document.getElementById('shibaSheet');
   if (sheet && sheet.classList.contains('open') && typeof renderShiba === 'function') renderShiba();
 }
-// 背景pull(カレンダー取り込み)用: 同じ日のカウンタは「大きい方」を採用し、絶対に減らさない。
-// Googleの結果整合性で古い記録を読んでも、散歩などの累積値が巻き戻らない(=タイマーが減らない)。
-// 日付が変わった時(date不一致)は累積をマージせず、取り込んだ値で素直に開始する(日替わりリセットは効く)。
+// 同日内カウンタを「大きい方」にするヘルパー(現在は未使用。後方互換のため残す)。
 function mergeDailyCountersMax(parsed, cur) {
   if (!cur) return parsed;
   parsed.food     = Math.max(parsed.food     || 0, cur.food     || 0);
@@ -5830,12 +5820,15 @@ function mergeDailyCountersMax(parsed, cur) {
   parsed.toothTime = Math.max(parsed.toothTime || 0, cur.toothTime || 0);
   return parsed;
 }
+// 背景pull(カレンダー取り込み)。呼び出し側で dailyOverwriteBlocked により「直近のローカル書き込み中(60秒)」は
+// 既にブロック済み。ここが動く時はカレンダー側が最新=正なので、取り込んだ値をそのまま反映する(monotonicにしない)。
+// これにより「タイマーで増えた値は60秒ガードで守られ、手動編集の減らす修正も巻き戻らずに反映」が両立する。
+// 日付不一致(日替わり)は素直に開始 = リセットが効く。
 function applyDailyEcurleFromPull(desc, eventIdHint) {
   const parsed = parseDailyEcurleDescription(desc);
   const day = ecurleDay();
   const s = loadShiba();
   const cur = (s.dailyTotals && s.dailyTotals.date === day) ? s.dailyTotals : null;
-  mergeDailyCountersMax(parsed, cur); // 同日内は減らさない(大きい方)
   const prevId = cur ? cur.eventId : null;
   const prevLeveled = cur ? !!cur.leveled : false;
   s.dailyTotals = Object.assign({ date: day, eventId: eventIdHint || prevId || null, leveled: prevLeveled }, parsed);
@@ -5878,7 +5871,9 @@ function ecurleOnUserActivity(s) {
 }
 function ecurleOnTaskCreated(title) {
   const s = tickShiba(loadShiba());
-  applyTaskToEcurle(s, title);
+  // メーターを増やすのは「エクル専用入力(例: 歯磨き / 歯磨き2 / 散歩30)」だけ。
+  // 「歯磨き粉を買う」等のキーワードを含む通常タスクではメーターを増やさない(誤カウント防止)。
+  if (typeof isEcurleOnlyInput === 'function' && isEcurleOnlyInput(title)) applyTaskToEcurle(s, title);
   ecurleOnUserActivity(s);
   saveShiba(s);
   setShibaEmoji('shibaCard', '🐕');
@@ -7266,12 +7261,12 @@ function shibaApplyIfNewer(remote) {
     const rescued = (merged.level > (remote.level || 0)) ||
       Object.keys(merged.leveledDays).some(d => leveledDayCount(merged.leveledDays[d]) > leveledDayCount(remoteDays[d]));
     if (rescued) merged.modifiedAt = Date.now();
-    // 同じ日の累積(散歩など)は、リモート採用で減らさない(大きい方を残す)。
-    // ← 他デバイスの少し古い dailyTotals を取り込んでも、今日の散歩時間等が巻き戻らないようにする。
+    // 同じ日に直近のローカル操作(タイマー停止/エクル入力/手動編集、60秒以内)があれば、リモートで
+    // dailyTotals を上書きしない(タイマーで増えた値・手動編集を守る)。それ以外はリモート(より新しい)を採用。
     if (merged.dailyTotals && local.dailyTotals &&
-        merged.dailyTotals.date === local.dailyTotals.date) {
-      mergeDailyCountersMax(merged.dailyTotals, local.dailyTotals);
-      // メーターも合算で再計算(散歩=分+運動分 等)
+        merged.dailyTotals.date === local.dailyTotals.date &&
+        dailyOverwriteBlocked(local)) {
+      merged.dailyTotals = local.dailyTotals;
       try { applyDailyTotalsToBars(merged); } catch (e) {}
     }
     // すぐやるタイマーは別キー(soon_timers_v1)で reconcileRemoteSoonTimers が独立に管理する。
