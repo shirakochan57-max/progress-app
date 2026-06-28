@@ -1461,6 +1461,8 @@ body.shiba-sleeping .shiba-emoji::after {
 .stat-row[title*="うんこ"] .stat-fill { background: #5D4037 !important; }
 .stat-row[title*="ブラシ"] .stat-fill { background: #C2185B !important; }
 .stat-row[title*="歯磨き"] .stat-fill { background: #0097A7 !important; }
+.stat-row[title*="運動"]  .stat-fill { background: #43A047 !important; }
+.stat-mark.goal { height: 3px; background: var(--ink); }
 /* 散歩ストップウォッチ */
 .shiba-walk-timer {
   display: flex; align-items: center; gap: 8px;
@@ -1471,11 +1473,14 @@ body.shiba-sleeping .shiba-emoji::after {
   font-size: 13px; white-space: nowrap;
 }
 .shiba-walk-timer #shibaWalkBtn.running { background: #1976D2; color: #fff; border-color: #1976D2; }
+.shiba-walk-timer #shibaToothBtn { flex: 0 0 auto; min-height: 30px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
+.shiba-walk-timer #shibaToothBtn.running { background: #0097A7; color: #fff; border-color: #0097A7; }
 .shiba-walk-elapsed {
   font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums;
   letter-spacing: 0.5px; color: var(--text);
 }
-.shiba-walk-timer.running .shiba-walk-elapsed { color: #1976D2; }
+.shiba-walk-timer #shibaWalkElapsed.running { color: #1976D2; }
+.shiba-walk-timer #shibaToothElapsed.running { color: #0097A7; }
 .shiba-actions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1948,10 +1953,10 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-mini-bars" id="shibaMiniBars" aria-hidden="true">
       <div class="shiba-mini-bar" data-bar="food" title="ご飯"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="walk" title="散歩"><span class="fill"></span></div>
+      <div class="shiba-mini-bar" data-bar="exercise" title="運動"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="poop" title="うんこ"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="brush" title="ブラシ"><span class="fill"></span></div>
       <div class="shiba-mini-bar" data-bar="tooth" title="歯磨き"><span class="fill"></span></div>
-      <div class="shiba-mini-bar" data-bar="papa" title="パパ"><span class="fill"></span></div>
     </div>
     <span id="shibaMoodTag" style="display:none;">ふつう</span>
   </div>
@@ -2121,8 +2126,7 @@ body.shiba-sleeping .shiba-emoji::after {
   <div class="shiba-panel-content">
   <h3 class="shiba-header-row">
     <span class="shiba-header-name">エクル</span>
-    <span class="shiba-header-lv">⭐ Lv.<span id="shibaLevel">0</span></span>
-    <span class="shiba-header-next muted">達成率 <span id="shibaToNext">0</span> %</span>
+    <span class="shiba-header-lv">Lv.<span id="shibaLevel">-</span><span id="shibaAgeNext" class="muted"></span></span>
     <span id="shibaCoins" style="display:none;">0</span>
     <span id="shibaTotalDone" style="display:none;">0</span>
   </h3>
@@ -2133,17 +2137,19 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-mood" id="shibaMood" style="display:none;">ごきげん</div>
   </div>
   <div class="shiba-stats">
-    <div class="stat-row" title="ご飯 (最大3)"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="foodVal">0</span></div>
-    <div class="stat-row" title="散歩 (最大90分・10分刻み)"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div><div class="stat-mark" style="bottom:11.11%"></div><div class="stat-mark" style="bottom:22.22%"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:44.44%"></div><div class="stat-mark" style="bottom:55.56%"></div><div class="stat-mark" style="bottom:66.67%"></div><div class="stat-mark" style="bottom:77.78%"></div><div class="stat-mark" style="bottom:88.89%"></div></div><span class="stat-val" id="walkVal">0</span></div>
-    <div class="stat-row" title="うんこ (最大2)"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="poopVal">0</span></div>
+    <div class="stat-row" title="ご飯 (最大5・3で達成)"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div><div class="stat-mark" style="bottom:20%"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark goal" style="bottom:60%"></div><div class="stat-mark" style="bottom:80%"></div></div><span class="stat-val" id="foodVal">0</span></div>
+    <div class="stat-row" title="散歩 (最大100分・10分刻み・60で達成)"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div><div class="stat-mark" style="bottom:10%"></div><div class="stat-mark" style="bottom:20%"></div><div class="stat-mark" style="bottom:30%"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark" style="bottom:50%"></div><div class="stat-mark goal" style="bottom:60%"></div><div class="stat-mark" style="bottom:70%"></div><div class="stat-mark" style="bottom:80%"></div><div class="stat-mark" style="bottom:90%"></div></div><span class="stat-val" id="walkVal">0</span></div>
+    <div class="stat-row" title="運動 (最大3回・記録のみ)"><span class="stat-label">🏃</span><div class="stat-bar"><div class="stat-fill" id="exerciseFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="exerciseVal">0</span></div>
+    <div class="stat-row" title="うんこ (最大3・2で達成)"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark goal" style="bottom:66.67%"></div></div><span class="stat-val" id="poopVal">0</span></div>
     <div class="stat-row" title="ブラシ (最大2)"><span class="stat-label">🪮</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="brushVal">0</span></div>
     <div class="stat-row" title="歯磨き (最大2)"><span class="stat-label">🪥</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="toothVal">0</span></div>
-    <div class="stat-row" title="パパ"><span class="stat-label">⭐</span><div class="stat-bar"><div class="stat-fill" id="papaFill"></div></div><span class="stat-val" id="papaVal">0</span></div>
     <span id="sleepFill" style="display:none;"></span><span id="sleepVal" style="display:none;">50</span>
   </div>
   <div class="shiba-walk-timer" id="shibaWalkTimer">
     <button class="btn secondary" id="shibaWalkBtn" title="散歩タイマー 開始/停止">▶ 散歩</button>
     <span class="shiba-walk-elapsed" id="shibaWalkElapsed">00:00</span>
+    <button class="btn secondary" id="shibaToothBtn" title="歯磨きタイマー 開始/停止(停止で歯磨き+1回)">▶ 歯磨き</button>
+    <span class="shiba-walk-elapsed" id="shibaToothElapsed">00:00</span>
   </div>
   <div class="shiba-quick">
     <input type="text" id="shibaQuickTitle" placeholder="タスクを入力"
@@ -5293,15 +5299,14 @@ function getShibaMoodShort(s) {
 function updateShibaMiniBars(s) {
   const c = document.getElementById('shibaMiniBars');
   if (c) {
-    const papaPct = ecurleCompletion(s) * 100;  // ⭐完了メーター = 5メーターの平均
+    // 達成度バーは廃止。
     const bars = {
       food:  { v: s.food  || 0, max: ECURLE_MAX.food },
       walk:  { v: Math.floor(s.walk || 0), max: ECURLE_MAX.walk }, // 散歩は1分刻み(切り捨て)で反映
-
+      exercise: { v: Math.floor(s.exercise || 0), max: ECURLE_MAX.exercise },
       poop:  { v: s.poop  || 0, max: ECURLE_MAX.poop },
       brush: { v: s.brush || 0, max: ECURLE_MAX.brush },
-      tooth: { v: s.tooth || 0, max: ECURLE_MAX.tooth },
-      papa:  { v: papaPct,       max: 100 }
+      tooth: { v: s.tooth || 0, max: ECURLE_MAX.tooth }
     };
     Object.keys(bars).forEach(key => {
       const el = c.querySelector(`[data-bar="${key}"]`);
@@ -5334,9 +5339,28 @@ function applyShibaState(s) {
 }
 const SHIBA_KEY = 'shiba_state_v1';
 // === エクル: バーの最大値 (積立式、日付変わりでリセット) ===
-const ECURLE_MAX = { food: 3, walk: 90, poop: 2, brush: 2, tooth: 2 }; // walk は「分」(最大90分・10分刻み)
+const ECURLE_MAX = { food: 5, walk: 100, exercise: 3, poop: 3, brush: 2, tooth: 2 }; // メーター表示の最大(walk=分, exercise=回)
+const ECURLE_GOAL = { food: 3, walk: 60, poop: 2, brush: 2, tooth: 2 }; // 達成度100になる値(運動は達成度に寄与しない)
+const ECURLE_BIRTH = '2021-09-30'; // 基準日(生まれた日)。レベルはここからの年齢で決まる。
+// 年齢(歳・今の歳で経過した日数・次の誕生日までの日数)を返す
+function ecurleAge(today) {
+  const [by, bm, bd] = ECURLE_BIRTH.split('-').map(Number);
+  const t = today ? new Date(today) : new Date();
+  const tt = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const b = new Date(by, bm - 1, bd);
+  let years = tt.getFullYear() - b.getFullYear();
+  const beforeB = (tt.getMonth() < b.getMonth()) || (tt.getMonth() === b.getMonth() && tt.getDate() < b.getDate());
+  if (beforeB) years--;
+  if (years < 0) years = 0;
+  const last = new Date(b.getFullYear() + years, b.getMonth(), b.getDate());
+  const next = new Date(b.getFullYear() + years + 1, b.getMonth(), b.getDate());
+  const MS = 86400000;
+  const daysInto = Math.max(0, Math.round((tt - last) / MS));
+  const daysToNext = Math.max(0, Math.round((next - tt) / MS));
+  return { years, daysInto, daysToNext };
+}
 const DEFAULT_SHIBA = {
-  food: 0, walk: 0, sleep: 0, poop: 0, brush: 0, tooth: 0, papa: 0, level: 0, lastFedAt: 0,
+  food: 0, walk: 0, exercise: 0, sleep: 0, poop: 0, brush: 0, tooth: 0, papa: 0, level: 0, lastFedAt: 0,
   coins: 0, totalDone: 0,
   hunger: 60, happy: 60, stamina: 60, comfort: 60,
   hasPoop: false, hasPee: false, urge: 0, comfortBeforeDirt: null,
@@ -5426,7 +5450,7 @@ function parseTaskForEcurle(title) {
   } else if (/散歩|さんぽ/.test(t)) {
     r.walk = 1; // 数値なし = 1分
   }
-  // 運動/遊び N回 (1回 = 15分、散歩メーター +1。数値なしは 1回)。記録は散歩と分離。
+  // 運動/遊び N回 (1回 = 10分、独立メーター・最大3回・達成度に寄与しない。数値なしは 1回)。
   const exMatch = t.match(/(?:運動|うんどう|遊び|あそび)\s*(\d+(?:\.\d+)?)/);
   if (exMatch) r.exercise = parseFloat(exMatch[1]);
   else if (/運動|うんどう|遊び|あそび/.test(t)) r.exercise = 1;
@@ -5464,14 +5488,15 @@ function isEcurleOnlyInput(title) {
     .replace(/[\s,、.。･・]/g, '');
   return t.length === 0;
 }
-// 完了メーター = 5メーターの平均充填率 (0..1)
+// 達成度 = 寄与する5項目(ごはん3・散歩60分・うんこ2・ブラシ2・歯磨き2)の平均充填率 (0..1)。
+// 運動は達成度に寄与しない。各項目は ECURLE_GOAL の値で100%。
 function ecurleCompletion(s) {
   return (
-    Math.min(1, (s.food  || 0) / ECURLE_MAX.food) +
-    Math.min(1, (s.walk  || 0) / ECURLE_MAX.walk) +
-    Math.min(1, (s.poop  || 0) / ECURLE_MAX.poop) +
-    Math.min(1, (s.brush || 0) / ECURLE_MAX.brush) +
-    Math.min(1, (s.tooth || 0) / ECURLE_MAX.tooth)
+    Math.min(1, (s.food  || 0) / ECURLE_GOAL.food) +
+    Math.min(1, (s.walk  || 0) / ECURLE_GOAL.walk) +
+    Math.min(1, (s.poop  || 0) / ECURLE_GOAL.poop) +
+    Math.min(1, (s.brush || 0) / ECURLE_GOAL.brush) +
+    Math.min(1, (s.tooth || 0) / ECURLE_GOAL.tooth)
   ) / 5;
 }
 // === レベル台帳(leveledDays)ヘルパー ===
@@ -5493,20 +5518,9 @@ function mergeLeveledDays(a, b) {
   for (const k in (b || {})) out[k] = Math.max(out[k] || 0, leveledDayCount(b[k]));
   return out;
 }
-// 達成率(5メーターの平均充填率)でレベルアップ: 80%で+1、100%で更に+1 (その日 最大2、翌日へ引き継ぎ)。
-// 既に同等以上を付与済みなら二重加算しない。完了率が後から下がってもレベルは戻さない(増える方向のみ)。
+// レベルは年齢で決まるので達成度では上げない。達成度100で「完了」→おやすみモードにする。
 function maybeLevelUp(s) {
-  const dt = s.dailyTotals;
-  if (!dt) return;
-  const pct = ecurleCompletion(s);              // 0..1
-  const want = pct >= 1 ? 2 : (pct >= 0.8 ? 1 : 0);
-  if (want <= 0) return;
-  if (!s.leveledDays) s.leveledDays = {};
-  const have = leveledDayCount(s.leveledDays[dt.date]);
-  if (want <= have) { dt.leveled = have > 0; return; } // 既に同等以上 → 何もしない
-  s.level = (s.level || 0) + (want - have);            // 差分だけ加算
-  s.leveledDays[dt.date] = want;
-  dt.leveled = true;
+  s.sleepMode = ecurleCompletion(s) >= 1;
 }
 function applyTaskToEcurle(s, title) {
   const r = parseTaskForEcurle(title);
@@ -5520,15 +5534,13 @@ function applyTaskToEcurle(s, title) {
   }
   if (r.walk > 0) {
     t.walk = Math.round(((t.walk || 0) + r.walk) * 1000) / 1000;  // 散歩 分 (秒精度=1/60分、記録は上限なし)
+    s.walk = Math.min(ECURLE_MAX.walk, Math.round((t.walk || 0) * 100) / 100); // 散歩メーター(分、運動は含めない)
     changed = true;
   }
   if (r.exercise > 0) {
-    t.exercise = (t.exercise || 0) + r.exercise * 15;  // 運動 分 (1回=15分、記録は散歩と分離)
+    t.exercise = (t.exercise || 0) + r.exercise * 10;  // 運動 分 (1回=10分、記録のみ)
+    s.exercise = Math.min(ECURLE_MAX.exercise, Math.round(((t.exercise || 0) / 10) * 100) / 100); // 運動メーター(回=分/10)
     changed = true;
-  }
-  if (r.walk > 0 || r.exercise > 0) {
-    // 散歩メーター = 散歩分 + 運動分 を合算 (全部「分」)。最大90分で頭打ち。
-    s.walk = Math.min(ECURLE_MAX.walk, Math.round(((t.walk || 0) + (t.exercise || 0)) * 100) / 100);
   }
   if (r.poop > 0)  { s.poop  = Math.min(ECURLE_MAX.poop,  Math.round(((s.poop  || 0) + r.poop)  * 10) / 10); t.poop  = Math.round(((t.poop  || 0) + r.poop)  * 10) / 10; changed = true; }
   if (r.brush > 0) { s.brush = Math.min(ECURLE_MAX.brush, Math.round(((s.brush || 0) + r.brush) * 10) / 10); t.brush = Math.round(((t.brush || 0) + r.brush) * 10) / 10; changed = true; }
@@ -5603,13 +5615,13 @@ function parseDailyEcurleDescription(desc) {
   }
   return out;
 }
-// 「毎日エクル」記述からメーター値を反映 (散歩は5km上限、他は各最大値)
+// 「毎日エクル」記述からメーター値を反映 (各メーターの最大で頭打ち)
 function applyDailyTotalsToBars(s) {
   const t = s.dailyTotals;
   if (!t) return;
   s.food  = Math.min(ECURLE_MAX.food,  Math.round((t.food  || 0) * 10) / 10);
-  // 散歩メーター = 散歩分 + 運動分 を合算、最大90分
-  s.walk  = Math.min(ECURLE_MAX.walk,  Math.round(((t.walk || 0) + (t.exercise || 0)) * 100) / 100);
+  s.walk  = Math.min(ECURLE_MAX.walk,  Math.round((t.walk  || 0) * 100) / 100); // 散歩(分)のみ。運動は含めない
+  s.exercise = Math.min(ECURLE_MAX.exercise, Math.round(((t.exercise || 0) / 10) * 100) / 100); // 運動(回=分/10)
   s.poop  = Math.min(ECURLE_MAX.poop,  t.poop  || 0);
   s.brush = Math.min(ECURLE_MAX.brush, t.brush || 0);
   s.tooth = Math.min(ECURLE_MAX.tooth, t.tooth || 0);
@@ -5753,7 +5765,7 @@ async function pullDailyEcurleFromCalendar() {
   }
 }
 function ecurleOnUserActivity(s) {
-  s.sleepMode = false;
+  // おやすみは達成度100で入る方式に変更したため、ここでは sleepMode を触らない(maybeLevelUp/tickShibaが管理)。
   s.lastActivityAt = Date.now();
   s.modifiedAt = Date.now();
 }
@@ -5803,13 +5815,10 @@ function tickShiba(s) {
   if (s.poop == null) s.poop = 0;
   if (s.brush == null) s.brush = 0;
   if (s.tooth == null) s.tooth = 0;
+  if (s.exercise == null) s.exercise = 0;
   if (s.papa == null) s.papa = s.totalPoints || 0;
-  // 旧 papa 基準レベルを引き継ぐ。DEFAULT_SHIBA に level:0 があり == null では拾えないため、
-  // level は減らない前提で max を取る (初回だけ papa 由来のレベルへ底上げ・以降は冪等)。
-  // leveledDays(レベルアップした日付の記録)が残っていれば、その件数からも底上げ。
-  // 同期等で level 数値が 0 に潰れても、日付台帳が残っていれば過去の最高レベルを復元できる。
-  // (件数は実際のレベルを超えないため復元方向のみ＝過剰加算しない)
-  s.level = Math.max(s.level || 0, levelFromPapa(s.papa || 0), sumLeveledDays(s.leveledDays));
+  // レベル = 年齢(歳)。基準日 ECURLE_BIRTH からの満年数で決まる(達成度では上げない)。
+  s.level = ecurleAge().years;
   if (s.lastActivityAt == null) s.lastActivityAt = s.modifiedAt || now;
   if (s.lastWalkResetDay == null) s.lastWalkResetDay = '';
   // 旧スケール (0-100) で保存されたデータをマイグレーション
@@ -5825,11 +5834,8 @@ function tickShiba(s) {
   // ここでの日付固定リセットは廃止 (日替わり/日付移動時は
   //  applyDailyEcurleFromEventsCache / pullDailyEcurleFromCalendar が表示日の値を反映)。
   s.lastWalkResetDay = new Date(now).toDateString();
-  // 自動おやすみ: 30分操作なし
-  const inactiveMin = (now - (s.lastActivityAt || now)) / 60000;
-  if (!s.sleepMode && inactiveMin >= 30) {
-    s.sleepMode = true;
-  }
+  // おやすみ = 達成度100で「完了」。30分無操作の自動おやすみは撤廃。
+  s.sleepMode = ecurleCompletion(s) >= 1;
   s.lastTick = now;
   return s;
 }
@@ -5868,12 +5874,12 @@ function renderShiba() {
   applyShibaState(s);
   updateShibaSleepBtn(!!s.sleepMode);
   document.getElementById('shibaMood').textContent = getShibaMood(s);
-  // レベル表示 (完了式: その日の5メーター全部最大ごとに +1、翌日へ引き継ぎ)
-  const lv = s.level || 0;
-  const completion = ecurleCompletion(s);  // 0..1
-  document.getElementById('shibaLevel').textContent = lv;
-  // 達成率(現在値)を表示。80%でレベル+1、100%で更に+1。
-  document.getElementById('shibaToNext').textContent = Math.round(completion * 100);
+  // レベル表示 = 年齢: Lv.歳-経過日数（次の誕生日までの日数）
+  const age = ecurleAge();
+  const lv = age.years;
+  document.getElementById('shibaLevel').textContent = age.years + '-' + age.daysInto;
+  const ageNextEl = document.getElementById('shibaAgeNext');
+  if (ageNextEl) ageNextEl.textContent = '（' + age.daysToNext + '）';
   const houses = Math.floor(lv / 100);
   const puppies = lv % 100;
   let puppyHtml = '';
@@ -5891,17 +5897,18 @@ function renderShiba() {
   };
   const food = s.food || 0;
   const walk = s.walk || 0;
+  const exercise = s.exercise || 0;
   const poop = s.poop || 0;
   const brush = s.brush || 0;
   const tooth = s.tooth || 0;
   applyFill('foodFill',  food,  ECURLE_MAX.food);
   applyFill('walkFill',  Math.floor(walk), ECURLE_MAX.walk); // 散歩メーターは1分刻み(切り捨て)
-
+  applyFill('exerciseFill', Math.floor(exercise), ECURLE_MAX.exercise); // 運動(回)
   applyFill('poopFill',  poop,  ECURLE_MAX.poop);
   applyFill('brushFill', brush, ECURLE_MAX.brush);
   applyFill('toothFill', tooth, ECURLE_MAX.tooth);
-  applyFill('papaFill',  completion * 100, 100);  // 完了メーター = 5メーターの平均
   updateWalkTimerUI();  // 散歩ストップウォッチの表示も同期
+  updateToothTimerUI(); // 歯磨きストップウォッチの表示も同期
 }
 
 // === 散歩ストップウォッチ (1秒単位・閉じても継続・停止で散歩メーターへ加算) ===
@@ -5925,13 +5932,12 @@ function currentWalkMinutes() {
   if (t && t.date === ecurleDay()) return t.walk || 0;
   return 0;
 }
-// 散歩メーター用の合計分(散歩+運動)。実行中は計測中の経過(extraSec)も加える。最大90分。
+// 散歩メーター用の散歩分(運動は別メーターなので含めない)。実行中は計測中の経過(extraSec)も加える。最大100分。
 function currentWalkMeterMinutes(extraSec) {
   const s = loadShiba();
   const t = (s.dailyTotals && s.dailyTotals.date === ecurleDay()) ? s.dailyTotals : null;
   const walkMin = (t ? (t.walk || 0) : 0) + ((extraSec || 0) / 60);
-  const exMin = t ? (t.exercise || 0) : 0;
-  return Math.min(ECURLE_MAX.walk, walkMin + exMin);
+  return Math.min(ECURLE_MAX.walk, walkMin);
 }
 // 散歩メーターのグラフを「1分刻み」で反映 (詳細パネルの walkFill と フローティングのミニ散歩バー)。
 // 切り捨て(floor)なので、計測が1分進むごとに1メモリ分だけ上がる。
@@ -5949,7 +5955,7 @@ function addWalkTimeMinutes(minutes) {
   const s = tickShiba(loadShiba());
   const t = ensureDailyTotals(s);
   t.walk = Math.round(((t.walk || 0) + minutes) * 1000) / 1000;
-  s.walk = Math.min(ECURLE_MAX.walk, Math.round(((t.walk || 0) + (t.exercise || 0)) * 100) / 100);
+  s.walk = Math.min(ECURLE_MAX.walk, Math.round((t.walk || 0) * 100) / 100); // 散歩メーター(分のみ。運動は別メーター)
   s._dailyDirty = true;
   markDailyLocalWrite(); // 直近ローカル書き込み時刻を記録(古い記録で巻き戻さないため)
   ecurleOnUserActivity(s);
@@ -5991,12 +5997,58 @@ function updateWalkTimerUI() {
   const liveSec = running ? Math.floor((Date.now() - o.startedAt) / 1000) : 0;
   btn.textContent = running ? '⏹ 停止' : '▶ 散歩';
   btn.classList.toggle('running', running);
-  if (wrap) wrap.classList.toggle('running', running);
+  el.classList.toggle('running', running);
   el.textContent = fmtMMSS(baseSec + liveSec); // 合計(＋計測中) を表示
   applyWalkMeterFill(currentWalkMeterMinutes(running ? liveSec : 0)); // 散歩メーターも1分刻みで(実行中はライブ)反映
 }
 // 毎秒、散歩タイマー表示を更新 (パネルを開いている間だけ実描画コスト)
 setInterval(updateWalkTimerUI, 1000);
+
+// === 歯磨きストップウォッチ (押して計測→停止で歯磨き+1回。時間はメモリと無関係、1回=1回) ===
+const SHIBA_TOOTH_TIMER_KEY = 'shiba_tooth_timer_v1';
+function loadToothTimer() { try { return JSON.parse(localStorage.getItem(SHIBA_TOOTH_TIMER_KEY) || 'null'); } catch (e) { return null; } }
+function saveToothTimer(o) { try { localStorage.setItem(SHIBA_TOOTH_TIMER_KEY, JSON.stringify(o)); } catch (e) {} }
+function clearToothTimer() { try { localStorage.removeItem(SHIBA_TOOTH_TIMER_KEY); } catch (e) {} }
+// 歯磨きを1回ぶん加算 (停止時)。記録/同期も実行。時間は保存しない。
+function addToothCount(n) {
+  n = n || 1;
+  const s = tickShiba(loadShiba());
+  const t = ensureDailyTotals(s);
+  t.tooth = Math.round(((t.tooth || 0) + n) * 10) / 10;
+  s.tooth = Math.min(ECURLE_MAX.tooth, t.tooth);
+  s._dailyDirty = true;
+  markDailyLocalWrite();
+  ecurleOnUserActivity(s);
+  maybeLevelUp(s);
+  saveShiba(s);
+  if (typeof applyShibaState === 'function') applyShibaState(s);
+  const sheet = document.getElementById('shibaSheet');
+  if (sheet && sheet.classList.contains('open') && typeof renderShiba === 'function') renderShiba();
+  if (typeof scheduleDailyEcurleSync === 'function') scheduleDailyEcurleSync();
+  if (typeof shibaPushDebounced === 'function') shibaPushDebounced();
+}
+function startToothTimer() { saveToothTimer({ startedAt: Date.now() }); updateToothTimerUI(); }
+function stopToothTimer() {
+  const o = loadToothTimer();
+  clearToothTimer();
+  if (o && o.startedAt) addToothCount(1); // 時間に関係なく1回としてカウント
+  updateToothTimerUI();
+}
+function toggleToothTimer() { if (loadToothTimer()) stopToothTimer(); else startToothTimer(); }
+// 歯磨きタイマー表示更新 (毎秒)。実行中は経過(計測のみ)、停止で 00:00。
+function updateToothTimerUI() {
+  const btn = document.getElementById('shibaToothBtn');
+  const el = document.getElementById('shibaToothElapsed');
+  if (!btn || !el) return;
+  const o = loadToothTimer();
+  const running = !!(o && o.startedAt);
+  const liveSec = running ? Math.floor((Date.now() - o.startedAt) / 1000) : 0;
+  btn.textContent = running ? '⏹ 停止' : '▶ 歯磨き';
+  btn.classList.toggle('running', running);
+  el.classList.toggle('running', running);
+  el.textContent = fmtMMSS(liveSec);
+}
+setInterval(updateToothTimerUI, 1000);
 
 function shibaAction(action) {
   const s = tickShiba(loadShiba());
@@ -6900,6 +6952,7 @@ async function quickDoneFromShiba() { return quickAddFromShiba(true); }
 document.getElementById('shibaQuickDone').addEventListener('click', () => quickAddFromShiba(true));
 document.getElementById('shibaQuickAdd').addEventListener('click', () => quickAddFromShiba(false));
 document.getElementById('shibaWalkBtn').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleWalkTimer(); });
+document.getElementById('shibaToothBtn').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleToothTimer(); });
 // === IME変換確定のEnterを誤検知しない共通ヘルパー ===
 // すべてのテキスト入力で「Enter確定」処理を登録する際はこれを使う。
 // IME編集中・変換確定のEnterは無視する (以下の4重ガード):
