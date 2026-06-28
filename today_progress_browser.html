@@ -1468,16 +1468,17 @@ body.shiba-sleeping .shiba-emoji::after {
   display: flex; align-items: center; gap: 8px;
   margin: 6px 0 8px;
 }
-.shiba-walk-timer #shibaWalkBtn {
-  flex: 0 0 auto; min-height: 30px; padding: 4px 12px;
-  font-size: 13px; white-space: nowrap;
+.shiba-walk-timer { flex-wrap: wrap; gap: 4px 6px; }
+.shiba-walk-timer #shibaWalkBtn,
+.shiba-walk-timer #shibaToothBtn {
+  flex: 0 0 auto; min-width: 0; min-height: 30px; padding: 3px 7px;
+  font-size: 16px; line-height: 1; white-space: nowrap;
 }
 .shiba-walk-timer #shibaWalkBtn.running { background: #1976D2; color: #fff; border-color: #1976D2; }
-.shiba-walk-timer #shibaToothBtn { flex: 0 0 auto; min-height: 30px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
 .shiba-walk-timer #shibaToothBtn.running { background: #0097A7; color: #fff; border-color: #0097A7; }
 .shiba-walk-elapsed {
-  font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums;
-  letter-spacing: 0.5px; color: var(--text);
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  letter-spacing: 0; color: var(--text); margin-right: 2px;
 }
 .shiba-walk-timer #shibaWalkElapsed.running { color: #1976D2; }
 .shiba-walk-timer #shibaToothElapsed.running { color: #0097A7; }
@@ -2137,18 +2138,18 @@ body.shiba-sleeping .shiba-emoji::after {
     <div class="shiba-mood" id="shibaMood" style="display:none;">ごきげん</div>
   </div>
   <div class="shiba-stats">
-    <div class="stat-row" title="ご飯 (最大5・3で達成)"><span class="stat-label">🍖</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div><div class="stat-mark" style="bottom:20%"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark goal" style="bottom:60%"></div><div class="stat-mark" style="bottom:80%"></div></div><span class="stat-val" id="foodVal">0</span></div>
-    <div class="stat-row" title="散歩 (最大100分・10分刻み・60で達成)"><span class="stat-label">🚶</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div><div class="stat-mark" style="bottom:10%"></div><div class="stat-mark" style="bottom:20%"></div><div class="stat-mark" style="bottom:30%"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark" style="bottom:50%"></div><div class="stat-mark goal" style="bottom:60%"></div><div class="stat-mark" style="bottom:70%"></div><div class="stat-mark" style="bottom:80%"></div><div class="stat-mark" style="bottom:90%"></div></div><span class="stat-val" id="walkVal">0</span></div>
-    <div class="stat-row" title="運動 (最大3回・記録のみ)"><span class="stat-label">🏃</span><div class="stat-bar"><div class="stat-fill" id="exerciseFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="exerciseVal">0</span></div>
+    <div class="stat-row" title="ご飯 (最大5・3で達成)"><span class="stat-label">🍙</span><div class="stat-bar"><div class="stat-fill" id="foodFill"></div><div class="stat-mark" style="bottom:20%"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark goal" style="bottom:60%"></div><div class="stat-mark" style="bottom:80%"></div></div><span class="stat-val" id="foodVal">0</span></div>
+    <div class="stat-row" title="散歩 (最大100分・10分刻み・60で達成)"><span class="stat-label">🐕</span><div class="stat-bar"><div class="stat-fill" id="walkFill"></div><div class="stat-mark" style="bottom:10%"></div><div class="stat-mark" style="bottom:20%"></div><div class="stat-mark" style="bottom:30%"></div><div class="stat-mark" style="bottom:40%"></div><div class="stat-mark" style="bottom:50%"></div><div class="stat-mark goal" style="bottom:60%"></div><div class="stat-mark" style="bottom:70%"></div><div class="stat-mark" style="bottom:80%"></div><div class="stat-mark" style="bottom:90%"></div></div><span class="stat-val" id="walkVal">0</span></div>
+    <div class="stat-row" title="運動 (最大3回・記録のみ)"><span class="stat-label">⚽️</span><div class="stat-bar"><div class="stat-fill" id="exerciseFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark" style="bottom:66.67%"></div></div><span class="stat-val" id="exerciseVal">0</span></div>
     <div class="stat-row" title="うんこ (最大3・2で達成)"><span class="stat-label">💩</span><div class="stat-bar"><div class="stat-fill" id="poopFill"></div><div class="stat-mark" style="bottom:33.33%"></div><div class="stat-mark goal" style="bottom:66.67%"></div></div><span class="stat-val" id="poopVal">0</span></div>
     <div class="stat-row" title="ブラシ (最大2)"><span class="stat-label">🪮</span><div class="stat-bar"><div class="stat-fill" id="brushFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="brushVal">0</span></div>
-    <div class="stat-row" title="歯磨き (最大2)"><span class="stat-label">🪥</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="toothVal">0</span></div>
+    <div class="stat-row" title="歯磨き (最大2)"><span class="stat-label">🦷</span><div class="stat-bar"><div class="stat-fill" id="toothFill"></div><div class="stat-mark" style="bottom:50%"></div></div><span class="stat-val" id="toothVal">0</span></div>
     <span id="sleepFill" style="display:none;"></span><span id="sleepVal" style="display:none;">50</span>
   </div>
   <div class="shiba-walk-timer" id="shibaWalkTimer">
-    <button class="btn secondary" id="shibaWalkBtn" title="散歩タイマー 開始/停止">▶ 散歩</button>
+    <button class="btn secondary" id="shibaWalkBtn" title="散歩タイマー 開始/停止">🐕</button>
     <span class="shiba-walk-elapsed" id="shibaWalkElapsed">00:00</span>
-    <button class="btn secondary" id="shibaToothBtn" title="歯磨きタイマー 開始/停止(停止で歯磨き+1回)">▶ 歯磨き</button>
+    <button class="btn secondary" id="shibaToothBtn" title="歯磨きタイマー 開始/停止(停止で歯磨き+1回)">🪥</button>
     <span class="shiba-walk-elapsed" id="shibaToothElapsed">00:00</span>
   </div>
   <div class="shiba-quick">
@@ -6000,7 +6001,7 @@ function updateWalkTimerUI() {
   const o = loadWalkTimer();
   const running = !!(o && o.startedAt);
   const liveSec = running ? Math.floor((Date.now() - o.startedAt) / 1000) : 0;
-  btn.textContent = running ? '⏹ 停止' : '▶ 散歩';
+  btn.textContent = running ? '⏹' : '🐕';
   btn.classList.toggle('running', running);
   el.classList.toggle('running', running);
   el.textContent = fmtMMSS(baseSec + liveSec); // 合計(＋計測中) を表示
@@ -6058,7 +6059,7 @@ function updateToothTimerUI() {
   const o = loadToothTimer();
   const running = !!(o && o.startedAt);
   const liveSec = running ? Math.floor((Date.now() - o.startedAt) / 1000) : 0;
-  btn.textContent = running ? '⏹ 停止' : '▶ 歯磨き';
+  btn.textContent = running ? '⏹' : '🪥';
   btn.classList.toggle('running', running);
   el.classList.toggle('running', running);
   el.textContent = fmtMMSS(baseSec + liveSec);
