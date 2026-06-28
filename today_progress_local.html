@@ -5614,9 +5614,9 @@ function mergeLeveledDays(a, b) {
   for (const k in (b || {})) out[k] = Math.max(out[k] || 0, leveledDayCount(b[k]));
   return out;
 }
-// レベルは年齢で決まるので達成度では上げない。達成度100で「完了」→おやすみモードにする。
+// レベルは年齢で決まるので達成度では上げない。おやすみ = 達成度100(完了) または 手動ON(sleepManual)。
 function maybeLevelUp(s) {
-  s.sleepMode = ecurleCompletion(s) >= 1;
+  s.sleepMode = (ecurleCompletion(s) >= 1) || !!s.sleepManual;
 }
 function applyTaskToEcurle(s, title) {
   const r = parseTaskForEcurle(title);
@@ -5668,10 +5668,11 @@ function ecurleDay() {
 function ensureDailyTotals(s) {
   const day = ecurleDay();
   if (!s.dailyTotals || s.dailyTotals.date !== day) {
-    s.dailyTotals = { date: day, food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0, eventId: null, leveled: false };
+    s.dailyTotals = { date: day, food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0, toothTime: 0, eventId: null, leveled: false };
   }
   if (s.dailyTotals.leveled === undefined) s.dailyTotals.leveled = false;
   if (s.dailyTotals.exercise === undefined) s.dailyTotals.exercise = 0;
+  if (s.dailyTotals.toothTime === undefined) s.dailyTotals.toothTime = 0;
   return s.dailyTotals;
 }
 function formatEcurleNum(v) {
@@ -5692,7 +5693,8 @@ function buildDailyEcurleDescription(t) {
     '運動 ' + formatEcurleNum(t.exercise) + '分',
     'うんち ' + formatEcurleNum(t.poop) + '回',
     'ブラッシング ' + formatEcurleNum(t.brush) + '回',
-    '歯磨き ' + formatEcurleNum(t.tooth) + '回'
+    '歯磨き ' + formatEcurleNum(t.tooth) + '回',
+    '歯磨き時間 ' + formatWalkTime(t.toothTime)
   ].join('\n');
 }
 let _dailyEcurleSyncTimer = null;
@@ -5768,12 +5770,14 @@ function scheduleDailyEcurleSync(delay) {
 }
 // 「食事 1.5杯」「散歩 7km」等を解析して dailyTotals に詰める
 function parseDailyEcurleDescription(desc) {
-  const out = { food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0 };
+  const out = { food: 0, walk: 0, exercise: 0, poop: 0, brush: 0, tooth: 0, toothTime: 0 };
   if (!desc) return out;
   const lines = normalizeEcurleText(desc).split(/\r?\n/);
   for (const line of lines) {
     let m;
-    if ((m = line.match(/食事\s*([0-9]+(?:\.[0-9]+)?)/))) out.food = parseFloat(m[1]);
+    if ((m = line.match(/歯磨き時間\s*([0-9]+(?:\.[0-9]+)?)\s*分\s*([0-9]+(?:\.[0-9]+)?)\s*秒/))) out.toothTime = parseFloat(m[1]) + parseFloat(m[2]) / 60; // 歯磨き時間 M分S秒
+    else if ((m = line.match(/歯磨き時間\s*([0-9]+(?:\.[0-9]+)?)\s*分?/))) out.toothTime = parseFloat(m[1]); // 歯磨き時間 M分
+    else if ((m = line.match(/食事\s*([0-9]+(?:\.[0-9]+)?)/))) out.food = parseFloat(m[1]);
     else if ((m = line.match(/散歩\s*([0-9]+(?:\.[0-9]+)?)\s*分\s*([0-9]+(?:\.[0-9]+)?)\s*秒/))) out.walk = parseFloat(m[1]) + parseFloat(m[2]) / 60; // 散歩 M分S秒
     else if ((m = line.match(/散歩\s*([0-9]+(?:\.[0-9]+)?)\s*分?/))) out.walk = parseFloat(m[1]); // 散歩 M分 / 散歩 M(旧km値も分として読込)
     else if ((m = line.match(/運動\s*([0-9]+(?:\.[0-9]+)?)/))) out.exercise = parseFloat(m[1]);
@@ -5823,6 +5827,7 @@ function mergeDailyCountersMax(parsed, cur) {
   parsed.poop     = Math.max(parsed.poop     || 0, cur.poop     || 0);
   parsed.brush    = Math.max(parsed.brush    || 0, cur.brush    || 0);
   parsed.tooth    = Math.max(parsed.tooth    || 0, cur.tooth    || 0);
+  parsed.toothTime = Math.max(parsed.toothTime || 0, cur.toothTime || 0);
   return parsed;
 }
 function applyDailyEcurleFromPull(desc, eventIdHint) {
@@ -5942,8 +5947,8 @@ function tickShiba(s) {
   // ここでの日付固定リセットは廃止 (日替わり/日付移動時は
   //  applyDailyEcurleFromEventsCache / pullDailyEcurleFromCalendar が表示日の値を反映)。
   s.lastWalkResetDay = new Date(now).toDateString();
-  // おやすみ = 達成度100で「完了」。30分無操作の自動おやすみは撤廃。
-  s.sleepMode = ecurleCompletion(s) >= 1;
+  // おやすみ = 達成度100で「完了」または 手動ON(🌙ボタン)。無操作の自動おやすみは撤廃。
+  s.sleepMode = (ecurleCompletion(s) >= 1) || !!s.sleepManual;
   s.lastTick = now;
   return s;
 }
@@ -5984,9 +5989,9 @@ function renderShiba() {
   // レベル表示 = 年齢: Lv.歳-経過日数（次の誕生日までの日数）
   const age = ecurleAge();
   const lv = age.years;
-  document.getElementById('shibaLevel').textContent = age.years + '-' + age.daysInto;
+  document.getElementById('shibaLevel').textContent = age.years + '-' + age.daysInto + '日';
   const ageNextEl = document.getElementById('shibaAgeNext');
-  if (ageNextEl) ageNextEl.textContent = '（' + age.daysToNext + '）';
+  if (ageNextEl) ageNextEl.textContent = '（あと' + age.daysToNext + '日）';
   // 家族表示: 匹数 = Lv(年齢)、100匹で犬小屋1軒に統合
   const houses = Math.floor(lv / 100);
   const puppies = lv % 100;
@@ -6117,12 +6122,18 @@ const SHIBA_TOOTH_TIMER_KEY = 'shiba_tooth_timer_v1';
 function loadToothTimer() { try { return JSON.parse(localStorage.getItem(SHIBA_TOOTH_TIMER_KEY) || 'null'); } catch (e) { return null; } }
 function saveToothTimer(o) { try { localStorage.setItem(SHIBA_TOOTH_TIMER_KEY, JSON.stringify(o)); } catch (e) {} }
 function clearToothTimer() { try { localStorage.removeItem(SHIBA_TOOTH_TIMER_KEY); } catch (e) {} }
-// 歯磨きを1回ぶん加算 (停止時)。記録/同期も実行。時間は保存しない。
-function addToothCount(n) {
-  n = n || 1;
+// その日の歯磨き累計時間(分)。表示日のみ。
+function currentToothMinutes() {
+  const s = loadShiba();
+  const t = (s.dailyTotals && s.dailyTotals.date === ecurleDay()) ? s.dailyTotals : null;
+  return t ? (t.toothTime || 0) : 0;
+}
+// 停止時: 歯磨き回数+1(メモリ) と 累計時間+経過(分) を同時に加算。記録/同期も実行。
+function addToothStop(minutes) {
   const s = tickShiba(loadShiba());
   const t = ensureDailyTotals(s);
-  t.tooth = Math.round(((t.tooth || 0) + n) * 10) / 10;
+  t.tooth = Math.round(((t.tooth || 0) + 1) * 10) / 10;                          // 回数 +1(時間に関係なく1回)
+  if (minutes > 0) t.toothTime = Math.round(((t.toothTime || 0) + minutes) * 1000) / 1000; // 累計時間(分)
   s.tooth = Math.min(ECURLE_MAX.tooth, t.tooth);
   s._dailyDirty = true;
   markDailyLocalWrite();
@@ -6139,22 +6150,26 @@ function startToothTimer() { saveToothTimer({ startedAt: Date.now() }); updateTo
 function stopToothTimer() {
   const o = loadToothTimer();
   clearToothTimer();
-  if (o && o.startedAt) addToothCount(1); // 時間に関係なく1回としてカウント
+  if (o && o.startedAt) {
+    const elapsedSec = Math.round((Date.now() - o.startedAt) / 1000);
+    addToothStop(elapsedSec / 60); // 回数+1 ＋ 累計時間に経過を加算
+  }
   updateToothTimerUI();
 }
 function toggleToothTimer() { if (loadToothTimer()) stopToothTimer(); else startToothTimer(); }
-// 歯磨きタイマー表示更新 (毎秒)。実行中は経過(計測のみ)、停止で 00:00。
+// 歯磨きタイマー表示更新 (毎秒)。表示 = その日の累計時間 + 実行中なら計測中の経過。停止しても0に戻らず累計を表示。
 function updateToothTimerUI() {
   const btn = document.getElementById('shibaToothBtn');
   const el = document.getElementById('shibaToothElapsed');
   if (!btn || !el) return;
+  const baseSec = Math.round(currentToothMinutes() * 60);
   const o = loadToothTimer();
   const running = !!(o && o.startedAt);
   const liveSec = running ? Math.floor((Date.now() - o.startedAt) / 1000) : 0;
   btn.textContent = running ? '⏹ 停止' : '▶ 歯磨き';
   btn.classList.toggle('running', running);
   el.classList.toggle('running', running);
-  el.textContent = fmtMMSS(liveSec);
+  el.textContent = fmtMMSS(baseSec + liveSec);
 }
 setInterval(updateToothTimerUI, 1000);
 
@@ -6962,52 +6977,17 @@ document.getElementById('shibaCard').addEventListener('click', () => {
 });
 document.getElementById('shibaSleepToggle').addEventListener('click', () => {
   const s = tickShiba(loadShiba());
-  s.sleepMode = !s.sleepMode;
+  // 🌙ボタン = 手動おやすみのトグル。押すたびに sleepManual を反転し、おやすみ状態を確定させる。
+  s.sleepManual = !s.sleepManual;
+  s.sleepMode = (ecurleCompletion(s) >= 1) || !!s.sleepManual;
   s.lastTick = Date.now();
   s.modifiedAt = Date.now();
-  // 手動で起こした時は活動時刻もリセット (すぐに自動おやすみで再入眠しないように)
-  if (!s.sleepMode) s.lastActivityAt = Date.now();
   saveShiba(s);
   updateShibaSleepBtn(s.sleepMode);
   showToast(s.sleepMode ? '🌙 おやすみモード ON' : '☀️ 起きた！');
   renderShiba();
-  // 手動切替後、自動おやすみタイマーを再始動 (起きた→15分計測再開 / 寝た→停止)
-  if (window._shibaAutoSleepReset) window._shibaAutoSleepReset();
 });
-
-// === 無操作15分で自動おやすみ ===
-// 仕様: 最後のユーザー操作から15分経過したら自動でおやすみモードへ移行。
-//       「操作」= タップ/クリック(pointerdown)・キー入力(keydown)・スクロール意思(wheel/touchstart) のみ。
-//       アプリを開いているだけ・マウスを動かしただけ・画面の自動更新だけでは操作とみなさない。
-//       一度寝たら手動でおやすみOFFにするまで継続 (操作では起きない)。
-//       手動で起こした後も、最後の操作から15分でまた自動おやすみに戻る。
-(function setupShibaAutoSleep() {
-  const IDLE_MS = 15 * 60 * 1000; // 15分
-  let lastActivity = Date.now();
-  function isAsleep() { return document.body.classList.contains('shiba-sleeping'); }
-  function markActivity() { lastActivity = Date.now(); }
-  // 実際のユーザー操作のみ検知。
-  // scroll イベントは 30秒ごとの自動更新によるレイアウト変化でも発火しうるため監視対象から外し、
-  // ユーザー由来でしか起きない wheel / touchstart で「スクロール意思」を代替する。
-  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => {
-    window.addEventListener(ev, markActivity, { passive: true, capture: true });
-  });
-  window._shibaAutoSleepReset = markActivity;  // 手動でおやすみOFFした後の再計測用
-  // setTimeout はタブが裏に回ると throttling されるため、実時刻ポーリングで判定する。
-  setInterval(() => {
-    if (isAsleep()) return;                          // 寝ている間は判定しない (操作で起こさない)
-    if (Date.now() - lastActivity < IDLE_MS) return; // まだ15分経っていない
-    const s = tickShiba(loadShiba());
-    if (s.sleepMode) return;
-    s.sleepMode = true;
-    s.lastTick = Date.now();
-    s.modifiedAt = Date.now();
-    saveShiba(s);
-    updateShibaSleepBtn(true);
-    renderShiba();
-    showToast('🌙 15分無操作のため自動おやすみ');
-  }, 30000); // 30秒ごとに判定
-})();
+// 無操作15分での自動おやすみ・その文言表示は撤廃(おやすみは達成度100か🌙手動のみ)。
 
 document.getElementById('shibaAutoToggle').addEventListener('click', () => {
   const s = tickShiba(loadShiba());
