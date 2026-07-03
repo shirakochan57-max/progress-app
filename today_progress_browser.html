@@ -5625,6 +5625,10 @@ function applyDailyTotalsToBars(s) {
 }
 let _dailyEcurleSyncTimer = null;
 let _dailyEcurleSyncing = false;
+// 直近に作成した当日イベントの記録。Googleカレンダーの結果整合性(作成直後のlistに出てこない)で
+// 二重createしてしまうのを防ぐため、一定時間はこのIDを再利用する。
+let _dailyEcurleLastCreate = null; // { date, id, at }
+const DAILY_ECURLE_CREATE_GUARD_MS = 30000;
 async function syncDailyEcurleToCalendar() {
   if (_dailyEcurleSyncing) { scheduleDailyEcurleSync(600); return; }
   const url = (typeof getGasUrl === 'function') ? getGasUrl() : '';
@@ -5635,21 +5639,38 @@ async function syncDailyEcurleToCalendar() {
   const desc = buildDailyEcurleDescription(t);
   _dailyEcurleSyncing = true;
   try {
-    // 常にカレンダーを確認 (削除→再入力にも対応)
-    let eventId = null;
+    // 当日の「毎日エクル」を全件取得。複数あれば1つに集約(重複の自己修復)。
+    let matches = [];
     try {
       const data = await gasCall('list', { date: t.date });
-      // 完了済み(✔️ 毎日エクル)も同じ記録として拾い、新規作成せず更新する
-      const ev = (data.events || []).find(e => isDailyEcurleTitle(e && e.summary));
-      if (ev) eventId = ev.id;
+      matches = (data.events || []).filter(e => isDailyEcurleTitle(e && e.summary));
     } catch (e) {}
+    let eventId = null;
+    if (matches.length) {
+      // 採用IDは「保存済みID(t.eventId)がリストにあればそれ、無ければ先頭」。
+      const saved = matches.find(e => e.id === t.eventId);
+      eventId = (saved || matches[0]).id;
+      // 採用分以外(重複)は削除して1つに集約する。
+      for (const e of matches) {
+        if (e.id !== eventId) { try { await gasCall('delete', { eventId: e.id }); } catch (err) {} }
+      }
+    }
+    // listに出ないが直近作成した当日イベントがある(結果整合性遅延) → 再利用して二重createを防ぐ。
+    if (!eventId && _dailyEcurleLastCreate &&
+        _dailyEcurleLastCreate.date === t.date &&
+        (Date.now() - _dailyEcurleLastCreate.at) < DAILY_ECURLE_CREATE_GUARD_MS) {
+      eventId = _dailyEcurleLastCreate.id;
+    }
+    // 保存済みID(別デバイス/前セッションで作成)があればまず update を試す。
+    if (!eventId && t.eventId) eventId = t.eventId;
+    // 既存があれば update、無ければ (or update失敗時は) create。
     let updated = false;
     if (eventId) {
       try {
         await gasCall('update', { eventId, description: desc });
         updated = true;
       } catch (e) {
-        eventId = null;
+        eventId = null; // 本当に存在しない(削除済み等) → 新規作成へフォールバック
       }
     }
     if (!updated) {
@@ -5661,8 +5682,9 @@ async function syncDailyEcurleToCalendar() {
         endTime: addDaysYmd(t.date, 1)
       });
       eventId = res && res.id;
+      if (eventId) _dailyEcurleLastCreate = { date: t.date, id: eventId, at: Date.now() };
     }
-    // eventId は保存。_dailyDirty(上書き禁止) は refresh 完了後に外す。
+    // eventId は保存 (次回syncでlistに頼らず再利用)。_dailyDirty(上書き禁止) は refresh 完了後に外す。
     // (refresh が途中で古いキャッシュを表示する間、その古い値でメーターが上書きされて
     //  「一瞬減る」のを防ぐ)。
     const s2 = loadShiba();
@@ -5763,6 +5785,42 @@ async function pullDailyEcurleFromCalendar() {
     return false;
   }
 }
+// ② 今日を表示中で「毎日エクル」がまだ無ければ、当日分を即作成してカードを出す。
+// (これまでは最初にエクル値を記録するまでカードが作られず、日替わりの引き継ぎが遅かった)
+async function ensureTodayEcurleCard() {
+  if (!(typeof getGasUrl === 'function' && getGasUrl())) return;
+  const realToday = ymdLocalKey();
+  if (ecurleDay() !== realToday) return; // 今日を見ている時だけ (前日/未来は触らない)
+  try {
+    const data = await gasCall('list', { date: realToday });
+    if ((data.events || []).some(e => isDailyEcurleTitle(e && e.summary))) return; // 既にある
+  } catch (e) { return; } // 取得失敗時は作らない(重複を避ける)
+  const s = loadShiba();
+  ensureDailyTotals(s); // 同日なら既存値を保持、無ければ当日0で用意
+  saveShiba(s);
+  try { await syncDailyEcurleToCalendar(); } catch (e) {} // 冪等create + refresh でカード表示
+}
+// 日付ロールオーバー監視: アプリを開きっぱなしで日を跨いだ時、今日を見ていたら新しい今日へ送る。
+let _lastKnownDay = ymdLocalKey();
+async function checkDayRollover() {
+  const realToday = ymdLocalKey();
+  if (realToday === _lastKnownDay) return false;
+  const prev = _lastKnownDay;
+  _lastKnownDay = realToday;
+  // 「今日(=前の今日)」を見ていた場合だけ移動 (前日/未来を意図的に見ている時は邪魔しない)
+  if (typeof currentDate !== 'undefined' && fmtDate(currentDate) === prev) {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    currentDate = d;
+    if (typeof updateDateLabel === 'function') updateDateLabel();
+    if (typeof syncTabs === 'function') syncTabs();
+    if (typeof refresh === 'function') { try { await refresh(); } catch (e) {} }
+    if (typeof autoCompleteYesterdayEcurle === 'function') await autoCompleteYesterdayEcurle().catch(() => {});
+    await ensureTodayEcurleCard().catch(() => {});
+    if (typeof autoCarryUndoneTasks === 'function') autoCarryUndoneTasks().catch(() => {});
+  }
+  return true;
+}
+setInterval(() => { checkDayRollover().catch(() => {}); }, 30000);
 function ecurleOnUserActivity(s) {
   // おやすみは達成度100で入る方式に変更したため、ここでは sleepMode を触らない(maybeLevelUp/tickShibaが管理)。
   s.lastActivityAt = Date.now();
@@ -6441,17 +6499,20 @@ function openShibaPanel() {
     pullDailyEcurleFromCalendar().catch(() => {});
   }
 }
-// アプリがフォアグラウンドに戻ったら最新値を取り込む
+// アプリがフォアグラウンドに戻ったら最新値を取り込む。
+// まず日付ロールオーバーを確認し (日を跨いでいたら今日へ送る=カード生成込み)、
+// 日跨ぎでなければ最新pull + 当日カードの存在保証を行う。
+function onAppForeground() {
+  checkDayRollover().then(rolled => {
+    if (rolled) return; // ロールオーバー処理内で refresh + ensureTodayEcurleCard 済み
+    if (typeof pullDailyEcurleFromCalendar === 'function') pullDailyEcurleFromCalendar().catch(() => {});
+    ensureTodayEcurleCard().catch(() => {});
+  }).catch(() => {});
+}
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && typeof pullDailyEcurleFromCalendar === 'function') {
-    pullDailyEcurleFromCalendar().catch(() => {});
-  }
+  if (!document.hidden) onAppForeground();
 });
-window.addEventListener('focus', () => {
-  if (typeof pullDailyEcurleFromCalendar === 'function') {
-    pullDailyEcurleFromCalendar().catch(() => {});
-  }
-});
+window.addEventListener('focus', onAppForeground);
 function closeShibaPanel() {
   document.getElementById('shibaSheet').classList.remove('open');
 }
@@ -7234,8 +7295,9 @@ updateDateLabel();
 syncTabs();
 (async () => {
   await refresh();
-  // 前日の「毎日エクル」を自動完了 → その後で未完了持ち越し処理
+  // 前日の「毎日エクル」を自動完了 → 今日のカードを即用意 → 未完了持ち越し処理
   await autoCompleteYesterdayEcurle().catch(e => console.error('autoCompleteYesterdayEcurle error', e));
+  await ensureTodayEcurleCard().catch(e => console.error('ensureTodayEcurleCard error', e));
   autoCarryUndoneTasks().catch(e => console.error('autoCarry error', e));
 })();
 </script>
