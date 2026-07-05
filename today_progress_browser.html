@@ -2282,7 +2282,12 @@ async function gasCall(action, payload) {
     if ((action === 'update' || action === 'create') && payload &&
         typeof isDailyEcurleTitle === 'function' &&
         isDailyEcurleTitle(payload.summary || '')) {
-      if (typeof applyDailyEcurleDescriptionToBars === 'function' && payload.description !== undefined) {
+      // 自分の書き込みのエコーで、古いdesc(例: 連続入力で遅れて届いた1回目)が
+      // 新しいメーター(2回目)を巻き戻すのを防ぐ。直近ローカル書き込み中は反映しない
+      // (下の list 副作用と同じガード)。手動編集は別経路でメーター反映済み(saveCardEvent)。
+      let _sEcho = null; try { _sEcho = loadShiba(); } catch (e) {}
+      if (typeof applyDailyEcurleDescriptionToBars === 'function' && payload.description !== undefined &&
+          !(typeof dailyOverwriteBlocked === 'function' && dailyOverwriteBlocked(_sEcho))) {
         const evId = (data && data.id) || payload.eventId || null;
         applyDailyEcurleDescriptionToBars(payload.description, evId);
       }
