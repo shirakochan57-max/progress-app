@@ -1435,6 +1435,16 @@ body.shiba-sleeping .shiba-emoji::after {
   font-weight: 400;
   letter-spacing: 0;
 }
+.stat-row > .stat-label.stat-label-tappable {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  transition: transform .08s ease;
+}
+.stat-row > .stat-label.stat-label-tappable:active {
+  transform: scale(0.82);
+}
 .stat-row > .stat-val {
   width: auto;
   text-align: center;
@@ -5946,6 +5956,27 @@ function ecurleOnTaskCreated(title) {
   // 「毎日エクル」イベントへ累積値を反映
   if (s._dailyDirty) scheduleDailyEcurleSync();
 }
+// メーターアイコンをタップで各メーター +1 (エクル語を1回入力したのと同じ経路 = 記録/同期/60秒ガードも共通)。
+const ECURLE_BUMP_WORDS = { food: 'ご飯', walk: '散歩', exercise: '運動', poop: 'うんこ', brush: 'ブラシ', tooth: '歯磨き' };
+function bumpEcurleMeter(type) {
+  const word = ECURLE_BUMP_WORDS[type];
+  if (!word) return;
+  ecurleOnTaskCreated(word); // food +1杯 / 散歩 +1分 / 運動 +1回 / うんこ +1 / ブラシ +1 / 歯磨き +1
+  if (typeof showToast === 'function') showToast(word + ' ＋1');
+}
+function setupEcurleMeterTaps() {
+  document.querySelectorAll('.shiba-stats .stat-row').forEach(row => {
+    const fill = row.querySelector('.stat-fill');
+    if (!fill || !fill.id) return;
+    const type = fill.id.replace(/Fill$/, ''); // foodFill → food 等
+    if (!ECURLE_BUMP_WORDS[type]) return;
+    const label = row.querySelector('.stat-label');
+    if (!label || label._bumpBound) return;
+    label._bumpBound = true;
+    label.classList.add('stat-label-tappable');
+    label.addEventListener('click', e => { e.stopPropagation(); bumpEcurleMeter(type); });
+  });
+}
 function loadShiba() {
   try {
     const s = JSON.parse(localStorage.getItem(SHIBA_KEY) || '{}');
@@ -7448,6 +7479,7 @@ document.querySelectorAll('.vm-tab').forEach(btn => {
   });
 });
 syncViewModeTabs();
+setupEcurleMeterTaps();
 
 updateDateLabel();
 syncTabs();
